@@ -33,6 +33,31 @@ const RULES: Array<{ name: string; re: RegExp; replace: (m: string) => string }>
     replace: (m) => `${m.split(/[:=]/)[0]!}=[redacted]`,
   },
   {
+    /**
+     * The same words used as free text rather than as an assignment:
+     * "Using token abc123", "password is hunter2", "secret: " handled above.
+     * The M4 audit walked a DiscordSRV-style line reading
+     * `Using token <value>` straight through, because the rule above needs a
+     * `:` or `=` and the value did not match the id.ts.hmac token shape.
+     *
+     * The value must look like a credential (10+ characters, no spaces, and
+     * not a bare English word) so that ordinary prose such as "invalid token"
+     * or "token expired" is left readable. A log that redacts its own error
+     * messages is a log nobody can debug from.
+     */
+    name: 'free-text-secret',
+    re: /\b(password|passwd|token|secret|api[_-]?key)s?\b(\s+(?:is|was|of|=)?\s*)([A-Za-z0-9._~+/-]{10,})/gi,
+    replace: (m) => {
+      const parts = /^(.*?)([A-Za-z0-9._~+/-]{10,})$/.exec(m)
+      if (!parts) return m
+      // Leave plain English alone: a "value" with no digit and no separator
+      // is a word, not a credential.
+      const value = parts[2]!
+      if (!/[\d._~+/-]/.test(value)) return m
+      return `${parts[1]}[redacted]`
+    },
+  },
+  {
     name: 'bearer',
     re: /\bBearer\s+[A-Za-z0-9._-]{10,}/gi,
     replace: () => 'Bearer [redacted]',

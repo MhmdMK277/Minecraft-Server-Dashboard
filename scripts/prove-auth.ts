@@ -252,6 +252,19 @@ check(
 
 {
   const dir = mkdtempSync(join(tmpdir(), 'mcdash-sess-'))
+  // The store cross-checks loaded sessions against the user file, so the
+  // fixture must contain the user. An earlier version of this block did not,
+  // which meant it was testing a directory shape production never has: the
+  // §6c lesson, arriving again in miniature.
+  saveUsers(dir, [
+    {
+      username: 'x',
+      role: 'admin',
+      password: await hashPassword('irrelevant-for-this-block'),
+      createdAt: new Date().toISOString(),
+      mustChangePassword: false,
+    },
+  ])
   const store = new SessionStore(dir)
   const s = store.create({ username: 'x', role: 'admin' }, '127.0.0.1', 'test')
   check('a session file is written next to the store directory', existsSync(join(dir, 'sessions.json')))
@@ -283,6 +296,40 @@ check(
   const afterExpiry = new SessionStore(dir)
   check('an ABSOLUTE-expired session on disk is not resurrected', afterExpiry.touch('expired-on-disk') === null)
   check('an IDLE-expired session on disk is not resurrected', afterExpiry.touch('idled-on-disk') === null)
+
+  // ---- what a TAMPERED session file may resurrect (M4 audit, F5)
+  // Someone who can write this file can also rewrite auth.json, so this is
+  // not the last line of defence. It is still worth refusing: forging an
+  // entry here skips having to crack scrypt at all.
+  const base = {
+    id: 'tampered',
+    username: 'x',
+    role: 'admin' as const,
+    createdAt: Date.now(),
+    lastSeenAt: Date.now(),
+    ip: '127.0.0.1',
+    userAgent: 'test',
+  }
+  const write = (sessions: unknown[]) =>
+    writeFileSync(join(dir, 'sessions.json'), JSON.stringify({ version: 1, sessions }), 'utf8')
+
+  write([{ ...base, id: 'bad-role', role: 'superuser' }])
+  check('a session with an unknown role is not loaded', new SessionStore(dir).touch('bad-role') === null)
+
+  write([{ ...base, id: 'ghost-user', username: 'nobody-by-that-name' }])
+  check(
+    'a session for a user who does not exist is not loaded',
+    new SessionStore(dir).touch('ghost-user') === null,
+  )
+
+  // now - createdAt is NEGATIVE for a future timestamp, so every expiry
+  // comparison passes and the session would never age out.
+  const year = 365 * 24 * 60 * 60_000
+  write([{ ...base, id: 'from-the-future', createdAt: Date.now() + year, lastSeenAt: Date.now() + year }])
+  check(
+    'a session dated in the future is treated as forged, not as immortal',
+    new SessionStore(dir).touch('from-the-future') === null,
+  )
 
   writeFileSync(join(dir, 'sessions.json'), 'this is not json{{{', 'utf8')
   let corruptOk = true

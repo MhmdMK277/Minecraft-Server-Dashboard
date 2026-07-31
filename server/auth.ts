@@ -1,6 +1,6 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync, renameSync, chmodSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { Role, SessionUser } from '@shared/api'
 
 /**
@@ -236,8 +236,26 @@ export class SessionStore {
       const parsed = JSON.parse(readFileSync(this.file, 'utf8')) as SessionFile
       if (!Array.isArray(parsed.sessions)) return
       const now = Date.now()
+      /**
+       * Validate every field, not just the ones needed to compute expiry.
+       *
+       * The M4 audit pointed out what this used to accept from a file it had
+       * already decided to trust: a `role` of anything at all (so a tampered
+       * viewer session could load as admin), a username belonging to no
+       * user, and timestamps in the FUTURE, which make `now - createdAt`
+       * negative and therefore never expiring. Someone who can write this
+       * file can also rewrite auth.json, so this is not the last line of
+       * defence, but forging a session skips having to crack scrypt, and a
+       * load path should never hand out more than it can justify.
+       */
+      const known = new Set(loadUsers(dirname(this.file)).map((u) => u.username))
       for (const s of parsed.sessions) {
         if (typeof s?.id !== 'string' || typeof s.createdAt !== 'number' || typeof s.lastSeenAt !== 'number') continue
+        if (s.role !== 'admin' && s.role !== 'viewer') continue
+        if (typeof s.username !== 'string' || !known.has(s.username)) continue
+        // A timestamp from the future is not a fresh session, it is a forged
+        // or clock-skewed one. Treat it as expired rather than immortal.
+        if (s.createdAt > now || s.lastSeenAt > now) continue
         if (now - s.createdAt >= SESSION_ABSOLUTE_MS || now - s.lastSeenAt >= SESSION_IDLE_MS) continue
         this.sessions.set(s.id, s)
       }

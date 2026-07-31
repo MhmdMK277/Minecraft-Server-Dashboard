@@ -29,6 +29,8 @@
     "prove-portability": "tsx scripts/prove-portability.tsx",
     "diagnose-pause": "tsx scripts/diagnose-pause.ts",
     "prove-auth": "tsx scripts/prove-auth.ts",
+    "prove-authgate": "tsx scripts/prove-authgate.ts",
+    "audit-target": "tsx scripts/audit-target.ts",
     "prove-gclog": "tsx scripts/prove-gclog.ts",
     "prove-backup-policy": "tsx scripts/prove-backup-policy.ts",
     "prove-backup-route": "tsx scripts/prove-backup-route.ts",

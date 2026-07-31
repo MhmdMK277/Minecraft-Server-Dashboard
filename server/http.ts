@@ -130,8 +130,68 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
    */
   const PUBLIC_ROUTES = new Set<string>([API.authState, API.login])
 
+  /**
+   * Security headers on every response, including JSON.
+   *
+   * The page has a CSP meta tag, but API responses carried nothing at all,
+   * so a JSON body sniffed as HTML, or the whole app framed by another
+   * origin, had no server-side answer. Four headers, no dependency:
+   *
+   *   nosniff          a JSON console line must never be sniffed as HTML
+   *   frame-ancestors  the panel can start and stop servers; do not let a
+   *                    page on another origin frame it and click for you
+   *   no-referrer      the URL can contain a server name; do not send it on
+   *   permissions      this app needs no camera, microphone or geolocation
+   *
+   * Deliberately NOT Strict-Transport-Security: this is plain HTTP on a LAN
+   * by design (see docs/security-audit.md), and HSTS on a hostname the
+   * operator reaches over http would lock them out of their own dashboard.
+   */
+  app.addHook('onSend', async (req, reply, payload) => {
+    reply.header('X-Content-Type-Options', 'nosniff')
+    reply.header('X-Frame-Options', 'DENY')
+    reply.header('Referrer-Policy', 'no-referrer')
+    reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), interest-cohort=()')
+
+    /**
+     * The CSP is per response class, and getting this wrong breaks the app.
+     * An API response may load nothing at all. The SPA must be allowed to
+     * run its own bundle, so it gets the policy index.html already declares
+     * in its meta tag; sending `default-src 'none'` to the page instead
+     * would forbid its own scripts, because browsers intersect every policy
+     * they are given.
+     */
+    const routed = req.routeOptions?.url
+    const isApi = (routed ?? req.url).startsWith('/api')
+    reply.header(
+      'Content-Security-Policy',
+      isApi
+        ? "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+        : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+    )
+    return payload
+  })
+
   app.addHook('onRequest', async (req, reply) => {
-    const url = req.url.split('?')[0] ?? ''
+    /**
+     * Key on the route Fastify MATCHED, not on how the client spelled it.
+     *
+     * This used to test `req.url`, the raw request target. Fastify
+     * percent-decodes the path when it routes, and routing happens before
+     * this hook, so `/%61pi/servers` failed the `startsWith('/api')` test,
+     * skipped this hook entirely, and was then handed to the real
+     * `/api/servers` handler: an unauthenticated reader on the LAN got the
+     * whole snapshot and every console line. Found by the M4 adversarial
+     * pass, 2026-07-31; `npm run prove-authgate` is the regression net.
+     *
+     * `routeOptions.url` is the registered pattern (`/api/servers/:id/log`),
+     * which is what the handler IS, and no spelling of the request can
+     * change it. When nothing matched it is undefined, and an unmatched
+     * request reaches the not-found handler, which serves the SPA and no
+     * data. The raw-url fallback is kept for that case only.
+     */
+    const routed = req.routeOptions?.url
+    const url = routed ?? (req.url.split('?')[0] ?? '')
     if (!url.startsWith('/api')) return
     if (PUBLIC_ROUTES.has(url)) return
 
@@ -438,16 +498,37 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
 
   // -------------------------------------------------------------------- REST
 
-  app.get(API.appInfo, async () => appInfo())
+  /**
+   * Read routes carry their own session check as well as the global hook.
+   *
+   * That is deliberate duplication. The hook was the single line of defence
+   * until a URL-spelling bug walked around it (see the hook's comment), and
+   * these handlers return the snapshot and raw console lines, which is the
+   * whole prize. `require_` with 'viewer' means "any signed-in role"; it
+   * reads the session the hook attached, so if the hook is ever skipped
+   * again the handler still refuses.
+   */
+  app.get(API.appInfo, async (req, reply) => {
+    if (!require_(req, reply, 'viewer', 'info.read')) return
+    return appInfo()
+  })
 
-  app.get(API.snapshot, async () => latest ?? (await doScan()))
+  app.get(API.snapshot, async (req, reply) => {
+    if (!require_(req, reply, 'viewer', 'servers.read')) return
+    return latest ?? (await doScan())
+  })
 
-  app.post(API.refresh, async () => {
+  app.post(API.refresh, async (req, reply) => {
+    // A rescan spawns processes, so it needs a session. It stays open to
+    // viewers because the Refresh button is theirs too; the cost is bounded
+    // by the scan itself, which is the same work the ten-second loop does.
+    if (!require_(req, reply, 'viewer', 'servers.refresh')) return
     await pushSnapshot()
     return { ok: true }
   })
 
-  app.get<{ Params: { id: string } }>('/api/servers/:id/log', async (req) => {
+  app.get<{ Params: { id: string } }>('/api/servers/:id/log', async (req, reply) => {
+    if (!require_(req, reply, 'viewer', 'log.read')) return
     return backlogFor(req.params.id)
   })
 
@@ -455,6 +536,7 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
   // dashboard's own discovery, resolved via the server id; nothing from the
   // request is ever joined into a filesystem path.
   app.get<{ Params: { id: string } }>('/api/servers/:id/worlds', async (req, reply) => {
+    if (!require_(req, reply, 'viewer', 'worlds.read')) return
     const snap = latest ?? (await doScan())
     const s = snap.servers.find((x) => x.id === req.params.id)
     if (!s) return reply.code(404).send({ error: 'no server with that id' })
@@ -467,6 +549,7 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
   app.get<{ Params: { id: string; dir: string } }>(
     '/api/servers/:id/worlds/:dir/icon',
     async (req, reply) => {
+      if (!require_(req, reply, 'viewer', 'worlds.icon')) return
       const snap = latest ?? (await doScan())
       const s = snap.servers.find((x) => x.id === req.params.id)
       if (!s) return reply.code(404).send({ error: 'no server with that id' })
