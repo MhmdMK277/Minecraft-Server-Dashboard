@@ -911,9 +911,28 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
   if (existsSync(dist)) {
     await app.register(fastifyStatic, { root: dist })
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith('/api') || req.url.startsWith(WS_PATH)) {
-        return reply.code(404).send({ error: 'not found' })
+      /**
+       * No route matched, so there is no routed pattern to key on and this
+       * has to look at the raw target. That is safe HERE, and only here,
+       * because both branches are data-free: an unmatched path either gets a
+       * JSON 404 or the SPA shell. It decides nothing about access.
+       *
+       * The decoded form is compared as well as the raw one, so that
+       * `/%61pi/nope` gets the API's 404 rather than a page of HTML. Same
+       * reasoning as the gate above, where the difference was a
+       * vulnerability rather than a cosmetic one.
+       */
+      const raw = req.url.split('?')[0] ?? ''
+      let decoded = raw
+      try {
+        decoded = decodeURIComponent(raw)
+      } catch {
+        // A malformed escape sequence is not an API path.
       }
+      const isApiish = [raw, decoded].some(
+        (u) => u.startsWith('/api') || u.startsWith(WS_PATH),
+      )
+      if (isApiish) return reply.code(404).send({ error: 'not found' })
       return reply.sendFile('index.html')
     })
   }
