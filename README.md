@@ -225,6 +225,17 @@ servers are the source of truth. Sessions and passwords are scrypt-hashed and
 stored in the per-user data directory; credentials from server directories
 never cross the wire, asserted by `npm run prove-websocket`.
 
+## Provenance
+
+This repository was published as a single commit. The development history
+exists but was squashed at publish because early commits contained private
+infrastructure details (a real public IP, usernames, LAN topology) that do
+not belong in a public repo. The code was built with heavy AI assistance
+under human review; the security-sensitive paths (authentication, RCON
+credential handling, and everything that writes into a server directory)
+are personally audited, and each ships with proof scripts that run against
+real servers.
+
 ## Contributing
 
 Read [docs/liveness-spec.md](docs/liveness-spec.md) before touching discovery,
