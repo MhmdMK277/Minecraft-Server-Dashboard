@@ -8,6 +8,7 @@ import {
   Metric,
   TONE_TEXT,
   TONE_RAIL,
+  fmtMemPair,
 } from './status'
 import { age, Note } from './controls'
 import { href } from './router'
@@ -189,18 +190,24 @@ export function ServerRow({ s, onOpen }: { s: ServerStatus; onOpen?: (id: string
               {s.gc && <div className="mt-0.5 text-[10px] text-faint">{s.gc.stoppedPercent}% stopped</div>}
             </Metric>
             <Metric
-              label="Resident"
-              value={ws != null ? `${ws} MB` : '–'}
+              label="RAM"
+              value={fmtMemPair(ws, s.proc?.heapMaxMb ?? priv)}
               tier="lead"
               title={
-                priv != null
-                  ? `${ws} MB resident of ${priv} MB committed by this process. Residency, not heap usage: the heap ceiling is not something the dashboard can see.`
-                  : 'Working set could not be read.'
+                ws == null
+                  ? 'Working set could not be read.'
+                  : s.proc?.heapMaxMb != null
+                    ? `${ws} MB resident of the ${s.proc.heapMaxMb} MB heap ceiling (-Xmx from the command line). The process has committed ${priv ?? '?'} MB; ${residency ?? '?'}% of that is resident. Residency, not heap usage.`
+                    : `${ws} MB resident of ${priv} MB committed by this process. The java command line is not readable for a boot-started process, so -Xmx is unknown and committed memory stands in for allocated. Residency, not heap usage.`
               }
             >
-              <Meter value={ws} max={priv} tone="muted" />
-              {residency != null && (
-                <div className="mt-0.5 text-[10px] text-faint">{residency}% of committed</div>
+              <Meter value={ws} max={s.proc?.heapMaxMb ?? priv} tone="muted" />
+              {ws != null && (
+                <div className="mt-0.5 text-[10px] text-faint">
+                  {s.proc?.heapMaxMb != null
+                    ? `${residency ?? '?'}% of committed resident`
+                    : 'committed stands in for -Xmx'}
+                </div>
               )}
             </Metric>
             <Metric label="Uptime" value={age(s.proc?.uptimeSeconds ?? null)} tier="lead" />

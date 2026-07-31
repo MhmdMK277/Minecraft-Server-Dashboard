@@ -384,6 +384,7 @@ async function inspect(
           pid: jvm.pid,
           workingSetMb: jvm.workingSetMb,
           privateMb: jvm.privateMb,
+          heapMaxMb: jvm.heapMaxMb,
           uptimeSeconds: jvm.uptimeSeconds,
         }
       : null,

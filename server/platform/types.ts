@@ -55,6 +55,8 @@ export type JvmProcess = {
   dir: string
   workingSetMb: number | null
   privateMb: number | null
+  /** -Xmx parsed from the command line; null when unreadable (session 0). */
+  heapMaxMb: number | null
   uptimeSeconds: number | null
   attributedBy: Attribution
   /** Windows session. 0 means a service or a scheduled task, never a desktop. */

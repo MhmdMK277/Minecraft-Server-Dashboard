@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { observerBlockedMs } from '../loopguard'
+import { parseXmx } from '../parse'
 import type {
   DirHint,
   JvmProcess,
@@ -376,6 +377,7 @@ export const windowsProvider: ProcessProvider = {
         dir,
         workingSetMb: row.ws,
         privateMb: row.priv,
+        heapMaxMb: parseXmx(row.ownCmd || ''),
         uptimeSeconds: Number.isFinite(row.start) ? Math.round((now - row.start) / 1000) : null,
         attributedBy: by,
         sessionId: row.sessionId,

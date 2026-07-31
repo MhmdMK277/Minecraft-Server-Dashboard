@@ -38,7 +38,7 @@ const gtnh: ServerStatus = {
   healthScans: 900,
   attribution: null,
   attributionDetail: null,
-  proc: { pid: 18076, workingSetMb: 1004, privateMb: 6906, uptimeSeconds: 51000 },
+  proc: { pid: 18076, workingSetMb: 1004, privateMb: 6906, heapMaxMb: 6144, uptimeSeconds: 51000 },
   slp: {
     versionName: 'GT New Horizons 2.8.4 (1.7.10 Forge)',
     protocol: 5,

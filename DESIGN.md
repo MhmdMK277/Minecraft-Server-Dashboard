@@ -94,7 +94,15 @@ live inside, never on the board.
    chips beside headings.
 5. Every interactive element keeps a visible focus state; keyboard paths
    survive the restyle.
-6. **Content never dictates column width** (operator amendment, 2026-07-31,
+6. **The RAM metric** (operator rule, 2026-07-31): label "RAM", value reads
+   used / allocated in matching units chosen from the allocated side.
+   Integer MB below 1000, one-decimal GB at or above ("0.6 / 8 GB", never
+   "1100 MB"). Allocated is -Xmx parsed from the captured java command
+   line; when unreadable (boot-started, session 0) committed memory stands
+   in and the secondary line says so. The resident-vs-committed honesty
+   lives on the secondary line and hover, unchanged in substance. Applies
+   on fleet rows and Overview.
+7. **Content never dictates column width** (operator amendment, 2026-07-31,
    root cause of every observed squeeze). Columns get their widths from the
    layout: every fr track is `minmax(0, fr)` or its children are `min-w-0`.
    Console and log panes get a capped width inside their column, and long

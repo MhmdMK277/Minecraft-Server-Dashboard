@@ -218,7 +218,7 @@ function srv(name: string, health: ServerStatus['health']): ServerStatus {
     healthScans: 1,
     attribution: null,
     attributionDetail: null,
-    proc: { pid: 1, workingSetMb: null, privateMb: null, uptimeSeconds: 9000 },
+    proc: { pid: 1, workingSetMb: null, privateMb: null, heapMaxMb: null, uptimeSeconds: 9000 },
     slp: null,
     rcon: null,
     gc: null,

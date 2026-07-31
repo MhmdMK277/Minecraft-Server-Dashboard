@@ -16,6 +16,24 @@ const COLOUR = /§./g
  * A regex looking for digits near "of" matches the 6 in "§6" and reports six
  * phantom players.
  */
+/**
+ * The JVM heap ceiling, from a captured command line. `-Xmx15G`, `-Xmx8192m`,
+ * `-Xmx4096k` or a bare byte count; returns MB, or null when the flag is
+ * absent or the command line was unreadable (boot-started processes in
+ * session 0 have no readable command line, and the caller falls back to
+ * committed memory WITH A LABEL SAYING SO, never silently).
+ */
+export function parseXmx(cmd: string): number | null {
+  const m = /-Xmx(\d+)([kKmMgG])?\b/.exec(cmd)
+  if (!m) return null
+  const n = Number(m[1])
+  if (!Number.isFinite(n) || n <= 0) return null
+  const unit = (m[2] ?? '').toLowerCase()
+  const mb =
+    unit === 'g' ? n * 1024 : unit === 'm' ? n : unit === 'k' ? n / 1024 : n / (1024 * 1024)
+  return mb >= 1 ? Math.round(mb) : null
+}
+
 export function stripColour(s: string): string {
   return s.replace(COLOUR, '')
 }

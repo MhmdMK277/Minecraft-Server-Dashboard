@@ -83,7 +83,7 @@ function srv(o: Partial<ServerStatus> & { name: string }): ServerStatus {
     healthScans: 1,
     attribution: null,
     attributionDetail: null,
-    proc: { pid: 1234, workingSetMb: 512, privateMb: 3600, uptimeSeconds: 26000 },
+    proc: { pid: 1234, workingSetMb: 512, privateMb: 3600, heapMaxMb: null, uptimeSeconds: 26000 },
     slp: {
       versionName: 'Paper 1.21.4',
       protocol: 769,

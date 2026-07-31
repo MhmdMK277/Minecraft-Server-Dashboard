@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { ServerStatus, LogLine } from '@shared/api'
-import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT } from './status'
+import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT, fmtMemPair } from './status'
+import type { WorldInfo } from '@shared/api'
+import { API } from '@shared/api'
 import { ControlPanel, BackupToggle, CommandBox, Btn, age } from './controls'
 import { formatMc } from './mcformat'
 import { dashboard } from './client'
@@ -151,6 +153,7 @@ export default function ServerPages({
       <div className="mt-4">
         {page === 'overview' && <Overview s={s} canEdit={canEdit} />}
         {page === 'players' && <Players s={s} canEdit={canEdit} />}
+        {page === 'worlds' && <Worlds s={s} />}
         {page === 'console' && <ConsolePage s={s} canEdit={canEdit} lines={lines} />}
         {page === 'backups' && <Backups s={s} canEdit={canEdit} />}
         {page === 'settings' &&
@@ -233,10 +236,25 @@ function Overview({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
           >
             {s.gc && <div className="mt-0.5 text-[10px] text-faint">{s.gc.stoppedPercent}% stopped</div>}
           </Metric>
-          <Metric label="Resident" value={ws != null ? `${ws} MB` : '–'} tier="lead">
-            <Meter value={ws} max={priv} tone="muted" />
-            {residency != null && (
-              <div className="mt-0.5 text-[10px] text-faint">{residency}% of committed</div>
+          <Metric
+            label="RAM"
+            value={fmtMemPair(ws, s.proc?.heapMaxMb ?? priv)}
+            tier="lead"
+            title={
+              ws == null
+                ? 'Working set could not be read.'
+                : s.proc?.heapMaxMb != null
+                  ? `${ws} MB resident of the ${s.proc.heapMaxMb} MB heap ceiling (-Xmx from the command line). The process has committed ${priv ?? '?'} MB; ${residency ?? '?'}% of that is resident. Residency, not heap usage.`
+                  : `${ws} MB resident of ${priv} MB committed by this process. The java command line is not readable for a boot-started process, so -Xmx is unknown and committed memory stands in for allocated. Residency, not heap usage.`
+            }
+          >
+            <Meter value={ws} max={s.proc?.heapMaxMb ?? priv} tone="muted" />
+            {ws != null && (
+              <div className="mt-0.5 text-[10px] text-faint">
+                {s.proc?.heapMaxMb != null
+                  ? `${residency ?? '?'}% of committed resident`
+                  : 'committed stands in for -Xmx'}
+              </div>
             )}
           </Metric>
           <Metric label="Uptime" value={age(s.proc?.uptimeSeconds ?? null)} tier="lead" />
@@ -564,6 +582,116 @@ function ConsolePage({ s, canEdit, lines }: { s: ServerStatus; canEdit: boolean;
           </p>
         </Section>
       )}
+    </>
+  )
+}
+
+function fmtBytes(bytes: number): string {
+  const mb = bytes / (1024 * 1024)
+  if (mb < 1000) return `${Math.round(mb)} MB`
+  const v = (mb / 1024).toFixed(1)
+  return `${v.endsWith('.0') ? v.slice(0, -2) : v} GB`
+}
+
+const DIM_LABEL: Record<WorldInfo['kind'], string> = {
+  overworld: 'overworld',
+  nether: 'nether',
+  end: 'the end',
+  custom: 'custom',
+}
+
+/**
+ * Read-only worlds enumeration (Phase B). Everything here is a statement
+ * about what is on disk; there is no action on this page, and no write path
+ * behind it. The walk cost is shown because honesty includes what a number
+ * cost to produce.
+ */
+function Worlds({ s }: { s: ServerStatus }) {
+  const [worlds, setWorlds] = useState<WorldInfo[] | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    setWorlds(null)
+    setErr(null)
+    dashboard
+      .getWorlds(s.id)
+      .then(setWorlds)
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'could not read worlds'))
+  }, [s.id])
+
+  if (err) return <p className="prose-line text-[12px] text-bad">{err}</p>
+  if (worlds === null) {
+    return (
+      <p className="prose-line text-[12px] text-faint">
+        Walking the world directories. A large modpack world holds tens of thousands of region
+        files, so this can take a moment.
+      </p>
+    )
+  }
+  if (worlds.length === 0) {
+    return (
+      <p className="prose-line text-[12px] text-faint">
+        No world directories were found under this server. A world is a directory holding a{' '}
+        <code className="font-mono">level.dat</code>.
+      </p>
+    )
+  }
+
+  return (
+    <>
+      {worlds.map((w) => (
+        <Section
+          key={w.dir}
+          label={w.dir}
+          note={`Read from disk in ${w.walkMs} ms. Sizes are what was on disk at that moment; a live server writes constantly.`}
+        >
+          <div className="flex items-start gap-4">
+            {w.hasIcon && (
+              <img
+                src={API.worldIcon(s.id, w.dir)}
+                alt=""
+                width={44}
+                height={44}
+                className="mt-1 shrink-0 rounded-md border border-border"
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
+                <Metric label="Kind" value={DIM_LABEL[w.kind]} tier="meta" />
+                <Metric label="Size" value={fmtBytes(w.sizeBytes)} tier="body" />
+                <Metric label="Region files" value={String(w.regionFiles)} tier="body" />
+                <Metric
+                  label="Last written"
+                  value={w.lastWrittenAt ? new Date(w.lastWrittenAt).toLocaleString() : '–'}
+                  tier="meta"
+                  title="The newest file modification time anywhere in the world directory."
+                />
+              </div>
+              {w.dimensions.length > 0 && (
+                <div className="mt-3 border-t border-border/60 pt-2.5">
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-faint">
+                    Dimensions inside this world
+                  </div>
+                  <ul className="mt-1.5 space-y-1">
+                    {w.dimensions.map((d) => (
+                      <li key={d.path} className="flex flex-wrap items-baseline gap-x-4 text-[12px]">
+                        <code className="font-mono text-ink">{d.path}</code>
+                        <span className="text-faint">{DIM_LABEL[d.kind]}</span>
+                        <span className="tnum font-mono text-muted-foreground">{fmtBytes(d.sizeBytes)}</span>
+                        <span className="tnum font-mono text-faint">{d.regionFiles} regions</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </Section>
+      ))}
+      <p className="prose-line text-[11px] leading-relaxed text-faint">
+        This page reads; it never writes. Deleting or modifying a world will never be offered
+        here.
+      </p>
     </>
   )
 }

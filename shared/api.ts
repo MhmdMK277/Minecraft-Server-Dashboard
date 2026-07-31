@@ -77,6 +77,12 @@ export const ProcInfo = z.object({
   pid: z.number(),
   workingSetMb: z.number().nullable(),
   privateMb: z.number().nullable(),
+  /**
+   * -Xmx parsed from the java command line, in MB. Null when the command
+   * line is unreadable (boot-started, session 0), in which case the UI
+   * falls back to committed memory and SAYS SO in the label.
+   */
+  heapMaxMb: z.number().nullable(),
   uptimeSeconds: z.number().nullable(),
 })
 export type ProcInfo = z.infer<typeof ProcInfo>
@@ -601,12 +607,43 @@ export const SessionSummary = z.object({
 })
 export type SessionSummary = z.infer<typeof SessionSummary>
 
+/**
+ * Read-only world enumeration (Phase B). Sizes are honest sums of what was
+ * on disk at walk time, and `walkMs` keeps the cost of producing them
+ * visible. There is no write path behind any of this, by design.
+ */
+export const DimensionInfo = z.object({
+  /** Path relative to the world directory, e.g. 'DIM-1' or 'dimensions/ns/name'. */
+  path: z.string(),
+  kind: z.enum(['overworld', 'nether', 'end', 'custom']),
+  sizeBytes: z.number(),
+  regionFiles: z.number(),
+})
+export type DimensionInfo = z.infer<typeof DimensionInfo>
+
+export const WorldInfo = z.object({
+  /** Directory name under the server root, e.g. 'world' or 'world_nether'. */
+  dir: z.string(),
+  kind: z.enum(['overworld', 'nether', 'end', 'custom']),
+  sizeBytes: z.number(),
+  files: z.number(),
+  regionFiles: z.number(),
+  lastWrittenAt: z.string().nullable(),
+  hasIcon: z.boolean(),
+  dimensions: z.array(DimensionInfo),
+  walkMs: z.number(),
+})
+export type WorldInfo = z.infer<typeof WorldInfo>
+
 /** HTTP routes. Was `CH`, the Electron IPC channel list. */
 export const API = {
   appInfo: '/api/info',
   snapshot: '/api/servers',
   refresh: '/api/servers/refresh',
   logBacklog: (id: string) => `/api/servers/${encodeURIComponent(id)}/log`,
+  worlds: (id: string) => `/api/servers/${encodeURIComponent(id)}/worlds`,
+  worldIcon: (id: string, dir: string) =>
+    `/api/servers/${encodeURIComponent(id)}/worlds/${encodeURIComponent(dir)}/icon`,
   ackIpChange: '/api/network/ack-ip-change',
   setBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/backup`,
   setSetting: (id: string) => `/api/servers/${encodeURIComponent(id)}/settings`,

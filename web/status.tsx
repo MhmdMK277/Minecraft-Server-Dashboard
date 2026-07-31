@@ -152,6 +152,23 @@ export function Indicator({
 }
 
 /** Spoken form of the two axes, for screen readers and for the `title`. */
+/**
+ * The RAM pair, per the DESIGN.md display rule: used / allocated in matching
+ * units chosen from the allocated side. Integer MB below 1000, one-decimal
+ * GB at or above (trailing .0 dropped): "0.6 / 8 GB", never "1100 MB".
+ */
+export function fmtMemPair(usedMb: number | null, allocMb: number | null): string {
+  if (usedMb == null) return '–'
+  const gb = (n: number) => {
+    const v = (n / 1024).toFixed(1)
+    return v.endsWith('.0') ? v.slice(0, -2) : v
+  }
+  if (allocMb == null) return usedMb >= 1000 ? `${gb(usedMb)} GB` : `${Math.round(usedMb)} MB`
+  return allocMb >= 1000
+    ? `${gb(usedMb)} / ${gb(allocMb)} GB`
+    : `${Math.round(usedMb)} / ${Math.round(allocMb)} MB`
+}
+
 export function verdictSentence(v: Verdict): string {
   const conf =
     v.confidence === 'measured'
