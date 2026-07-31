@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
-import type { DimensionInfo, WorldInfo } from '@shared/api'
+import type { DimensionInfo, WorldInfo, WorldsReading } from '@shared/api'
 
 /**
  * Read-only world enumeration. Phase B item 1.
@@ -130,6 +130,56 @@ async function dimensionsOf(worldPath: string): Promise<DimensionInfo[]> {
  * (directories under the server root holding a level.dat), never from a
  * request.
  */
+/**
+ * How long a reading stays good. Same convention as launcher.ts's
+ * TASK_CACHE_MS: an exported constant, and `maxAgeMs = 0` means "do not use
+ * the cache", which is what the refresh control passes.
+ *
+ * Measured on the real fleet before choosing this: GTNH's world is 54
+ * dimensions and walks in 178 ms, a 555 MB Paper world in 47 ms. So this is
+ * not rescuing a stall today. It is here so that revisiting the page shows
+ * the reading it already has, with the time it was taken, instead of
+ * silently doing the work again and implying the number is live. A world
+ * with tens of thousands of region files is the case where it earns more.
+ */
+export const WORLDS_CACHE_MS = 60_000
+
+const cache = new Map<string, { at: number; walkMs: number; worlds: WorldInfo[] }>()
+
+/** Test seam: the cache is process-wide, so proofs must be able to clear it. */
+export function resetWorldsCache(): void {
+  cache.clear()
+}
+
+/**
+ * A worlds reading, from cache when one is young enough.
+ *
+ * `maxAgeMs > 0` is not redundant, for the reason launcher.ts documents: a
+ * caller passing 0 to force a fresh read would otherwise still hit a cache
+ * written in the same millisecond.
+ */
+export async function readWorlds(
+  serverDir: string,
+  worldDirs: string[],
+  maxAgeMs = WORLDS_CACHE_MS,
+): Promise<WorldsReading> {
+  const key = serverDir.toLowerCase()
+  const hit = cache.get(key)
+  if (hit && maxAgeMs > 0 && Date.now() - hit.at <= maxAgeMs) {
+    return {
+      readAt: new Date(hit.at).toISOString(),
+      walkMs: hit.walkMs,
+      cached: true,
+      worlds: hit.worlds,
+    }
+  }
+  const started = Date.now()
+  const worlds = await listWorlds(serverDir, worldDirs)
+  const walkMs = Date.now() - started
+  cache.set(key, { at: started, walkMs, worlds })
+  return { readAt: new Date(started).toISOString(), walkMs, cached: false, worlds }
+}
+
 export async function listWorlds(serverDir: string, worldDirs: string[]): Promise<WorldInfo[]> {
   const out: WorldInfo[] = []
   for (const name of worldDirs) {

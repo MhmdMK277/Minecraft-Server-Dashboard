@@ -643,6 +643,25 @@ export const DimensionInfo = z.object({
 })
 export type DimensionInfo = z.infer<typeof DimensionInfo>
 
+/**
+ * One reading of a server's worlds.
+ *
+ * The envelope exists so the page can say WHEN it read, and whether what it
+ * is showing came from a previous read. Same idiom as PublicIpState's
+ * `fetchedAt` + `stale` and GcSummary's `coveredMinutes`: ship the
+ * provenance of a number next to the number, and never let a cached value
+ * imply freshness it does not have.
+ */
+export const WorldsReading = z.object({
+  readAt: z.string(),
+  /** What the walk cost, summed across worlds. */
+  walkMs: z.number(),
+  /** True when this is a previous reading served without re-walking. */
+  cached: z.boolean(),
+  worlds: z.array(z.lazy(() => WorldInfo)),
+})
+export type WorldsReading = { readAt: string; walkMs: number; cached: boolean; worlds: WorldInfo[] }
+
 export const WorldInfo = z.object({
   /** Directory name under the server root, e.g. 'world' or 'world_nether'. */
   dir: z.string(),
@@ -699,7 +718,8 @@ export const API = {
   snapshot: '/api/servers',
   refresh: '/api/servers/refresh',
   logBacklog: (id: string) => `/api/servers/${encodeURIComponent(id)}/log`,
-  worlds: (id: string) => `/api/servers/${encodeURIComponent(id)}/worlds`,
+  worlds: (id: string, fresh = false) =>
+    `/api/servers/${encodeURIComponent(id)}/worlds${fresh ? '?fresh=1' : ''}`,
   attachValidate: '/api/attach/validate',
   attach: '/api/attach',
   attachLaunch: '/api/attach/launch',

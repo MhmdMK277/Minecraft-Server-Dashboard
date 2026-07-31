@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { ServerStatus, LogLine } from '@shared/api'
 import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT, fmtMemPair } from './status'
-import type { WorldInfo } from '@shared/api'
+import type { DimensionInfo, WorldsReading } from '@shared/api'
 import { API } from '@shared/api'
 import { ControlPanel, BackupToggle, CommandBox, Btn, age } from './controls'
 import { formatMc } from './mcformat'
@@ -593,7 +593,7 @@ function fmtBytes(bytes: number): string {
   return `${v.endsWith('.0') ? v.slice(0, -2) : v} GB`
 }
 
-const DIM_LABEL: Record<WorldInfo['kind'], string> = {
+const DIM_LABEL: Record<DimensionInfo['kind'], string> = {
   overworld: 'overworld',
   nether: 'nether',
   end: 'the end',
@@ -606,21 +606,111 @@ const DIM_LABEL: Record<WorldInfo['kind'], string> = {
  * behind it. The walk cost is shown because honesty includes what a number
  * cost to produce.
  */
+/** One dimension, as a board row. Aligned columns, no card. */
+function DimensionRow({ d }: { d: DimensionInfo }) {
+  const empty = d.regionFiles === 0 && d.sizeBytes < 1024 * 1024
+  return (
+    <li
+      className={`grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-5 border-t border-border/40 py-1 ${
+        empty ? 'opacity-55' : ''
+      }`}
+    >
+      <code className="truncate font-mono text-[12px] text-ink">{d.path}</code>
+      <span className="tnum font-mono text-[11px] text-muted-foreground">{fmtBytes(d.sizeBytes)}</span>
+      <span className="tnum w-20 text-right font-mono text-[11px] text-faint">
+        {d.regionFiles} {d.regionFiles === 1 ? 'region' : 'regions'}
+      </span>
+    </li>
+  )
+}
+
+/**
+ * Dimensions, at the scale a modded server actually has them.
+ *
+ * Measured on the real fleet before designing this: GTNH has FIFTY-FOUR
+ * dimensions in one world, all in Forge's flat `DIM<n>` form, and most hold
+ * no data at all. Two consequences:
+ *
+ *   - Grouping by namespace only works for the modern
+ *     `dimensions/<namespace>/<name>` layout. `DIM112` has no namespace, and
+ *     inventing a mod-name lookup would be exactly the kind of guess this
+ *     project refuses to make. So the known ids are named, and the rest are
+ *     one group ordered by size.
+ *   - Rendering 38 identical empty rows is noise, so they collapse to a
+ *     count. The disclosure is the house pattern: an underlined text button,
+ *     never a chevron, and the collapsed state says what it is hiding.
+ */
+function Dimensions({ dims }: { dims: DimensionInfo[] }) {
+  const [showAll, setShowAll] = useState(false)
+  if (dims.length === 0) return null
+
+  const named = dims.filter((d) => d.kind !== 'custom')
+  const rest = dims.filter((d) => d.kind === 'custom')
+  const withData = rest.filter((d) => d.regionFiles > 0 || d.sizeBytes >= 1024 * 1024)
+  const empty = rest.filter((d) => !(d.regionFiles > 0 || d.sizeBytes >= 1024 * 1024))
+  const bySize = (a: DimensionInfo, b: DimensionInfo) => b.sizeBytes - a.sizeBytes
+
+  return (
+    <div className="mt-4 border-t border-border/60 pt-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-faint">
+          Dimensions inside this world
+        </span>
+        <span className="tnum font-mono text-[10px] text-faint">
+          {dims.length} total · {withData.length + named.length} with data
+        </span>
+      </div>
+
+      <ul className="mt-1.5">
+        {named.sort(bySize).map((d) => (
+          <DimensionRow key={d.path} d={d} />
+        ))}
+        {withData.sort(bySize).map((d) => (
+          <DimensionRow key={d.path} d={d} />
+        ))}
+        {showAll && empty.sort(bySize).map((d) => <DimensionRow key={d.path} d={d} />)}
+      </ul>
+
+      {empty.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="mt-2 text-[11px] text-muted-foreground underline underline-offset-2 transition-colors duration-150 hover:text-ink"
+        >
+          {showAll
+            ? `Hide the ${empty.length} dimensions with no data yet`
+            : `Show ${empty.length} more dimensions, generated but holding no data yet`}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function Worlds({ s }: { s: ServerStatus }) {
-  const [worlds, setWorlds] = useState<WorldInfo[] | null>(null)
+  const [reading, setReading] = useState<WorldsReading | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(
+    (fresh: boolean) => {
+      setBusy(true)
+      setErr(null)
+      dashboard
+        .getWorlds(s.id, fresh)
+        .then(setReading)
+        .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'could not read worlds'))
+        .finally(() => setBusy(false))
+    },
+    [s.id],
+  )
 
   useEffect(() => {
-    setWorlds(null)
-    setErr(null)
-    dashboard
-      .getWorlds(s.id)
-      .then(setWorlds)
-      .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'could not read worlds'))
-  }, [s.id])
+    setReading(null)
+    load(false)
+  }, [s.id, load])
 
   if (err) return <p className="prose-line text-[12px] text-bad">{err}</p>
-  if (worlds === null) {
+  if (reading === null) {
     return (
       <p className="prose-line text-[12px] text-faint">
         Walking the world directories. A large modpack world holds tens of thousands of region
@@ -628,7 +718,7 @@ function Worlds({ s }: { s: ServerStatus }) {
       </p>
     )
   }
-  if (worlds.length === 0) {
+  if (reading.worlds.length === 0) {
     return (
       <p className="prose-line text-[12px] text-faint">
         No world directories were found under this server. A world is a directory holding a{' '}
@@ -637,14 +727,46 @@ function Worlds({ s }: { s: ServerStatus }) {
     )
   }
 
+  const totalBytes = reading.worlds.reduce((n, w) => n + w.sizeBytes, 0)
+  const totalDims = reading.worlds.reduce((n, w) => n + w.dimensions.length, 0)
+
   return (
     <>
-      {worlds.map((w) => (
-        <Section
-          key={w.dir}
-          label={w.dir}
-          note={`Read from disk in ${w.walkMs} ms. Sizes are what was on disk at that moment; a live server writes constantly.`}
-        >
+      {/*
+        The summary first, with the provenance of the reading attached to it
+        rather than repeated per world. A cached reading says so: showing a
+        previous walk as though it were live is the same failure as a panel
+        showing the last numbers it collected before a server froze.
+      */}
+      <Section label="Worlds">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+          <Metric label="Worlds" value={String(reading.worlds.length)} tier="body" />
+          <Metric label="Dimensions" value={String(totalDims)} tier="body" />
+          <Metric label="On disk" value={fmtBytes(totalBytes)} tier="body" />
+          <Metric
+            label="Reading taken"
+            value={new Date(reading.readAt).toLocaleTimeString()}
+            tier="meta"
+            title={`Walked in ${reading.walkMs} ms. Sizes are what was on disk at that moment; a live server writes constantly.`}
+          />
+        </div>
+        <p className="prose-line mt-2.5 text-[11px] leading-relaxed text-faint">
+          {reading.cached
+            ? 'This is the reading already taken, shown as it was. '
+            : `Read from disk in ${reading.walkMs} ms. `}
+          <button
+            type="button"
+            onClick={() => load(true)}
+            disabled={busy}
+            className="text-muted-foreground underline underline-offset-2 transition-colors duration-150 hover:text-ink disabled:opacity-50"
+          >
+            {busy ? 'Reading…' : 'Read the folders again'}
+          </button>
+        </p>
+      </Section>
+
+      {reading.worlds.map((w) => (
+        <Section key={w.dir} label={w.dir}>
           <div className="flex items-start gap-4">
             {w.hasIcon && (
               <img
@@ -667,27 +789,12 @@ function Worlds({ s }: { s: ServerStatus }) {
                   title="The newest file modification time anywhere in the world directory."
                 />
               </div>
-              {w.dimensions.length > 0 && (
-                <div className="mt-3 border-t border-border/60 pt-2.5">
-                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-faint">
-                    Dimensions inside this world
-                  </div>
-                  <ul className="mt-1.5 space-y-1">
-                    {w.dimensions.map((d) => (
-                      <li key={d.path} className="flex flex-wrap items-baseline gap-x-4 text-[12px]">
-                        <code className="font-mono text-ink">{d.path}</code>
-                        <span className="text-faint">{DIM_LABEL[d.kind]}</span>
-                        <span className="tnum font-mono text-muted-foreground">{fmtBytes(d.sizeBytes)}</span>
-                        <span className="tnum font-mono text-faint">{d.regionFiles} regions</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <Dimensions dims={w.dimensions} />
             </div>
           </div>
         </Section>
       ))}
+
       <p className="prose-line text-[11px] leading-relaxed text-faint">
         This page reads; it never writes. Deleting or modifying a world will never be offered
         here.

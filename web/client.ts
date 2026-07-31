@@ -9,7 +9,7 @@ import type {
   SessionUser,
   Snapshot,
   ServerSettingKey,
-  WorldInfo,
+  WorldsReading,
   ConfirmedLaunch,
   AttachCandidate,
 } from '@shared/api'
@@ -216,7 +216,7 @@ export const dashboard = {
   getAppInfo: () => get<AppInfo>(API.appInfo),
   getSnapshot: () => get<Snapshot>(API.snapshot),
   getLogBacklog: (id: string) => get<LogLine[]>(API.logBacklog(id)),
-  getWorlds: (id: string) => get<WorldInfo[]>(API.worlds(id)),
+  getWorlds: (id: string, fresh = false) => get<WorldsReading>(API.worlds(id, fresh)),
   validateAttach: (dir: string) => send<AttachCandidate>(API.attachValidate, 'POST', { dir }),
   attach: (path: string, confirmedLaunch: ConfirmedLaunch | null) =>
     send<unknown>(API.attach, 'POST', { path, confirmedLaunch }),

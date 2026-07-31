@@ -35,7 +35,7 @@ declare module 'fastify' {
 }
 
 import { scan } from './discovery'
-import { listWorlds } from './worlds'
+import { readWorlds } from './worlds'
 import { validateAttachCandidate, attachDir, detachDir, setLaunchMethod } from './attach'
 import { consoleBus, syncConsoles, backlogFor, stopAllConsoles } from './consoles'
 import { refreshPublicIp, acknowledgeIpChange } from './network'
@@ -596,13 +596,18 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
   // Read-only world enumeration. The directory and world list come from the
   // dashboard's own discovery, resolved via the server id; nothing from the
   // request is ever joined into a filesystem path.
-  app.get<{ Params: { id: string } }>('/api/servers/:id/worlds', async (req, reply) => {
-    if (!require_(req, reply, 'viewer', 'worlds.read')) return
-    const snap = latest ?? (await doScan())
-    const s = snap.servers.find((x) => x.id === req.params.id)
-    if (!s) return reply.code(404).send({ error: 'no server with that id' })
-    return listWorlds(s.dir, s.worldDirs)
-  })
+  app.get<{ Params: { id: string }; Querystring: { fresh?: string } }>(
+    '/api/servers/:id/worlds',
+    async (req, reply) => {
+      if (!require_(req, reply, 'viewer', 'worlds.read')) return
+      const snap = latest ?? (await doScan())
+      const s = snap.servers.find((x) => x.id === req.params.id)
+      if (!s) return reply.code(404).send({ error: 'no server with that id' })
+      // ?fresh=1 is the refresh control saying "walk it again". Everything
+      // else gets whatever reading is current, with its timestamp.
+      return readWorlds(s.dir, s.worldDirs, req.query.fresh === '1' ? 0 : undefined)
+    },
+  )
 
   // The world's own icon.png, when it has one. The world segment is matched
   // by strict equality against the discovered list, so no request can name a
