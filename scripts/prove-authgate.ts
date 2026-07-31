@@ -168,6 +168,95 @@ const state = await probe(API.authState)
 check('the auth state route stays reachable unauthenticated', state.status === 200)
 console.log(`   ${API.authState} -> ${state.status}`)
 
+// ===========================================================================
+// The one that matters most for the future: enumerate the REAL route table
+// and prove the gate is default-deny. A gate that depends on someone
+// remembering to protect a new route is the same bug waiting to happen, so
+// this test does not read a list I wrote: it reads the routes Fastify
+// actually registered, fires an unauthenticated request at every one, and
+// fails if any of them answers without being a NAMED exception.
+// ===========================================================================
+console.log('\n=== 5b. default-deny over the real route table ===\n')
+{
+  // The exceptions, spelled out here as well as in http.ts. If someone makes
+  // a route public, this list must change too, in a file called prove-*.
+  const EXPECTED_PUBLIC = new Set<string>([API.authState, API.login])
+  const EXPECTED_SELF_GUARDED = new Set<string>(['/ws'])
+  const EXPECTED_SHELL = new Set<string>(['/', '/*'])
+
+  const routes = app.registeredRoutes.filter((r) => r.method !== 'HEAD' && r.method !== 'OPTIONS')
+  check('the route table is not empty (the enumeration works at all)', routes.length > 5, String(routes.length))
+
+  for (const r of routes) {
+    const named =
+      EXPECTED_PUBLIC.has(r.url) || EXPECTED_SELF_GUARDED.has(r.url) || EXPECTED_SHELL.has(r.url)
+
+    // Fill path params with a value that cannot exist, so a 404 from a
+    // missing resource is distinguishable from a 401 from the gate.
+    const path = r.url.replace(/:[^/]+/g, 'nonexistent-for-the-proof').replace('/*', '/index.html')
+
+    const res = await fetch(BASE + path, {
+      method: r.method,
+      headers: { 'content-type': 'application/json', [CSRF_HEADER]: '1' },
+      body: r.method === 'GET' || r.method === 'DELETE' ? undefined : '{}',
+    })
+
+    // Reachable = the handler ran. 401 and 403 mean the gate stopped it.
+    const gated = res.status === 401 || res.status === 403
+    const ok = named || gated
+    if (!ok) {
+      console.log(`   FAIL  ${r.method} ${r.url} -> ${res.status} (unauthenticated, and not a named exception)`)
+    } else {
+      console.log(`   ${'PASS'}  ${r.method.padEnd(6)} ${r.url.padEnd(42)} ${res.status}${named ? '  [named exception]' : ''}`)
+    }
+    check(
+      `${r.method} ${r.url} is gated, or is a named public route`,
+      ok,
+      `${res.status}${named ? ' named' : ''}`,
+    )
+  }
+
+  // The exception lists must not rot: every name in them must still be a
+  // real route, or it is a stale entry nobody noticed.
+  const urls = new Set(routes.map((r) => r.url))
+  for (const u of [...EXPECTED_PUBLIC, ...EXPECTED_SELF_GUARDED]) {
+    check(`the named exception ${u} is still a real route`, urls.has(u))
+  }
+}
+
+// ===========================================================================
+// The claim under test is about the FUTURE: a route nobody has written yet
+// must be protected without anyone remembering to protect it. So write one.
+// `/metrics` is not hypothetical, it is on the roadmap as a Prometheus
+// endpoint, and under the old prefix test it would have been born
+// world-readable.
+// ===========================================================================
+console.log('\n=== 5c. a route added tomorrow is protected by default ===\n')
+{
+  const future = await buildServer({ cfg, version: 'prove-authgate-future' })
+  future.get('/metrics', async () => 'mcdash_up 1\n')
+  future.get('/api/whatever/new', async () => ({ secret: 'data' }))
+  future.post('/admin/danger', async () => ({ did: 'something' }))
+  await future.listen({ host: '127.0.0.1', port: 0 })
+  const a = future.server.address()
+  const FUTURE_BASE = `http://127.0.0.1:${typeof a === 'object' && a ? a.port : 0}`
+
+  for (const [method, path] of [
+    ['GET', '/metrics'],
+    ['GET', '/api/whatever/new'],
+    ['POST', '/admin/danger'],
+  ] as Array<[string, string]>) {
+    const res = await fetch(FUTURE_BASE + path, {
+      method,
+      headers: { [CSRF_HEADER]: '1' },
+    })
+    const gated = res.status === 401 || res.status === 403
+    console.log(`   ${gated ? 'PASS' : 'FAIL'}  ${method} ${path.padEnd(24)} ${res.status}`)
+    check(`a newly added route ${method} ${path} is protected without being told`, gated, String(res.status))
+  }
+  await future.close()
+}
+
 console.log('\n=== 6. security headers on every response ===\n')
 {
   const res2 = await fetch(BASE + API.snapshot, { headers: { cookie: `${SESSION_COOKIE}=${cookie}` } })

@@ -24,6 +24,13 @@ import {
   type Role,
   type SessionSummary,
 } from '@shared/api'
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** Every route Fastify registered. Read by prove-authgate. */
+    registeredRoutes: Array<{ method: string; url: string }>
+  }
+}
+
 import { scan } from './discovery'
 import { listWorlds } from './worlds'
 import { consoleBus, syncConsoles, backlogFor, stopAllConsoles } from './consoles'
@@ -81,6 +88,22 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     trustProxy: process.env.MCDASH_TRUST_PROXY === '1',
   })
 
+  /**
+   * The real route table, recorded as Fastify registers it.
+   *
+   * The gate below is default-deny and names its exceptions; this list is
+   * what lets a proof check that claim against reality rather than against a
+   * hand-written inventory that drifts. `prove-authgate` reads it, fires an
+   * unauthenticated request at every route, and fails if any of them answers
+   * without being a named exception.
+   */
+  const registeredRoutes: Array<{ method: string; url: string }> = []
+  app.addHook('onRoute', (r) => {
+    const methods = Array.isArray(r.method) ? r.method : [r.method]
+    for (const m of methods) registeredRoutes.push({ method: m, url: r.url })
+  })
+  app.decorate('registeredRoutes', registeredRoutes)
+
   await app.register(fastifyCookie)
   await app.register(fastifyWebsocket)
 
@@ -128,7 +151,38 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
    * unless it is named here, so forgetting to think about a new route fails
    * closed.
    */
+  /**
+   * The gate is DEFAULT-DENY over every registered route.
+   *
+   * It used to be default-deny only *within* `/api`: the hook returned early
+   * for anything else, so a route registered at, say, `/metrics` would have
+   * been born world-readable and nobody would have had to decide that. The
+   * safe thing must be what happens when a future change does nothing, so
+   * the question is now inverted. A new route is protected unless its
+   * pattern appears in one of the three named sets below, and adding it to
+   * one of them is a visible edit in a security-relevant file.
+   *
+   * `npm run prove-authgate` enumerates the real route table and fails if
+   * any route answers an unauthenticated caller without being named here.
+   */
+
+  /** Deliberately public: the two routes needed in order to get a session. */
   const PUBLIC_ROUTES = new Set<string>([API.authState, API.login])
+
+  /**
+   * Routes that authenticate themselves, differently. The WebSocket cannot
+   * reply 401 to an upgrade, so it checks the session after the handshake
+   * and closes with 4401. Listed here so "not gated by the hook" is written
+   * down rather than implied by a prefix test.
+   */
+  const SELF_GUARDED = new Set<string>([WS_PATH])
+
+  /**
+   * The SPA shell. These serve index.html and the built assets and carry no
+   * server data; the login screen itself lives here, so requiring a session
+   * would make signing in impossible.
+   */
+  const SHELL_ROUTES = new Set<string>(['/', '/*'])
 
   /**
    * Security headers on every response, including JSON.
@@ -190,9 +244,12 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
      * request reaches the not-found handler, which serves the SPA and no
      * data. The raw-url fallback is kept for that case only.
      */
-    const routed = req.routeOptions?.url
-    const url = routed ?? (req.url.split('?')[0] ?? '')
-    if (!url.startsWith('/api')) return
+    const url = req.routeOptions?.url
+    // Nothing matched: the not-found handler answers, with the SPA shell or
+    // a 404. There is no handler to protect and no data to leak.
+    if (!url) return
+    if (SHELL_ROUTES.has(url)) return
+    if (SELF_GUARDED.has(url)) return
     if (PUBLIC_ROUTES.has(url)) return
 
     const session = sessionOf(req)

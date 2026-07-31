@@ -42,6 +42,29 @@ The honest summary: this document raises the cost of an attack and records
 what was checked. It is not a professional penetration test, and nothing in
 it should be read as one.
 
+## Disclosure record
+
+The vulnerable code was public for part of its life, so this is recorded as
+a disclosure rather than only as an internal note.
+
+| | |
+| --- | --- |
+| Issue | Authentication bypass via URL percent-encoding (F1 below). An unauthenticated caller who could reach the port could read the full server snapshot, console backlog, worlds and app info |
+| Severity | Critical for confidentiality; no unauthenticated write, control or RCON access was possible |
+| Introduced | Present from the first public commit, `ee4ad74` (2026-07-31) |
+| Public exposure window | `ee4ad74` through `34f87e5`, the same day |
+| Found | 2026-07-31, by the M4 adversarial pass, before any external report |
+| Fixed | 2026-07-31 in `5be2c48`, hardened to default-deny in the commit that followed |
+| Fixed release | Any clone or pull of `main` at `5be2c48` or later contains the fix |
+| Live instance | The operator's running service was restarted onto the fix the same day; the bypass was verified exploitable before the restart and closed after |
+
+**If you cloned this repository during that window, pull `main`.** There is no
+configuration change to make and no credential to rotate: the flaw allowed
+reading, not authentication or writes, and no credential is reachable through
+the API by design (see "What held"). If your instance was reachable by
+someone you do not trust, treat anything your servers printed to their
+console during that time as having been readable.
+
 ## Threat model
 
 The system is a self-hosted monitoring dashboard that holds RCON credentials
@@ -169,6 +192,36 @@ It asserts sixteen spellings of a protected route (`/%61pi/`, `/%61%70%69/`,
 slash and more) return no JSON to an unauthenticated caller, that no canary
 string escapes, that mutating routes stay shut, and that a genuine session
 still works.
+
+#### F1a: the gate is now default-deny over every route, not just under `/api`
+
+The first fix closed the bypass but left a second question, raised on
+review: was the gate *default-deny*? It was not, quite. The hook still
+returned early for anything whose route pattern did not begin with `/api`,
+so a route registered elsewhere would have been born world-readable and
+nobody would have had to decide that. A Prometheus `/metrics` endpoint is on
+this project's own roadmap, and it would have shipped public.
+
+The question is inverted now. Every registered route requires a session
+unless its pattern appears in one of three **named** sets in `server/http.ts`:
+`PUBLIC_ROUTES` (the two routes needed to obtain a session), `SELF_GUARDED`
+(the WebSocket, which cannot answer 401 to an upgrade and closes 4401
+instead), and `SHELL_ROUTES` (the SPA shell, which carries no data and must
+be reachable for the login screen to load). Making a route public is now a
+visible edit to a security-relevant file.
+
+`prove-authgate` proves this against reality rather than against a list
+someone maintained by hand:
+
+- the server records its own route table as Fastify registers it
+  (`app.registeredRoutes`), and the proof fires an unauthenticated request at
+  **every route in it**, failing if any answers without being a named
+  exception. All 21 current routes pass;
+- every name in the exception lists must still resolve to a real route, so a
+  stale entry cannot rot there unnoticed;
+- and the proof registers three **new** routes at runtime, including
+  `/metrics`, to demonstrate that a route added tomorrow is protected without
+  anyone remembering to protect it. All three return 401.
 
 #### F2 (medium): redaction missed free-text secrets
 
