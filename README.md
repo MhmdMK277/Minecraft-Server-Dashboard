@@ -188,6 +188,12 @@ For a fresh machine, that means a server appears when:
    the dashboard offers no start button rather than guessing a command
    line.
 
+**Discovery is per machine.** The service reads the process table of the host
+it runs on, so it can only see servers on that machine. The browser can be
+anywhere on your network, but a server running on a different computer needs
+its own instance of the dashboard there. Attaching a folder does not change
+this: an attached folder is still a local folder.
+
 Directories without a `level.dat` are listed as ignored, with the reason
 each was skipped. Marking a server `retired` is an operator judgement and
 lives in `config.json` in the data directory, never inferred.
