@@ -1,20 +1,24 @@
 # Screenshots
 
-Recaptured 2026-07-31, after the M3.7 redesign. Each `alt` attribute in the root
-README describes what the shot contains; this file records where each one came
-from, because "real" and "rendered" are different claims and a reader should not
-have to guess which.
+Recaptured 2026-07-31 evening, after the v2 departure-board redesign. Each
+`alt` attribute in the root README describes what the shot contains; this file
+records where each one came from, because "real" and "rendered" are different
+claims and a reader should not have to guess which.
 
 | File | Source | Notes |
 | --- | --- | --- |
 | `logo.png` | drawn | A server rack as a Minecraft block. `scratchpad/logo.html` in the session that made it; regenerate with headless Chrome `--screenshot`. Also the mark in the app header. |
-| `servers-healthy.png` | **live** | Four real servers, all healthy. Two had just been restarted through the app's own start route, which is why their boot samples are fresh. |
-| `console.png` | **live** | MC 1.21.11's real log with the search filter active, so the pane shows something other than the dashboard's own RCON polling. RCON listener port replaced with `[redacted]`. |
+| `servers-healthy.png` | **live** | All four real servers on the board, all healthy, nobody online. The RAM column shows real `-Xmx` ceilings read from the java command lines (3 GB Paper, 6 GB GTNH). |
+| `server-detail.png` | **live** | MC GTNH's Overview. Directory path masked to `C:\Users\<user>\`. |
+| `console.png` | **live** | MC 1.21.11's real log. The RCON-polling filter is on, and the count beside it reads `(876 hidden)`, which is the point of the view: what is left is the eight lines that are not the dashboard talking to itself. |
 | `addresses.png` | **live** | Real address table. Public IP replaced with `203.0.113.47` (RFC 5737 documentation range). |
-| `server-detail.png` | **live** | The per-server view. Directory path masked to `C:\Users\<user>\`. |
 | `servers-stalled.png` | rendered | `npm run preview-states`, "One server, healthy host". |
 | `host-wide-event.png` | rendered | `npm run preview-states`, "A host-wide event". |
 | `unknown-explained.png` | rendered | `npm run preview-states`, "A persistent UNKNOWN". |
+
+All seven are 1568x699, converted to PNG with no ancillary chunks
+(`tEXt`/`iTXt`/`zTXt`/`eXIf` all absent, asserted after conversion) and
+optimized with oxipng.
 
 ## Why three of them are rendered
 
@@ -75,7 +79,15 @@ Two things that will bite you:
 - **A redaction observer has to be throttled.** Re-applying the mask on every DOM
   mutation froze the renderer on the console view, which is virtualised and
   mutates on every scroll frame. Debounce it, or apply the mask immediately
-  before each capture and verify immediately after.
+  before each capture and verify immediately after. A 120 ms interval that
+  rewrites matching text nodes works and survives React re-rendering.
+- **A full page load kills the mask.** The 2026-07-31 recapture loaded
+  `preview-states.html` in the middle of the run, and coming back to the SPA
+  was a fresh document with no redaction installed: the operator's real public
+  IP was on screen and would have been photographed. It was caught only because
+  the protocol says to check the DOM *before* pressing the shutter, not just
+  after. Reinstall the mask after any navigation that is not a hash change, and
+  never trust that it is still running.
 - **The console follows its own tail.** Setting `scrollTop` does not survive the
   next batch of lines. Use the search filter to decide what is on screen.
 
