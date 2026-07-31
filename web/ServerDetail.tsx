@@ -148,7 +148,7 @@ export default function ServerDetail({
           <h1 className="text-[20px] font-semibold tracking-[-0.02em] text-ink">{s.name}</h1>
           <span
             className={`text-[13px] ${
-              v.attention ? `font-semibold ${TONE_TEXT[v.tone]}` : 'font-medium text-muted'
+              v.attention ? `font-semibold ${TONE_TEXT[v.tone]}` : 'font-medium text-muted-foreground'
             }`}
             title={verdictSentence(v)}
           >
@@ -161,7 +161,7 @@ export default function ServerDetail({
           </span>
         </div>
 
-        <p className="prose-line mt-2.5 text-[13px] leading-relaxed text-muted">{s.healthDetail}</p>
+        <p className="prose-line mt-2.5 text-[13px] leading-relaxed text-muted-foreground">{s.healthDetail}</p>
 
         {s.attributionDetail && (
           <p
@@ -169,7 +169,7 @@ export default function ServerDetail({
               s.attribution === 'server'
                 ? 'border-bad/40 bg-bad/10 text-ink'
                 : s.attribution === 'configuration'
-                  ? 'border-border bg-secondary text-muted'
+                  ? 'border-border bg-secondary text-muted-foreground'
                   : 'border-warn/40 bg-warn/10 text-warn'
             }`}
           >
@@ -270,7 +270,7 @@ export default function ServerDetail({
                   tier="meta"
                 />
               </div>
-              <p className="prose-line mt-2.5 text-[12px] leading-relaxed text-muted">{s.gc.detail}</p>
+              <p className="prose-line mt-2.5 text-[12px] leading-relaxed text-muted-foreground">{s.gc.detail}</p>
               {s.gc.truncated && (
                 <p className="prose-line mt-2 rounded-md border border-warn/40 bg-warn/10 px-2.5 py-1.5 text-[12px] leading-relaxed text-warn">
                   Only {s.gc.coveredMinutes} of the intended {s.gc.windowMinutes} minutes could be read.
@@ -308,7 +308,7 @@ export default function ServerDetail({
                 <Meter value={s.boot.lastSeconds} max={s.boot.graceSeconds} tone="muted" />
               </Metric>
             </div>
-            <p className="prose-line mt-2.5 text-[12px] leading-relaxed text-muted">{s.boot.detail}</p>
+            <p className="prose-line mt-2.5 text-[12px] leading-relaxed text-muted-foreground">{s.boot.detail}</p>
             {s.boot.lastPortSeconds != null && s.boot.lastSeconds != null && (
               <p className="prose-line mt-2 text-[12px] leading-relaxed text-faint">
                 Its port opened after {s.boot.lastPortSeconds}s, so it spent{' '}
@@ -324,7 +324,7 @@ export default function ServerDetail({
             <LogTail lines={lines} />
             <a
               href={href({ name: 'console' })}
-              className="mt-2 inline-block text-[12px] text-muted underline underline-offset-2 transition-colors duration-150 hover:text-ink"
+              className="mt-2 inline-block text-[12px] text-muted-foreground underline underline-offset-2 transition-colors duration-150 hover:text-ink"
             >
               Open the full console
             </a>

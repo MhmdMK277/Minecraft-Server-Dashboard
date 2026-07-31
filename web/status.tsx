@@ -96,7 +96,7 @@ export const TONE_TEXT: Record<Tone, string> = {
   ok: 'text-ok',
   warn: 'text-warn',
   bad: 'text-bad',
-  muted: 'text-muted',
+  muted: 'text-muted-foreground',
 }
 
 export const TONE_BORDER: Record<Tone, string> = {

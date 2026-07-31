@@ -10,6 +10,7 @@ import { dashboard, type ConnectionState } from './client'
 import { useRoute, navigate, href } from './router'
 import { AppSidebar } from './AppSidebar'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import { Button } from '@/components/ui/button'
 import {
@@ -46,7 +47,7 @@ export default function App() {
     return dashboard.onAuthLost(() => setAuth({ configured: true, user: null, mustChangePassword: false }))
   }, [refreshAuth])
 
-  if (!auth) return <p className="p-5 text-[13px] text-muted">Checking…</p>
+  if (!auth) return <p className="p-5 text-[13px] text-muted-foreground">Checking…</p>
   if (!auth.user) return <Login mustChangePassword={false} onDone={refreshAuth} />
   if (auth.mustChangePassword) {
     return <Login mustChangePassword username={auth.user.username} onDone={refreshAuth} />
@@ -58,7 +59,7 @@ export default function App() {
 function SectionHead({ title, note }: { title: string; note: string }) {
   return (
     <header className="mb-2.5">
-      <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-muted">{title}</h2>
+      <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-muted-foreground">{title}</h2>
       <p className="prose-line mt-0.5 text-[12px] leading-relaxed text-faint">{note}</p>
     </header>
   )
@@ -127,6 +128,11 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
   const isAdmin = user.role === 'admin'
 
   return (
+    // TooltipProvider is required ABOVE the sidebar: SidebarMenuButton's
+    // tooltip renders a Radix Tooltip, and this shadcn generation does not
+    // bundle the provider inside SidebarProvider. Without it the whole app
+    // throws on mount and renders a blank page -- found live, 2026-07-31.
+    <TooltipProvider>
     <SidebarProvider>
       <AppSidebar
         route={route}
@@ -240,7 +246,7 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
             {err}
           </p>
         )}
-        {!err && !snap && <p className="text-[13px] text-muted">Scanning…</p>}
+        {!err && !snap && <p className="text-[13px] text-muted-foreground">Scanning…</p>}
 
         {snap && route.name === 'console' && (
           <div className="h-[calc(100dvh-8rem)]">
@@ -268,7 +274,7 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
           ) : (
             <div className="mx-auto max-w-lg py-16 text-center">
               <h2 className="text-[15px] font-semibold text-ink">No server with that id</h2>
-              <p className="prose-line mx-auto mt-1.5 text-[12px] leading-relaxed text-muted">
+              <p className="prose-line mx-auto mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
                 Nothing in the current scan matches <code className="font-mono text-ink">{route.id}</code>.
                 It may have been renamed, or the link may be from a different machine.
               </p>
@@ -344,7 +350,7 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
                   title="Not Minecraft servers"
                   note="Directories under the servers root with no level.dat, listed with the reason each was skipped."
                 />
-                <ul className="space-y-1 text-[12px] text-muted">
+                <ul className="space-y-1 text-[12px] text-muted-foreground">
                   {snap.ignored.map((d) => (
                     <li key={d.name} className="prose-line">
                       <span className="font-mono text-ink">{d.name}</span>. {d.reason}
@@ -358,5 +364,6 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
         </main>
       </SidebarInset>
     </SidebarProvider>
+    </TooltipProvider>
   )
 }

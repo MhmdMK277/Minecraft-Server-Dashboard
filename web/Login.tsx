@@ -44,7 +44,7 @@ function Brand({ subtitle }: { subtitle: string }) {
         <h1 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
           Minecraft Server Dashboard
         </h1>
-        <p className="mt-0.5 text-[12px] text-muted">{subtitle}</p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">{subtitle}</p>
       </div>
     </div>
   )
@@ -124,7 +124,7 @@ function ChangePassword({ username, onDone }: { username?: string; onDone: () =>
     <form onSubmit={submit} className="surface rounded-xl border border-warn/50 bg-card p-6">
       <Brand subtitle="One thing before the dashboard opens." />
       <h2 className="mt-4 text-[12px] font-semibold text-warn">Choose a password</h2>
-      <p className="prose-line mt-1 text-[12px] leading-relaxed text-muted">
+      <p className="prose-line mt-1 text-[12px] leading-relaxed text-muted-foreground">
         {username ? `${username} is ` : 'This account is '}still using the password generated at
         first start, which was printed to a terminal and may still be in its scrollback. Replacing it
         signs out every other session.
@@ -182,7 +182,7 @@ function Field({
 }) {
   return (
     <label className="mt-3.5 block">
-      <span className="text-[12px] font-medium text-muted">{label}</span>
+      <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
       <Input
         type={type}
         value={value}

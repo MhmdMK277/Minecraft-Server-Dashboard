@@ -25,7 +25,7 @@ const LEVEL_CLASS: Record<LogLine['level'], string> = {
   error: 'text-bad',
   warn: 'text-warn',
   info: 'text-ink',
-  other: 'text-muted',
+  other: 'text-muted-foreground',
 }
 
 /**
@@ -116,7 +116,7 @@ export default function ConsoleView({
   }, [lines, query])
 
   if (live.length === 0) {
-    return <p className="text-[13px] text-muted">No live servers to show a console for.</p>
+    return <p className="text-[13px] text-muted-foreground">No live servers to show a console for.</p>
   }
 
   return (
@@ -141,7 +141,7 @@ export default function ConsoleView({
 
         {/* The toggle the empty-state copy always referred to. Off by default:
             an idle server's tail is otherwise the dashboard talking to itself. */}
-        <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-muted">
+        <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-[11px] text-muted-foreground">
           <Switch size="sm" checked={showProbe} onCheckedChange={setShowProbe} />
           RCON polling
           {!showProbe && hiddenProbe > 0 && <span className="text-faint">({hiddenProbe} hidden)</span>}
@@ -152,7 +152,7 @@ export default function ConsoleView({
           placeholder="Search this tab…"
           className="h-7 w-56 text-[12px]"
         />
-        <span className="w-28 text-right font-mono text-[11px] text-muted">
+        <span className="w-28 text-right font-mono text-[11px] text-muted-foreground">
           {query ? `${filtered.length}/${lines.length}` : `${lines.length} lines`}
         </span>
       </div>
@@ -167,11 +167,11 @@ export default function ConsoleView({
               console, which is why it says which one it is.
             */
             <div className="mt-2 flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-border text-center">
-              <p className="text-[13px] font-medium text-muted">This server has been quiet</p>
+              <p className="text-[13px] font-medium text-muted-foreground">This server has been quiet</p>
               <p className="prose-line mt-1 max-w-md px-6 text-[12px] leading-relaxed text-faint">
                 Nothing in the last {hiddenProbe} lines except this dashboard opening and closing
                 its own RCON connection every ten seconds. Turn on{' '}
-                <span className="text-muted">RCON polling</span> to see it.
+                <span className="text-muted-foreground">RCON polling</span> to see it.
               </p>
             </div>
           ) : (

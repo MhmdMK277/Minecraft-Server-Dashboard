@@ -26,14 +26,14 @@ import { dashboard } from './client'
 
 function Copy({ value }: { value: string | null }) {
   const [done, setDone] = useState(false)
-  if (!value) return <span className="text-muted">–</span>
+  if (!value) return <span className="text-muted-foreground">–</span>
   return (
     <span className="inline-flex items-center gap-1.5">
       <code className="font-mono text-[12px]">{value}</code>
       <Button
         variant="outline"
         size="sm"
-        className="h-5 px-1.5 text-[10px] text-muted"
+        className="h-5 px-1.5 text-[10px] text-muted-foreground"
         onClick={() => {
           void navigator.clipboard.writeText(value)
           setDone(true)
@@ -65,7 +65,7 @@ export default function Addresses({
         <div className="flex items-start gap-3 rounded-lg border border-bad bg-bad/10 px-3 py-2.5">
           <div className="flex-1 text-[12px]">
             <p className="font-semibold text-bad">Your public address has changed.</p>
-            <p className="mt-0.5 text-muted">
+            <p className="mt-0.5 text-muted-foreground">
               {ip.previous ? (
                 <>
                   Was <code className="font-mono">{ip.previous}</code>, now{' '}
@@ -96,7 +96,7 @@ export default function Addresses({
               <TableRow key={s.id} className="align-top">
                 <TableCell>
                   <div className="font-medium text-ink">{s.name}</div>
-                  <div className="text-[11px] text-muted">{s.slp?.versionName ?? s.kind}</div>
+                  <div className="text-[11px] text-muted-foreground">{s.slp?.versionName ?? s.kind}</div>
                 </TableCell>
                 <TableCell>
                   <Copy value={formatAddress('localhost', s.gamePort)} />
@@ -127,14 +127,14 @@ export default function Addresses({
                           </Badge>
                         )}
                       </div>
-                      <div className="text-[11px] text-muted">
+                      <div className="text-[11px] text-muted-foreground">
                         {dead
                           ? `port ${d.port} is configured but nothing is listening`
                           : 'web map, open in a browser'}
                       </div>
                     </TableCell>
                     {dead ? (
-                      <TableCell colSpan={3} className="text-[12px] text-muted">
+                      <TableCell colSpan={3} className="text-[12px] text-muted-foreground">
                         No working link to show. The plugin is not loaded, so these addresses would
                         fail if handed out.
                       </TableCell>
@@ -158,7 +158,7 @@ export default function Addresses({
         </Table>
       </div>
 
-      <div className="space-y-1.5 text-[12px] text-muted">
+      <div className="space-y-1.5 text-[12px] text-muted-foreground">
         <p className="prose-line">
           <strong className="text-ink">
             The outside address will not work from inside this house.

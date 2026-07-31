@@ -140,13 +140,13 @@ export default function ServerSettingsPanel({ s }: { s: ServerStatus }) {
                 ? 'UUIDs will go back to being issued by Mojang rather than derived from usernames. Anyone who has played while it was off will return to their original identity, and anything they built, earned or was granted under the offline identity will no longer be theirs.'
                 : 'UUIDs will be derived from usernames instead of issued by Mojang. Every player becomes a different person to this server.'}
             </p>
-            <ul className="mt-2 space-y-1 text-[12px] leading-relaxed text-muted">
+            <ul className="mt-2 space-y-1 text-[12px] leading-relaxed text-muted-foreground">
               <li>· Inventories, enderchests, advancements and statistics detach from their owners</li>
               <li>· Operator status stops matching, because ops.json is keyed on UUID</li>
               <li>· LuckPerms grants, land claims and any plugin keyed on UUID detach too</li>
               <li>· Flipping it back does not reattach anything for players who logged in meanwhile</li>
             </ul>
-            <p className="prose-line mt-2 text-[12px] leading-relaxed text-muted">
+            <p className="prose-line mt-2 text-[12px] leading-relaxed text-muted-foreground">
               Nothing is deleted, and the previous <code className="font-mono">server.properties</code>{' '}
               is kept beside the original as a dated <code className="font-mono">.bak</code> file.{' '}
               <span className="font-medium text-ink">
@@ -171,7 +171,7 @@ export default function ServerSettingsPanel({ s }: { s: ServerStatus }) {
               <button
                 type="button"
                 onClick={() => setArmed(false)}
-                className="text-[11px] text-muted underline underline-offset-2 hover:text-ink"
+                className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-ink"
               >
                 cancel
               </button>

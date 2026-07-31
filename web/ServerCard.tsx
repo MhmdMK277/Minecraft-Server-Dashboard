@@ -101,7 +101,7 @@ export function BackupToggle({ s, canEdit }: { s: ServerStatus; canEdit: boolean
         }
       >
         <Switch size="sm" checked={on} disabled={!canEdit} onCheckedChange={toggle} />
-        <span className={on ? 'text-muted' : 'text-faint'}>
+        <span className={on ? 'text-muted-foreground' : 'text-faint'}>
           {on ? 'In the nightly backup' : 'Excluded from the nightly backup'}
         </span>
       </label>
@@ -248,7 +248,7 @@ export function ControlPanel({ s, canEdit }: { s: ServerStatus; canEdit: boolean
               <button
                 type="button"
                 onClick={() => setArmed(null)}
-                className="text-[11px] text-muted underline underline-offset-2 hover:text-ink"
+                className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-ink"
               >
                 cancel
               </button>
@@ -310,7 +310,7 @@ export function CommandBox({ s }: { s: ServerStatus }) {
       <div className="flex gap-2">
         <span
           aria-hidden="true"
-          className="flex select-none items-center rounded-md border border-border bg-secondary px-2 font-mono text-[11px] text-muted"
+          className="flex select-none items-center rounded-md border border-border bg-secondary px-2 font-mono text-[11px] text-muted-foreground"
         >
           {s.name}
         </span>
@@ -348,7 +348,7 @@ function Note({ tone, children }: { tone: 'bad' | 'warn' | 'muted'; children: Re
       ? 'border-bad/40 bg-bad/10 text-ink'
       : tone === 'warn'
         ? 'border-warn/40 bg-warn/10 text-warn'
-        : 'border-edge bg-panel2 text-muted'
+        : 'border-edge bg-panel2 text-muted-foreground'
   return (
     <p className={`prose-line rounded-md border px-2.5 py-1.5 text-[12px] leading-relaxed ${cls}`}>
       {children}
@@ -414,7 +414,7 @@ export function ServerCard({
         */}
         <span
           className={`text-[12px] ${
-            v.attention ? `font-semibold ${TONE_TEXT[v.tone]}` : 'font-medium text-muted'
+            v.attention ? `font-semibold ${TONE_TEXT[v.tone]}` : 'font-medium text-muted-foreground'
           }`}
           title={verdictSentence(v)}
         >
@@ -428,7 +428,7 @@ export function ServerCard({
       </header>
 
       <div className="px-4 py-4">
-        <p className="prose-line text-[12px] leading-relaxed text-muted">{s.healthDetail}</p>
+        <p className="prose-line text-[12px] leading-relaxed text-muted-foreground">{s.healthDetail}</p>
 
         {/*
           These two sit ABOVE the figures, and that is not a layout preference.
@@ -578,7 +578,7 @@ export function ServerCard({
               </Note>
             )}
             {s.players && s.players.length > 0 && (
-              <p className="prose-line text-[12px] text-muted">
+              <p className="prose-line text-[12px] text-muted-foreground">
                 <span className="text-faint">Online: </span>
                 <span className="text-ink">{s.players.join(', ')}</span>
               </p>

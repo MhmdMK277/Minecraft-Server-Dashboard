@@ -30,7 +30,7 @@ const STATE_TEXT: Record<Tone, string> = {
   ok: 'text-ok',
   warn: 'text-warn',
   bad: 'text-bad',
-  muted: 'text-muted',
+  muted: 'text-muted-foreground',
 }
 
 /** Border and headline weight follow where the fault is, not how red it looks. */
@@ -81,7 +81,7 @@ export default function Host({
         <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">This host</h2>
         <span
           className={`text-[12px] ${
-            loud ? `font-semibold ${STATE_TEXT[st.tone]}` : 'font-medium text-muted'
+            loud ? `font-semibold ${STATE_TEXT[st.tone]}` : 'font-medium text-muted-foreground'
           }`}
         >
           {st.label}
@@ -103,7 +103,7 @@ export default function Host({
       >
         {fleet.headline}
       </p>
-      <p className="prose-line mt-1.5 pl-1.5 text-[12px] leading-relaxed text-muted">{fleet.detail}</p>
+      <p className="prose-line mt-1.5 pl-1.5 text-[12px] leading-relaxed text-muted-foreground">{fleet.detail}</p>
 
       {identityBroken && (
         <p className="prose-line mt-2.5 rounded-md border border-warn/40 bg-warn/10 px-2.5 py-1.5 text-[12px] leading-relaxed text-warn">
