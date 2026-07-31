@@ -55,9 +55,12 @@ export const consoleBus = new EventEmitter<{ batch: [LogBatch] }>()
  */
 function toLine(serverId: string, seq: number, raw: string, arrivedAt: number | null): LogLine {
   const level = levelOf(raw)
-  const text = stripColourCodes(redactLine(raw, 'on'))
-  const { origin } = classifyLine(serverId, text, arrivedAt)
-  return { seq, text, level, origin }
+  const redacted = redactLine(raw, 'on')
+  // Attribution matches on the stripped shape; the SHIPPED text keeps its
+  // formatting codes so the browser can render the actual colours. Redaction
+  // still runs first, on the raw line, so nothing secret rides in either way.
+  const { origin } = classifyLine(serverId, stripColourCodes(redacted), arrivedAt)
+  return { seq, text: redacted, level, origin }
 }
 
 export async function ensureConsole(serverId: string, dir: string): Promise<void> {

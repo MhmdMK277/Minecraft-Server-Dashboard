@@ -3,6 +3,8 @@ import type { LogLine, ServerStatus } from '@shared/api'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { formatMc, stripMc } from './mcformat'
+import { CommandBox } from './controls'
 
 /**
  * Tabbed console.
@@ -74,11 +76,13 @@ export default function ConsoleView({
   buffers,
   rotations,
   ensureBacklog,
+  canEdit = false,
 }: {
   servers: ServerStatus[]
   buffers: Record<string, LogLine[]>
   rotations: Record<string, number>
   ensureBacklog: (id: string) => void
+  canEdit?: boolean
 }) {
   useFrameProbe('console')
   const live = servers.filter((s) => s.classification === 'live')
@@ -109,11 +113,16 @@ export default function ConsoleView({
     [all, showProbe],
   )
   const hiddenProbe = all.length - lines.length
+  // Search matches the text a reader sees, not the bytes: formatting codes
+  // are stripped before matching, so "20 players" matches across a §-pair.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return lines
-    return lines.filter((l) => l.text.toLowerCase().includes(q))
+    return lines.filter((l) => stripMc(l.text).toLowerCase().includes(q))
   }, [lines, query])
+
+  const activeServer = active ? live.find((s) => s.id === active) : undefined
+  const activeRunnable = activeServer ? activeServer.health !== 'DOWN' || !!activeServer.proc : false
 
   if (live.length === 0) {
     return <p className="text-[13px] text-muted-foreground">No live servers to show a console for.</p>
@@ -179,6 +188,15 @@ export default function ConsoleView({
           )}
         </TabsContent>
       )}
+
+      {/* The fleet command bar: same audited route, same target-named
+          labelling as the per-server one. It follows the selected tab, and
+          the CommandBox itself names that server twice. */}
+      {canEdit && activeServer && activeServer.rconConfigured && activeRunnable && (
+        <div className="mt-2 border-t border-border pt-2.5">
+          <CommandBox s={activeServer} />
+        </div>
+      )}
     </Tabs>
   )
 }
@@ -231,7 +249,7 @@ function Virtual({ lines, query }: { lines: LogLine[]; query: string }) {
               }}
               className={`w-full whitespace-pre px-2 font-mono text-[11px] ${LEVEL_CLASS[l.level]}`}
             >
-              {query ? highlight(l.text, query) : l.text}
+              {query ? highlight(stripMc(l.text), query) : formatMc(l.text)}
             </div>
           ))}
         </div>

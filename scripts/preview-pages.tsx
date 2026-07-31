@@ -85,12 +85,20 @@ const gtnh: ServerStatus = {
   checkedAt: new Date().toISOString(),
 }
 
+const CODED =
+  '[31Jul2026 03:20:00] [Server thread/INFO]: §6There are §c2§6 out of maximum §c20§6 players online. §aGreen§r plain §l§bBoldAqua§r §nunder§r §mstruck§r §kobfuscated§r end'
+
 const lines: LogLine[] = Array.from({ length: 40 }, (_, i) => ({
   seq: i,
   at: new Date().toISOString(),
   level: i % 9 === 0 ? 'warn' : 'info',
   origin: 'server',
-  text: i % 3 === 0 ? LONG : `[31Jul2026 03:${String(10 + i)}:00] [Server thread/INFO] [minecraft/DedicatedServer]: shorter line ${i}`,
+  text:
+    i % 5 === 0
+      ? CODED
+      : i % 3 === 0
+        ? LONG
+        : `[31Jul2026 03:${String(10 + i)}:00] [Server thread/INFO] [minecraft/DedicatedServer]: shorter line ${i}`,
 })) as LogLine[]
 
 const page = (p: 'overview' | 'console') =>

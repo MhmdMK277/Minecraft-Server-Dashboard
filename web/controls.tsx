@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ServerStatus, ControlAction, ControlResult, CommandResponse } from '@shared/api'
 import { dashboard } from './client'
+import { formatMc } from './mcformat'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -308,7 +309,7 @@ export function CommandBox({ s }: { s: ServerStatus }) {
             reply.ok ? 'border-border bg-sidebar text-ink' : 'border-warn/40 bg-warn/10 text-warn'
           }`}
         >
-          {reply.ok ? reply.raw || '(no output)' : reply.detail}
+          {reply.ok ? (reply.raw ? formatMc(reply.raw) : '(no output)') : reply.detail}
         </pre>
       )}
     </div>
