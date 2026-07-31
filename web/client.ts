@@ -12,6 +12,7 @@ import type {
   WorldsReading,
   ConfirmedLaunch,
   AttachCandidate,
+  ScanResult,
 } from '@shared/api'
 import { API, WS_PATH } from '@shared/api'
 
@@ -217,6 +218,7 @@ export const dashboard = {
   getSnapshot: () => get<Snapshot>(API.snapshot),
   getLogBacklog: (id: string) => get<LogLine[]>(API.logBacklog(id)),
   getWorlds: (id: string, fresh = false) => get<WorldsReading>(API.worlds(id, fresh)),
+  discover: (fresh = false) => get<ScanResult>(API.discover(fresh)),
   validateAttach: (dir: string) => send<AttachCandidate>(API.attachValidate, 'POST', { dir }),
   attach: (path: string, confirmedLaunch: ConfirmedLaunch | null) =>
     send<unknown>(API.attach, 'POST', { path, confirmedLaunch }),

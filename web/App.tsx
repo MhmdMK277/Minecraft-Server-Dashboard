@@ -6,7 +6,7 @@ import Host from './Host'
 import Login from './Login'
 import ServerDetail from './ServerDetail'
 import { ServerRow } from './ServerRow'
-import { AttachPanel } from './Attach'
+import { AttachPanel, ScanPanel } from './Attach'
 import { dashboard, type ConnectionState } from './client'
 import { useRoute, navigate, href } from './router'
 import { AppSidebar } from './AppSidebar'
@@ -62,9 +62,32 @@ export default function App() {
  * The masthead above already says no reading is being claimed; this says how
  * to become visible.
  */
-function FirstRun() {
+function FirstRun({ canEdit, onChanged }: { canEdit: boolean; onChanged: () => void }) {
   return (
     <div className="mx-auto max-w-2xl">
+      {/*
+        The first thing on a first run is an ACTION, not an essay. The
+        explanation below still matters, but a new operator whose servers
+        live somewhere this dashboard has never heard of should be one click
+        from having them found rather than one configuration file from it.
+      */}
+      {canEdit && (
+        <section className="border-t border-border/60 pt-3 pb-6">
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+            Find your servers
+          </h2>
+          <p className="prose-line mt-3 text-[13px] leading-relaxed text-muted-foreground">
+            Nothing was found in the folder this dashboard watches by default. If your servers are
+            somewhere else, it can look for them: it searches your profile, Documents and Desktop,
+            and two levels down each drive, for folders holding a{' '}
+            <code className="font-mono text-ink">server.properties</code>. Anything it finds is
+            offered to you, never added on its own.
+          </p>
+          <div className="mt-3">
+            <ScanPanel onChanged={onChanged} dense />
+          </div>
+        </section>
+      )}
       <section className="border-t border-border/60 pt-3 pb-6">
         <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
           How discovery works
@@ -403,7 +426,7 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
             {/* The board: one full-width row per live server, single column by
                 design. A departure board is read down, not tiled. */}
             {live.length === 0 && other.length === 0 ? (
-              <FirstRun />
+              <FirstRun canEdit={isAdmin} onChanged={() => void dashboard.refresh()} />
             ) : (
               <div className="border-t border-border/60">
                 {live.map((s) => (

@@ -47,6 +47,19 @@ const check = (label: string, ok: boolean, detail?: string) => checks.push([labe
 
 const root = mkdtempSync(join(tmpdir(), 'mcdash-portability-'))
 
+/**
+ * A data directory of its own, and this is not optional.
+ *
+ * Without it this proof read the REAL data directory, and once discovery
+ * learned to include operator-attached folders (spec §17) a single real
+ * attachment on the developer's machine turned "all three invented servers
+ * are discovered" into four. The proof was not wrong about the code; it was
+ * wrong about its world, which is docs/proof-coverage.md's whole lesson
+ * arriving one more time. A proof that shares mutable state with the machine
+ * it runs on is testing that machine, not the code.
+ */
+process.env.MCDASH_DATA_DIR = mkdtempSync(join(tmpdir(), 'mcdash-portability-data-'))
+
 /** Deliberately nothing like the real names, ports, or level names. */
 const FAKE_RCON_PASSWORD = 'portability-canary-9d2f4a'
 const SERVER_A = 'Ancient Vaults [modded]'

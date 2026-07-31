@@ -37,6 +37,7 @@ declare module 'fastify' {
 import { scan } from './discovery'
 import { readWorlds } from './worlds'
 import { validateAttachCandidate, attachDir, detachDir, setLaunchMethod } from './attach'
+import { scanForServers } from './scan'
 import { consoleBus, syncConsoles, backlogFor, stopAllConsoles } from './consoles'
 import { refreshPublicIp, acknowledgeIpChange } from './network'
 import { loadConfig, dataDir, type AppConfig } from './config'
@@ -638,6 +639,17 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
    * becomes eligible for start, stop and settings writes. That is why they
    * sit with the control routes rather than with the read routes.
    */
+  /**
+   * Search this machine for server directories. Admin-only: it reports paths
+   * outside the servers root, and every result is one confirmation away from
+   * becoming a startable server. Nothing here adopts anything.
+   */
+  app.get<{ Querystring: { fresh?: string } }>('/api/discover', async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'discover.scan')
+    if (!session) return
+    return scanForServers(req.query.fresh === '1' ? { maxAgeMs: 0 } : {})
+  })
+
   app.post(API.attachValidate, async (req, reply) => {
     const session = require_(req, reply, 'admin', 'attach.validate')
     if (!session) return

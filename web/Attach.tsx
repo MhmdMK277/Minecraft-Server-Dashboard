@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import type { AttachCandidate, ConfirmedLaunch, IdentityScan } from '@shared/api'
+import type { AttachCandidate, ConfirmedLaunch, IdentityScan, ScanCandidate, ScanResult } from '@shared/api'
 import { dashboard } from './client'
 import { Btn } from './controls'
+import { Indicator } from './status'
 import { Input } from '@/components/ui/input'
 
 /**
@@ -171,6 +172,163 @@ function Unwatched({
   )
 }
 
+/**
+ * One folder the scan found, offered to the operator.
+ *
+ * The offer is the whole point of the scan. Before this existed, a server
+ * started the canonical way (`java -jar server.jar nogui`) produced one
+ * anonymous java process and an honest banner saying so, and nothing the
+ * operator could act on. Now the folder is named and one click away.
+ */
+function Candidate({ c, onDone }: { c: ScanCandidate; onDone: () => void }) {
+  const [candidate, setCandidate] = useState<AttachCandidate | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const inspect = () => {
+    setErr(null)
+    dashboard
+      .validateAttach(c.dir)
+      .then(setCandidate)
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'could not read that folder'))
+  }
+
+  const attach = (launch: ConfirmedLaunch | null) => {
+    setBusy(true)
+    setErr(null)
+    dashboard
+      .attach(c.dir, launch)
+      .then(() => onDone())
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'could not attach'))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <li className="border-t border-border/60 py-2.5 first:border-t-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span
+          className={`flex size-4 items-center justify-center ${c.running ? 'text-ok' : 'text-faint'}`}
+          title={c.running ? 'A java process is holding this folder open' : 'Nothing is running here'}
+        >
+          <Indicator tone={c.running ? 'ok' : 'muted'} confidence="measured" large={false} />
+        </span>
+        <span className="text-[13px] font-medium text-ink">{c.name}</span>
+        {c.running && (
+          <span className="tnum font-mono text-[11px] text-ok">running, pid {c.pid}</span>
+        )}
+        {!c.looksLikeServer && (
+          <span className="text-[11px] text-faint">no world generated yet</span>
+        )}
+        <span className="min-w-0 flex-1 break-all font-mono text-[11px] text-faint">{c.dir}</span>
+        {!candidate && <Btn onClick={inspect} label="Check this folder" />}
+      </div>
+      {candidate && !candidate.ok && (
+        <p className="prose-line mt-2 text-[12px] text-bad">{candidate.reason}</p>
+      )}
+      {candidate && candidate.ok && <Preview c={candidate} onAttach={attach} busy={busy} />}
+      {err && <p className="prose-line mt-2 text-[12px] text-bad">{err}</p>}
+    </li>
+  )
+}
+
+/**
+ * Searching the machine. Deliberately operator-initiated: it walks the
+ * filesystem, and a dashboard that does that on its own ten-second loop
+ * would be the observer becoming the load.
+ */
+export function ScanPanel({ onChanged, dense }: { onChanged: () => void; dense?: boolean }) {
+  const [result, setResult] = useState<ScanResult | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const run = (fresh: boolean) => {
+    setBusy(true)
+    setErr(null)
+    dashboard
+      .discover(fresh)
+      .then(setResult)
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'could not search'))
+      .finally(() => setBusy(false))
+  }
+
+  const fresh = result?.candidates.filter((c) => c.known === 'new') ?? []
+  const running = fresh.filter((c) => c.running)
+  const idle = fresh.filter((c) => !c.running)
+  const alreadyKnown = result?.candidates.filter((c) => c.known !== 'new').length ?? 0
+
+  return (
+    <div className={dense ? '' : 'mt-3'}>
+      {!result && (
+        <Btn
+          onClick={() => run(false)}
+          disabled={busy}
+          tone={dense ? 'primary' : undefined}
+          label={busy ? 'Searching…' : 'Look for servers on this machine'}
+        />
+      )}
+      {err && <p className="prose-line mt-2 text-[12px] text-bad">{err}</p>}
+
+      {result && (
+        <>
+          <p className="prose-line text-[11px] leading-relaxed text-faint">
+            Searched {result.roots.length} location{result.roots.length === 1 ? '' : 's'} in{' '}
+            {result.ms} ms{result.cached ? ', showing the search already done' : ''}. Found{' '}
+            {result.candidates.length} folder{result.candidates.length === 1 ? '' : 's'} holding a{' '}
+            <code className="font-mono">server.properties</code>
+            {alreadyKnown > 0 ? `, ${alreadyKnown} of which this dashboard already watches` : ''}.{' '}
+            <button
+              type="button"
+              onClick={() => run(true)}
+              disabled={busy}
+              className="text-muted-foreground underline underline-offset-2 transition-colors duration-150 hover:text-ink disabled:opacity-50"
+            >
+              {busy ? 'Searching…' : 'Search again'}
+            </button>
+          </p>
+
+          {running.length > 0 && (
+            <>
+              <div className="mt-3 font-mono text-[9px] uppercase tracking-[0.1em] text-faint">
+                Running now, and not watched
+              </div>
+              <ul className="mt-1">
+                {running.map((c) => (
+                  <Candidate key={c.dir} c={c} onDone={onChanged} />
+                ))}
+              </ul>
+            </>
+          )}
+
+          {idle.length > 0 && (
+            <>
+              <div className="mt-4 font-mono text-[9px] uppercase tracking-[0.1em] text-faint">
+                Server folders that are not running
+              </div>
+              <p className="prose-line mt-1 text-[11px] leading-relaxed text-faint">
+                Nothing is running in these. Some will be servers you keep for later; some will be
+                backups or copies, which is why none of them is added for you.
+              </p>
+              <ul className="mt-1">
+                {idle.map((c) => (
+                  <Candidate key={c.dir} c={c} onDone={onChanged} />
+                ))}
+              </ul>
+            </>
+          )}
+
+          {fresh.length === 0 && (
+            <p className="prose-line mt-2 text-[12px] leading-relaxed text-faint">
+              Nothing new found. If your server lives somewhere the search does not reach, the
+              default places are your profile, Documents and Desktop, plus two levels down each
+              drive, you can still add its folder by path below.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 export function AttachPanel({
   identity,
   onChanged,
@@ -243,6 +401,29 @@ export function AttachPanel({
             ))}
           </ul>
         </>
+      )}
+
+      {/*
+        The canonical-start case. A server run as `java -jar server.jar nogui`
+        has no directory anywhere in its command line, so it arrives here as
+        an anonymous java process with nothing to click. Searching the
+        machine for the folder is what turns that honest banner into an
+        offer. See docs/liveness-spec.md section 17.
+      */}
+      {identity.unattributed > 0 && (
+        <div className={unwatched.length > 0 ? 'mt-4 border-t border-border/60 pt-3' : ''}>
+          <h3 className="text-[13px] font-semibold text-warn">
+            {identity.unattributed} running java process
+            {identity.unattributed === 1 ? '' : 'es'} could not be matched to a folder
+          </h3>
+          <p className="prose-line mt-1 text-[12px] leading-relaxed text-muted-foreground">
+            That is what a server started with <code className="font-mono">java -jar server.jar</code>{' '}
+            looks like from outside: the command line names no directory. Searching this machine
+            for server folders finds it, by looking for which folder a running process is holding
+            open.
+          </p>
+          <ScanPanel onChanged={onChanged} />
+        </div>
       )}
 
       <div className={unwatched.length > 0 ? 'mt-4 border-t border-border/60 pt-3' : ''}>

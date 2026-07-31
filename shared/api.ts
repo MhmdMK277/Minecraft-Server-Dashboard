@@ -676,6 +676,42 @@ export const WorldInfo = z.object({
 })
 export type WorldInfo = z.infer<typeof WorldInfo>
 
+/**
+ * Searching this machine for server directories (spec section 17).
+ *
+ * Every entry is a CANDIDATE, never an adopted server. `running` comes from
+ * the exclusive log hold, never from the declared port: on the development
+ * machine three candidate directories are a backup tree declaring the same
+ * ports as live servers, and resolving by port would map one JVM onto three
+ * directories. Spec section 1.
+ */
+export const ScanRoot = z.object({ dir: z.string(), depth: z.number() })
+export type ScanRoot = z.infer<typeof ScanRoot>
+
+export const ScanCandidate = z.object({
+  dir: z.string(),
+  name: z.string(),
+  /** Whether the dashboard already covers this directory. */
+  known: z.enum(['new', 'watched', 'attached']),
+  /** A server.properties was found; a level.dat may not exist yet. */
+  looksLikeServer: z.boolean(),
+  gamePort: z.number().nullable(),
+  levelName: z.string().nullable(),
+  /** A JVM holds this directory's log open. Identity, not a port guess. */
+  running: z.boolean(),
+  pid: z.number().nullable(),
+})
+export type ScanCandidate = z.infer<typeof ScanCandidate>
+
+export const ScanResult = z.object({
+  scannedAt: z.string(),
+  ms: z.number(),
+  roots: z.array(z.string()),
+  cached: z.boolean(),
+  candidates: z.array(ScanCandidate),
+})
+export type ScanResult = z.infer<typeof ScanResult>
+
 /** The launch method an operator confirms while looking at a folder. */
 export const ConfirmedLaunch = z.union([
   z.object({ strategy: z.literal('script'), script: z.string().min(1).max(120) }),
@@ -720,6 +756,7 @@ export const API = {
   logBacklog: (id: string) => `/api/servers/${encodeURIComponent(id)}/log`,
   worlds: (id: string, fresh = false) =>
     `/api/servers/${encodeURIComponent(id)}/worlds${fresh ? '?fresh=1' : ''}`,
+  discover: (fresh = false) => `/api/discover${fresh ? '?fresh=1' : ''}`,
   attachValidate: '/api/attach/validate',
   attach: '/api/attach',
   attachLaunch: '/api/attach/launch',
