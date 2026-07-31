@@ -1,0 +1,43 @@
+name: CodeQL
+
+# Static analysis on GitHub's own infrastructure, so the results are produced
+# and published by something other than the machine that wrote the code. That
+# independence is the point: see docs/security-audit.md.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so a newly published query class finds this repo without anyone
+    # having to push. Monday 06:00 UTC.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    name: Analyze JavaScript/TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # security-extended adds the lower-precision security queries.
+          # A monitoring tool that holds RCON credentials is worth the extra
+          # false positives; they get triaged in docs/security-audit.md.
+          queries: security-extended
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'

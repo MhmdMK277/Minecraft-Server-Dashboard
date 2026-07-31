@@ -1,0 +1,37 @@
+name: Semgrep
+
+# Semgrep runs here as well as locally, because it is officially a Linux and
+# macOS tool: a Windows-only contributor cannot necessarily reproduce a local
+# run, and a check nobody can rerun is not evidence. The rulesets match the
+# ones recorded in docs/security-audit.md.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: |
+          semgrep scan \
+            --config=p/default \
+            --config=p/typescript \
+            --config=p/nodejs \
+            --config=p/owasp-top-ten \
+            --exclude=node_modules --exclude=dist \
+            --error \
+            server shared web scripts
