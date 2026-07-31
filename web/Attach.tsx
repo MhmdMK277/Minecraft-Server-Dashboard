@@ -368,7 +368,15 @@ export function AttachPanel({
       .finally(() => setBusy(false))
   }
 
-  if (unwatched.length === 0 && !open) {
+  /**
+   * Collapse to a single quiet link ONLY when there is genuinely nothing to
+   * report. `unattributed > 0` is the canonical-start case: a server run as
+   * `java -jar server.jar nogui` has no directory in its command line, so it
+   * arrives with nothing in `unwatched` and would have hit this early return,
+   * leaving the operator the honest banner and no way to act on it. That was
+   * the whole gap the scan exists to close, and it was still open here.
+   */
+  if (unwatched.length === 0 && identity.unattributed === 0 && !open) {
     return (
       <div className="mt-3">
         <button
