@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react'
  * lands somewhere sensible.
  */
 
-export const SERVER_PAGES = ['overview', 'players', 'console', 'backups', 'settings'] as const
+export const SERVER_PAGES = ['overview', 'players', 'console', 'worlds', 'backups', 'settings'] as const
 export type ServerPage = (typeof SERVER_PAGES)[number]
 
 export type Route =

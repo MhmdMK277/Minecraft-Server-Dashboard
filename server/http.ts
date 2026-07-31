@@ -3,6 +3,7 @@ import fastifyWebsocket from '@fastify/websocket'
 import fastifyStatic from '@fastify/static'
 import fastifyCookie from '@fastify/cookie'
 import { existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import type { WebSocket } from 'ws'
@@ -24,6 +25,7 @@ import {
   type SessionSummary,
 } from '@shared/api'
 import { scan } from './discovery'
+import { listWorlds } from './worlds'
 import { consoleBus, syncConsoles, backlogFor, stopAllConsoles } from './consoles'
 import { refreshPublicIp, acknowledgeIpChange } from './network'
 import { loadConfig, dataDir, type AppConfig } from './config'
@@ -448,6 +450,36 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
   app.get<{ Params: { id: string } }>('/api/servers/:id/log', async (req) => {
     return backlogFor(req.params.id)
   })
+
+  // Read-only world enumeration. The directory and world list come from the
+  // dashboard's own discovery, resolved via the server id; nothing from the
+  // request is ever joined into a filesystem path.
+  app.get<{ Params: { id: string } }>('/api/servers/:id/worlds', async (req, reply) => {
+    const snap = latest ?? (await doScan())
+    const s = snap.servers.find((x) => x.id === req.params.id)
+    if (!s) return reply.code(404).send({ error: 'no server with that id' })
+    return listWorlds(s.dir, s.worldDirs)
+  })
+
+  // The world's own icon.png, when it has one. The world segment is matched
+  // by strict equality against the discovered list, so no request can name a
+  // path discovery did not produce.
+  app.get<{ Params: { id: string; dir: string } }>(
+    '/api/servers/:id/worlds/:dir/icon',
+    async (req, reply) => {
+      const snap = latest ?? (await doScan())
+      const s = snap.servers.find((x) => x.id === req.params.id)
+      if (!s) return reply.code(404).send({ error: 'no server with that id' })
+      const world = s.worldDirs.find((d) => d === req.params.dir)
+      if (!world) return reply.code(404).send({ error: 'no such world' })
+      try {
+        const buf = await readFile(join(s.dir, world, 'icon.png'))
+        return reply.type('image/png').send(buf)
+      } catch {
+        return reply.code(404).send({ error: 'this world has no icon.png' })
+      }
+    },
+  )
 
   // Admin-only, and the first route to be so. Acknowledging an IP change writes
   // persisted state and silences a warning the whole household depends on, so

@@ -2,6 +2,7 @@ import {
   Archive,
   ArrowLeft,
   ChevronsUpDown,
+  Earth,
   Gauge,
   LayoutDashboard,
   LogOut,
@@ -47,6 +48,7 @@ const SERVER_NAV: Array<{ page: ServerPage; label: string; icon: LucideIcon; adm
   { page: 'overview', label: 'Overview', icon: Gauge },
   { page: 'players', label: 'Players', icon: Users },
   { page: 'console', label: 'Console', icon: Terminal },
+  { page: 'worlds', label: 'Worlds', icon: Earth },
   { page: 'backups', label: 'Backups', icon: Archive },
   { page: 'settings', label: 'Settings', icon: Settings2, adminOnly: true },
 ]

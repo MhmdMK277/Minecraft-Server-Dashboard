@@ -9,6 +9,7 @@ import type {
   SessionUser,
   Snapshot,
   ServerSettingKey,
+  WorldInfo,
 } from '@shared/api'
 import { API, WS_PATH } from '@shared/api'
 
@@ -213,6 +214,7 @@ export const dashboard = {
   getAppInfo: () => get<AppInfo>(API.appInfo),
   getSnapshot: () => get<Snapshot>(API.snapshot),
   getLogBacklog: (id: string) => get<LogLine[]>(API.logBacklog(id)),
+  getWorlds: (id: string) => get<WorldInfo[]>(API.worlds(id)),
   refresh: () => post<{ ok: boolean }>(API.refresh),
   acknowledgeIpChange: () => post<{ ok: boolean }>(API.ackIpChange),
   setBackupEnabled: (id: string, enabled: boolean) =>
