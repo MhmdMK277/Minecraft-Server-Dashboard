@@ -14,7 +14,7 @@ import type { ServerStatus, LogLine } from '@shared/api'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT } from './status'
-import { ControlPanel, BackupToggle, CommandBox, age } from './ServerCard'
+import { ControlPanel, BackupToggle, CommandBox, age } from './controls'
 import ServerSettingsPanel from './ServerSettings'
 import { href } from './router'
 

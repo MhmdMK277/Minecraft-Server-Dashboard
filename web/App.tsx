@@ -5,7 +5,7 @@ import Addresses from './Addresses'
 import Host from './Host'
 import Login from './Login'
 import ServerDetail from './ServerDetail'
-import { ServerCard } from './ServerCard'
+import { ServerRow } from './ServerRow'
 import { dashboard, type ConnectionState } from './client'
 import { useRoute, navigate, href } from './router'
 import { AppSidebar } from './AppSidebar'
@@ -55,12 +55,12 @@ export default function App() {
   return <Dashboard user={auth.user} onSignedOut={refreshAuth} />
 }
 
-/** A heading with the sentence that explains why the section exists. */
+/** A board section label: mono, uppercase, tracked, with its reason beneath. */
 function SectionHead({ title, note }: { title: string; note: string }) {
   return (
-    <header className="mb-2.5">
-      <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-muted-foreground">{title}</h2>
-      <p className="prose-line mt-0.5 text-[12px] leading-relaxed text-faint">{note}</p>
+    <header className="mb-2 border-b border-border/60 pb-2">
+      <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{title}</h2>
+      <p className="prose-line mt-1 text-[12px] leading-relaxed text-faint">{note}</p>
     </header>
   )
 }
@@ -314,14 +314,11 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
                 that is one statement about the page, not a property of a card. */}
             <Host host={snap.host} identity={snap.identity} />
 
-            <div className="grid gap-4 xl:grid-cols-2">
+            {/* The board: one full-width row per live server, single column by
+                design. A departure board is read down, not tiled. */}
+            <div className="border-t border-border/60">
               {live.map((s) => (
-                <ServerCard
-                  key={s.id}
-                  s={s}
-                  canEdit={isAdmin}
-                  onOpen={(id) => navigate({ name: 'server', id })}
-                />
+                <ServerRow key={s.id} s={s} onOpen={(id) => navigate({ name: 'server', id })} />
               ))}
             </div>
 
@@ -331,14 +328,9 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
                   title="Not in service"
                   note="Kept visible so they get cleaned up rather than quietly forgotten."
                 />
-                <div className="grid gap-4 xl:grid-cols-2">
+                <div>
                   {other.map((s) => (
-                    <ServerCard
-                      key={s.id}
-                      s={s}
-                      canEdit={isAdmin}
-                      onOpen={(id) => navigate({ name: 'server', id })}
-                    />
+                    <ServerRow key={s.id} s={s} onOpen={(id) => navigate({ name: 'server', id })} />
                   ))}
                 </div>
               </section>

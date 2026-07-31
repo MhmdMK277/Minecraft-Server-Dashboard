@@ -33,13 +33,13 @@ const STATE_TEXT: Record<Tone, string> = {
   muted: 'text-muted-foreground',
 }
 
-/** Border and headline weight follow where the fault is, not how red it looks. */
-const FAULT_EDGE: Record<Fault, string> = {
-  none: 'border-border',
-  host: 'border-bad/70',
-  shared: 'border-warn/45',
-  server: 'border-border',
-  observer: 'border-warn/45',
+/** The masthead's bottom rule steps up in weight when the fault is loud. */
+const FAULT_RULE: Record<Fault, string> = {
+  none: 'border-b border-border',
+  host: 'border-b-2 border-bad/60',
+  shared: 'border-b-2 border-warn/40',
+  server: 'border-b border-border',
+  observer: 'border-b-2 border-warn/40',
 }
 
 /**
@@ -67,10 +67,12 @@ export default function Host({
   const identityBroken = !identity.ok || identity.unattributed > 0
 
   return (
+    // The masthead of the board: no card, no elevation. A rail for tone and
+    // confidence, a hairline rule below that thickens when the fault is loud.
     <section
-      className={`surface-raised rail mb-4 overflow-hidden rounded-xl border bg-card p-5 ${
-        STATE_TEXT[st.tone]
-      } ${st.measured ? '' : 'rail-dashed'} ${FAULT_EDGE[fleet.fault]}`}
+      className={`rail mb-6 pb-5 pl-5 pt-1 ${STATE_TEXT[st.tone]} ${
+        st.measured ? '' : 'rail-dashed'
+      } ${FAULT_RULE[fleet.fault]}`}
     >
       <header className="flex flex-wrap items-center gap-2.5 pl-1.5">
         <Indicator

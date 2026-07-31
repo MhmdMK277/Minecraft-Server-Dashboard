@@ -20,7 +20,7 @@ import { join } from 'node:path'
 import type { HostStatus, IdentityScan, LoopLag, ServerStatus, Snapshot } from '@shared/api'
 import { observeFleet, resetFleetMemory } from '../server/hostwatch'
 import Host from '../web/Host'
-import { ServerCard } from '../web/ServerCard'
+import { ServerRow } from '../web/ServerRow'
 
 const HERE = import.meta.dirname
 const OUT = process.argv[2] ?? join(HERE, '..', 'preview-states.html')
@@ -267,9 +267,9 @@ const body = renderToStaticMarkup(
           <h2 className="text-base font-semibold">{s.title}</h2>
           <p className="mb-3 mt-1 max-w-3xl text-xs text-[var(--color-muted)]">{s.note}</p>
           <Host host={host} identity={s.identity ?? HEALTHY_IDENTITY} />
-          <div className="grid gap-3 lg:grid-cols-2">
+          <div className="border-t border-[var(--color-edge)]/60">
             {servers.map((x) => (
-              <ServerCard key={x.id} s={x} canEdit />
+              <ServerRow key={x.id} s={x} />
             ))}
           </div>
         </section>

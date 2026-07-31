@@ -37,7 +37,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSyn
 import { hostname, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { scan } from '../server/discovery'
-import { ServerCard } from '../web/ServerCard'
+import { ServerRow } from '../web/ServerRow'
 import Host from '../web/Host'
 
 const checks: Array<[string, boolean, string?]> = []
@@ -177,7 +177,7 @@ const html = renderToStaticMarkup(
     <Host host={snap.host} identity={snap.identity} />
     <div className="grid gap-3 lg:grid-cols-2">
       {snap.servers.map((s) => (
-        <ServerCard key={s.id} s={s} />
+        <ServerRow key={s.id} s={s} />
       ))}
     </div>
   </div>,

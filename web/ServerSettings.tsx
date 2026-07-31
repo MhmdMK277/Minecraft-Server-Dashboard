@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { ServerStatus, ServerSettingKey } from '@shared/api'
 import { dashboard } from './client'
-import { Btn } from './ServerCard'
+import { Btn } from './controls'
 
 /**
  * The two editable server.properties values.
