@@ -19,6 +19,9 @@ import {
   SetBackupRequest,
   SetServerSettingRequest,
   RunCommandRequest,
+  AttachRequest,
+  AttachLaunchRequest,
+  AttachDetachRequest,
   type AuthState,
   type LogBatch,
   type Role,
@@ -33,6 +36,7 @@ declare module 'fastify' {
 
 import { scan } from './discovery'
 import { listWorlds } from './worlds'
+import { validateAttachCandidate, attachDir, detachDir, setLaunchMethod } from './attach'
 import { consoleBus, syncConsoles, backlogFor, stopAllConsoles } from './consoles'
 import { refreshPublicIp, acknowledgeIpChange } from './network'
 import { loadConfig, dataDir, type AppConfig } from './config'
@@ -620,6 +624,115 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
       }
     },
   )
+
+  /**
+   * Attaching a server folder. All four are admin-only and audited.
+   *
+   * The write these guard is the dashboard's own attached.json, never
+   * anything inside a server directory, but the CONSEQUENCE is that a folder
+   * becomes eligible for start, stop and settings writes. That is why they
+   * sit with the control routes rather than with the read routes.
+   */
+  app.post(API.attachValidate, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'attach.validate')
+    if (!session) return
+    const body = AttachDetachRequest.safeParse(req.body)
+    if (!body.success) return reply.code(400).send({ error: 'a path is required' })
+    return validateAttachCandidate(body.data.dir)
+  })
+
+  app.post(API.attach, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'attach.add')
+    if (!session) return
+    const body = AttachRequest.safeParse(req.body)
+    if (!body.success) return reply.code(400).send({ error: 'invalid attach request' })
+
+    // Validated again here, not just in the browser: the preview the operator
+    // saw was produced by a separate request, and nothing stops a client
+    // sending a different path than the one it previewed.
+    const candidate = await validateAttachCandidate(body.data.path)
+    if (!candidate.ok) {
+      audit({
+        actor: session.username,
+        role: session.role,
+        action: 'attach.add',
+        target: body.data.path,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: candidate.reason,
+      })
+      return reply.code(400).send({ error: candidate.reason })
+    }
+
+    const result = attachDir(dataDir(), {
+      dir: candidate.dir,
+      confirmedLaunch: body.data.confirmedLaunch,
+    })
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'attach.add',
+      target: candidate.dir,
+      outcome: result.ok ? 'ok' : 'denied',
+      ip: clientIp(req),
+      detail: result.ok
+        ? `launch=${body.data.confirmedLaunch?.strategy ?? 'none confirmed'}`
+        : result.reason,
+    })
+    if (!result.ok) return reply.code(409).send({ error: result.reason })
+    await pushSnapshot()
+    return result.attached
+  })
+
+  app.post(API.attachLaunch, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'attach.launch')
+    if (!session) return
+    const body = AttachLaunchRequest.safeParse(req.body)
+    if (!body.success) return reply.code(400).send({ error: 'invalid request' })
+
+    // Refused while a control action is in flight: that action already read
+    // the launcher inside its lock.
+    const busy = (latest?.servers ?? []).some(
+      (s) => s.dir.toLowerCase() === body.data.dir.toLowerCase() && s.controlBusy,
+    )
+    const result = setLaunchMethod(dataDir(), body.data.dir, body.data.confirmedLaunch, {
+      controlBusy: busy,
+    })
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'attach.launch',
+      target: body.data.dir,
+      outcome: result.ok ? 'ok' : 'denied',
+      ip: clientIp(req),
+      detail: result.ok
+        ? `launch=${body.data.confirmedLaunch?.strategy ?? 'cleared'}`
+        : result.reason,
+    })
+    if (!result.ok) return reply.code(409).send({ error: result.reason })
+    await pushSnapshot()
+    return result.attached
+  })
+
+  app.post(API.attachDetach, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'attach.remove')
+    if (!session) return
+    const body = AttachDetachRequest.safeParse(req.body)
+    if (!body.success) return reply.code(400).send({ error: 'a dir is required' })
+    const result = detachDir(dataDir(), body.data.dir)
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'attach.remove',
+      target: body.data.dir,
+      outcome: result.ok ? 'ok' : 'denied',
+      ip: clientIp(req),
+      detail: 'the folder itself is untouched; the entry is kept',
+    })
+    if (!result.ok) return reply.code(404).send({ error: 'that folder is not attached' })
+    await pushSnapshot()
+    return { ok: true }
+  })
 
   // Admin-only, and the first route to be so. Acknowledging an IP change writes
   // persisted state and silences a warning the whole household depends on, so

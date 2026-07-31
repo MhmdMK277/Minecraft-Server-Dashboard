@@ -10,6 +10,8 @@ import type {
   Snapshot,
   ServerSettingKey,
   WorldInfo,
+  ConfirmedLaunch,
+  AttachCandidate,
 } from '@shared/api'
 import { API, WS_PATH } from '@shared/api'
 
@@ -215,6 +217,12 @@ export const dashboard = {
   getSnapshot: () => get<Snapshot>(API.snapshot),
   getLogBacklog: (id: string) => get<LogLine[]>(API.logBacklog(id)),
   getWorlds: (id: string) => get<WorldInfo[]>(API.worlds(id)),
+  validateAttach: (dir: string) => send<AttachCandidate>(API.attachValidate, 'POST', { dir }),
+  attach: (path: string, confirmedLaunch: ConfirmedLaunch | null) =>
+    send<unknown>(API.attach, 'POST', { path, confirmedLaunch }),
+  setAttachLaunch: (dir: string, confirmedLaunch: ConfirmedLaunch | null) =>
+    send<unknown>(API.attachLaunch, 'POST', { dir, confirmedLaunch }),
+  detach: (dir: string) => send<{ ok: boolean }>(API.attachDetach, 'POST', { dir }),
   refresh: () => post<{ ok: boolean }>(API.refresh),
   acknowledgeIpChange: () => post<{ ok: boolean }>(API.ackIpChange),
   setBackupEnabled: (id: string, enabled: boolean) =>

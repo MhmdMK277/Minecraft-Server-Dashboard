@@ -474,6 +474,28 @@ export const IdentityScan = z.object({
     interactive: z.number(),
     unknown: z.number(),
   }),
+  /**
+   * Running servers this dashboard is NOT watching.
+   *
+   * A JVM whose directory was resolved from its command line is attributed
+   * successfully, so it never counted as unattributed; but if that directory
+   * is not under the servers root and has not been attached, no server entry
+   * exists for it either. It was therefore invisible in both directions: a
+   * real, running Minecraft server that the dashboard could see and said
+   * nothing about. Found while wiring the attach flow, 2026-07-31.
+   *
+   * This is also the strongest case for attaching, because the directory is
+   * already known rather than guessed.
+   */
+  unwatched: z.array(
+    z.object({
+      pid: z.number(),
+      dir: z.string(),
+      startedBy: z.enum(['scheduled-task', 'interactive', 'unknown']),
+      /** True when the folder still looks like a server right now. */
+      looksLikeServer: z.boolean(),
+    }),
+  ),
 })
 export type IdentityScan = z.infer<typeof IdentityScan>
 
@@ -635,6 +657,42 @@ export const WorldInfo = z.object({
 })
 export type WorldInfo = z.infer<typeof WorldInfo>
 
+/** The launch method an operator confirms while looking at a folder. */
+export const ConfirmedLaunch = z.union([
+  z.object({ strategy: z.literal('script'), script: z.string().min(1).max(120) }),
+  z.object({ strategy: z.literal('windows-task'), task: z.string().min(1).max(260) }),
+])
+export type ConfirmedLaunch = z.infer<typeof ConfirmedLaunch>
+
+/**
+ * What the operator is shown before confirming an attach. Lives in the
+ * contract, not in the server module, so the browser never imports server
+ * code to know the shape of a reply.
+ */
+export type AttachCandidate =
+  | { ok: false; reason: string }
+  | {
+      ok: true
+      dir: string
+      gamePort: number | null
+      levelName: string | null
+      worldDirs: string[]
+      rconConfigured: boolean
+      /** What a scan FOUND. Reporting it is not confirming it. */
+      launchCandidate: ConfirmedLaunch | null
+      logHeld: boolean | null
+    }
+
+export const AttachRequest = z.object({
+  path: z.string().min(1).max(4096),
+  confirmedLaunch: ConfirmedLaunch.nullable(),
+})
+export const AttachLaunchRequest = z.object({
+  dir: z.string().min(1).max(4096),
+  confirmedLaunch: ConfirmedLaunch.nullable(),
+})
+export const AttachDetachRequest = z.object({ dir: z.string().min(1).max(4096) })
+
 /** HTTP routes. Was `CH`, the Electron IPC channel list. */
 export const API = {
   appInfo: '/api/info',
@@ -642,6 +700,10 @@ export const API = {
   refresh: '/api/servers/refresh',
   logBacklog: (id: string) => `/api/servers/${encodeURIComponent(id)}/log`,
   worlds: (id: string) => `/api/servers/${encodeURIComponent(id)}/worlds`,
+  attachValidate: '/api/attach/validate',
+  attach: '/api/attach',
+  attachLaunch: '/api/attach/launch',
+  attachDetach: '/api/attach/detach',
   worldIcon: (id: string, dir: string) =>
     `/api/servers/${encodeURIComponent(id)}/worlds/${encodeURIComponent(dir)}/icon`,
   ackIpChange: '/api/network/ack-ip-change',

@@ -281,6 +281,74 @@ check(
 }
 
 // ===========================================================================
+console.log('\n=== 7. changing the launch method on an attached server ===\n')
+// ===========================================================================
+// Allowed deliberately: the danger this design guards against is the
+// dashboard INFERRING a launcher, not an operator confirming one. The same
+// validation applies, and the double-spawn guard is untouched by it.
+{
+  const { setLaunchMethod } = await import('../server/attach')
+  detachDir(dataDir(), HAND_STARTED)
+  attachDir(dataDir(), { dir: HAND_STARTED, confirmedLaunch: null })
+
+  const set = setLaunchMethod(dataDir(), HAND_STARTED, { strategy: 'script', script: 'start.bat' })
+  check('an admin can set a launch method after attaching', set.ok === true)
+  {
+    const cl = loadAttached(dataDir()).find((a) => a.dir === HAND_STARTED)?.confirmedLaunch
+    check('and it is stored', cl?.strategy === 'script' && cl.script === 'start.bat')
+  }
+
+  const bogus = setLaunchMethod(dataDir(), HAND_STARTED, { strategy: 'script', script: 'ghost.bat' })
+  check('but only for a script that actually exists', bogus.ok === false)
+
+  const busy = setLaunchMethod(
+    dataDir(),
+    HAND_STARTED,
+    { strategy: 'script', script: 'start.bat' },
+    { controlBusy: true },
+  )
+  check(
+    'and never while a control action is in flight, which already read the launcher',
+    busy.ok === false,
+  )
+
+  const cleared = setLaunchMethod(dataDir(), HAND_STARTED, null)
+  check('clearing it back to none is allowed', cleared.ok === true)
+  {
+    const s = (await scan(ROOT, {})).servers.find((x) => x.dir === HAND_STARTED)
+    check('and the server goes back to reporting no launcher', s?.launchStrategy === 'none')
+  }
+
+  const missing = setLaunchMethod(dataDir(), join(OUTSIDE, 'never-attached'), null)
+  check('setting a launch method on a folder that is not attached is refused', missing.ok === false)
+}
+
+// ===========================================================================
+console.log('\n=== 8. the routes are admin-only and audited ===\n')
+// ===========================================================================
+{
+  const src = readFileSync(join(import.meta.dirname, '..', 'server', 'http.ts'), 'utf8')
+  for (const [label, action] of [
+    ['validate', 'attach.validate'],
+    ['attach', 'attach.add'],
+    ['launch change', 'attach.launch'],
+    ['detach', 'attach.remove'],
+  ] as Array<[string, string]>) {
+    check(
+      `the ${label} route requires admin`,
+      new RegExp(`require_\\(req, reply, 'admin', '${action.replace('.', '\\.')}'\\)`).test(src),
+    )
+  }
+  check(
+    'the attach route re-validates server-side rather than trusting the previewed path',
+    /const candidate = await validateAttachCandidate\(body\.data\.path\)/.test(src),
+  )
+  check('attaching is audited', /action: 'attach\.add'/.test(src))
+  check('detaching is audited', /action: 'attach\.remove'/.test(src))
+  check('changing the launch method is audited', /action: 'attach\.launch'/.test(src))
+}
+
+// ===========================================================================
 const failed = checks.filter(([, ok]) => !ok)
 console.log(`\n${'='.repeat(64)}`)
 for (const [label, ok, detail] of failed) console.log(`FAIL  ${label}${detail ? `  [${detail}]` : ''}`)

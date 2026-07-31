@@ -207,6 +207,17 @@ export async function scan(
       ok: scan.ok,
       failure: scan.failure,
       unattributed: scan.unattributed.length,
+      // A JVM whose directory we know but whose directory we are not
+      // watching. See the note on IdentityScan.unwatched: this used to fall
+      // through both lists and be reported nowhere.
+      unwatched: jvms
+        .filter((j) => !candidates.some((c) => c.dir.toLowerCase() === j.dir.toLowerCase()))
+        .map((j) => ({
+          pid: j.pid,
+          dir: j.dir,
+          startedBy: j.startedBy,
+          looksLikeServer: levelDatPath(j.dir) !== null,
+        })),
       tookMs: scan.tookMs,
       loopBlockedMs: scan.loopBlockedMs,
       // Which signal answered, counted. All four on this host resolving via the

@@ -6,6 +6,7 @@ import Host from './Host'
 import Login from './Login'
 import ServerDetail from './ServerDetail'
 import { ServerRow } from './ServerRow'
+import { AttachPanel } from './Attach'
 import { dashboard, type ConnectionState } from './client'
 import { useRoute, navigate, href } from './router'
 import { AppSidebar } from './AppSidebar'
@@ -391,6 +392,13 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
             {/* Above the grid, not inside it: when the machine is the problem
                 that is one statement about the page, not a property of a card. */}
             <Host host={snap.host} identity={snap.identity} />
+
+            {/* The dashboard's most honest moment, made actionable: a running
+                server it can see and is not watching. Admin only, because
+                attaching makes a folder eligible for start and settings. */}
+            {isAdmin && (
+              <AttachPanel identity={snap.identity} onChanged={() => void dashboard.refresh()} />
+            )}
 
             {/* The board: one full-width row per live server, single column by
                 design. A departure board is read down, not tiled. */}

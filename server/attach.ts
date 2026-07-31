@@ -28,9 +28,8 @@ import { dataDir as defaultDataDir } from './config'
  *     and keeps it, with the time it was set aside.
  */
 
-export type ConfirmedLaunch =
-  | { strategy: 'script'; script: string }
-  | { strategy: 'windows-task'; task: string }
+import type { AttachCandidate, ConfirmedLaunch } from '@shared/api'
+export type { AttachCandidate, ConfirmedLaunch }
 
 export type AttachedServer = {
   dir: string
@@ -51,20 +50,6 @@ type AttachFile = {
   detached: Array<AttachedServer & { detachedAt: string }>
 }
 
-export type AttachCandidate =
-  | { ok: false; reason: string }
-  | {
-      ok: true
-      dir: string
-      gamePort: number | null
-      levelName: string | null
-      worldDirs: string[]
-      rconConfigured: boolean
-      /** What a launcher scan FOUND. Reporting it is not confirming it. */
-      launchCandidate: ConfirmedLaunch | null
-      /** True when a JVM currently holds this directory's log open. */
-      logHeld: boolean | null
-    }
 
 const FILE = 'attached.json'
 
@@ -238,6 +223,54 @@ export function attachDir(
   }
   write(dir, { ...file, attached: [...file.attached, attached] })
   return { ok: true, attached }
+}
+
+/**
+ * Change (or set) the launch method on an already attached folder.
+ *
+ * Safe to allow, and the reasoning is worth stating: the danger this design
+ * guards against is the dashboard INFERRING a way to start a server. An
+ * operator deliberately confirming one, while looking at what is really in
+ * the folder, is the same act as confirming it at attach time and gets the
+ * same validation. The double-spawn guard is untouched by it: that guard
+ * asks whether a JVM already owns the directory, which has nothing to do
+ * with which script would be run if it did not.
+ *
+ * One refusal is added. A control action in flight has already read the
+ * launcher inside its lock, so changing it underneath would mean the
+ * operator confirmed one thing and a different one ran.
+ */
+export function setLaunchMethod(
+  dir: string,
+  target: string,
+  confirmedLaunch: ConfirmedLaunch | null,
+  opts: { controlBusy?: boolean } = {},
+): AttachResult {
+  if (opts.controlBusy) {
+    return {
+      ok: false,
+      reason: 'This server is starting, stopping or restarting right now. Try again once it settles.',
+    }
+  }
+  const file = read(dir)
+  const found = file.attached.find((a) => sameDir(a.dir, target))
+  if (!found) return { ok: false, reason: 'That folder is not attached.' }
+
+  if (confirmedLaunch?.strategy === 'script') {
+    if (!confirmedLaunch.script || !existsSync(join(found.dir, confirmedLaunch.script))) {
+      return {
+        ok: false,
+        reason: `There is no ${confirmedLaunch.script ?? 'script'} in that folder, so it cannot be confirmed as the way to start it.`,
+      }
+    }
+  }
+
+  const updated: AttachedServer = { ...found, confirmedLaunch }
+  write(dir, {
+    ...file,
+    attached: file.attached.map((a) => (sameDir(a.dir, target) ? updated : a)),
+  })
+  return { ok: true, attached: updated }
 }
 
 /** Set an attachment aside. The entry is kept; nothing on disk is touched. */

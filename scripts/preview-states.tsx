@@ -64,6 +64,7 @@ const HEALTHY_IDENTITY: IdentityScan = {
   loopBlockedMs: 0,
   bySignal: { 'scheduled-task': 4, 'command-line': 0, 'open-log-and-port': 0 },
   startedBy: { 'scheduled-task': 4, interactive: 0, unknown: 0 },
+  unwatched: [],
 }
 
 function srv(o: Partial<ServerStatus> & { name: string }): ServerStatus {
@@ -220,6 +221,7 @@ const SCENARIOS: Scenario[] = [
       loopBlockedMs: 0,
       bySignal: { 'scheduled-task': 0, 'command-line': 0, 'open-log-and-port': 0 },
       startedBy: { 'scheduled-task': 0, interactive: 0, unknown: 4 },
+      unwatched: [],
     },
   },
   {
