@@ -33,6 +33,44 @@ a boot-started server has an empty one, and that took down attribution for every
 server at once. The rule above is still the primary signal; it is no longer the
 only one.
 
+**Amended 2026-08-01, and this is the part to read before widening discovery.**
+
+Discovery is about to search the filesystem for server directories rather than
+only reading one configured root (§17). That makes this rule sharper, not
+softer, because searching finds *copies*.
+
+A bounded scan of this machine found **ten** directories holding a
+`server.properties`. Six are the real servers. One was a deliberate test copy.
+The other three live in `Documents\MC Servers - Copy\`, a duplicate tree
+nobody had mentioned, and they declare **the same ports as the live servers**:
+that tree contains its own `MC 1.21.4` claiming 25565.
+
+So the tempting shortcut is now actively dangerous. It looks like this:
+
+> read `server-port` from each candidate directory, ask Windows which process
+> owns that port, and call that the server for that directory
+
+With ten candidates and duplicate ports, that maps one running JVM onto
+**three different directories**, and the dashboard would offer to start, stop
+or write settings into a backup copy while reporting the live server's health
+next to it.
+
+**Rule, stated as a rule because a future reader will be tempted:**
+
+> **The exclusive hold on `logs/latest.log` is the identity. The port is only
+> a lookup.**
+
+The hold is per-directory and a running JVM has exactly one, so it cannot be
+ambiguous no matter how many directories declare the same port. Once a
+directory is known to be held, the listening port is used only to name *which
+pid* holds it. Never the reverse, and never the port alone.
+
+Measured, 2026-08-01: port-to-pid is reliable for a JVM started any way at all
+(four servers started by boot scheduled tasks in session 0, one started by
+hand in session 1: five for five), which is exactly why it is tempting. It
+answers "which process listens here" perfectly. It just does not answer "which
+directory is this".
+
 ## 2. `session.lock` is advisory, never authoritative
 
 Two independent traps:
@@ -616,3 +654,55 @@ waiting for one is not a test strategy. What the proof **cannot** do is
 manufacture a real measurement. The numbers come from real servers booting, and
 the first arrive on the next reboot or the next nightly backup restart, which
 produces one per server for free.
+
+## 17. The common way to start a server defeats command-line attribution
+
+Measured 2026-08-01, as an A/B against one real Forge 1.20.1 server, stopped
+and restarted between the two runs with nothing else changed.
+
+The canonical start command, the one the Minecraft wiki and effectively every
+tutorial gives, is:
+
+```
+java -Xmx1024M -Xms1024M -jar server.jar nogui
+```
+
+Run from inside the server directory, that command line contains **no
+directory at all**: a bare relative jar name and no wrapper script. Neither
+does its parent shell. `dirFromCommandLine` looks for exactly two things, an
+absolute path to a `.bat`/`.cmd`/`.ps1`/`.sh` in the parent, or
+`-Duser.dir=` in the JVM's own line, and finds neither.
+
+| The same server, started two ways | Attributed today? |
+| --- | --- |
+| `cmd /c "D:\...\Attach Test Server\start.bat"` | **yes**, via `command-line` |
+| `java -Xms512M -Xmx2G @libraries/... nogui` | **no**, reported as 1 unattributed JVM |
+
+So the failure is not an edge case. **It is the most common way people start
+Minecraft servers**, and for those servers the dashboard could see a running
+JVM and say nothing about which server it was.
+
+**What fixes it, and what does not.** The fix is not a new signal. Signal 3
+already does the right thing: probe the exclusive hold on
+`logs/latest.log`, then use the listening port only to name the pid. Its sole
+limitation was that it is only ever *asked* about directories under the
+configured servers root. Given the directory as a candidate, the same
+unmodified mechanism attributed the canonically-started server immediately:
+
+| Same canonical server, same scan | Result |
+| --- | --- |
+| hints from the servers root only | not attributed |
+| the directory supplied as one more hint | **attributed via `open-log-and-port`** |
+
+**Consequence.** Widen the candidate list, do not add a signal. Discovery
+searches for directories holding a `server.properties` (bounded: the user
+profile, Documents and Desktop always; drive roots at depth 2; anything
+deeper is a location the operator adds). Measured cost of that search on this
+machine: **769 ms** across 723 directories with no permission errors, which is
+why it runs on demand and at first run and never inside the ten-second loop.
+
+**Found is not adopted.** A directory that holds a `server.properties` is a
+*candidate*, and candidates are shown to the operator to choose from. They are
+never adopted automatically, for the reason §1 now spells out: three of the
+ten found on this machine are a backup tree, and adopting them would put a
+copy of a live world under a start button.

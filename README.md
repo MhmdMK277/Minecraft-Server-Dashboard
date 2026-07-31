@@ -35,11 +35,23 @@ And because it reads the whole fleet at once, it can say the other thing no
 per-server tool can: **four servers degrading at the same moment is one machine
 problem, not four server faults**, in one sentence at the top of the page.
 
-It also **attaches instead of wrapping**. Crafty, MCSManager, PufferPanel and
-Pterodactyl all spawn the server as a child and own its stdin. This one tails
-`logs/latest.log`, sends RCON, and resolves which JVM owns which directory from
-the process tree, so it works with servers that started at boot from Task
-Scheduler, long before any UI existed.
+It also **manages your server where it already is.**
+
+Every comparable panel wants to own the files. Pterodactyl creates its own
+container volume and has no way to register a directory you already have. AMP
+tells you to zip your server and upload it into an instance AMP created.
+Crafty imports a zip and **copies** it into its own managed folder, which has
+put at least one user out of disk space importing a large server. All of them
+also spawn the server as a child and own its stdin, so none can say anything
+about a server it did not start.
+
+This one never copies and never wraps. It tails `logs/latest.log`, sends RCON,
+and works out which JVM owns which directory from the process tree, so it can
+attach to a server that was already running before the dashboard existed,
+including one started at boot by Task Scheduler or by hand from a terminal.
+Your folders stay exactly where you put them. See
+[docs/comparison.md](docs/comparison.md) for what each of those panels
+actually does, with sources.
 
 ## Screenshots
 
