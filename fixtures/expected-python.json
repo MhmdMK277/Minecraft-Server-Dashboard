@@ -1,0 +1,122 @@
+{
+  "playerCount": {
+    "MC 1.21.11": {
+      "raw": "§6There are §c0§6 out of maximum §c30§6 players online.\n",
+      "online": 0
+    },
+    "MC 1.21.4": {
+      "raw": "There are 0 of a max of 20 players online: ",
+      "online": 0
+    },
+    "MC GTNH": {
+      "raw": "There are 0/20 players online:",
+      "online": 0
+    },
+    "MC Skyblock": {
+      "raw": "There are 0 of a max of 20 players online: \n",
+      "online": 0
+    }
+  },
+  "slpReady": {
+    "MC 1.21.11": true,
+    "MC 1.21.4": true,
+    "MC GTNH": true,
+    "MC Skyblock": true
+  },
+  "worlds": {
+    "MC 1.21.11": {
+      "worldDirs": [
+        "world",
+        "world_nether",
+        "world_the_end"
+      ],
+      "levelDat": "world/level.dat"
+    },
+    "MC 1.21.4": {
+      "worldDirs": [
+        "world",
+        "world_nether",
+        "world_the_end"
+      ],
+      "levelDat": "world/level.dat"
+    },
+    "MC 1.21.4 - Copy": {
+      "worldDirs": [
+        "world",
+        "world_nether",
+        "world_the_end"
+      ],
+      "levelDat": "world/level.dat"
+    },
+    "MC 26.1": {
+      "worldDirs": [],
+      "levelDat": null
+    },
+    "MC GTNH": {
+      "worldDirs": [
+        "World"
+      ],
+      "levelDat": "World/level.dat"
+    },
+    "MC Skyblock": {
+      "worldDirs": [
+        "world"
+      ],
+      "levelDat": "world/level.dat"
+    },
+    "MC Tech": {
+      "worldDirs": [
+        "world"
+      ],
+      "levelDat": "world/level.dat"
+    },
+    "clientpacks": {
+      "worldDirs": [],
+      "levelDat": null
+    }
+  },
+  "discovery": {
+    "servers": [
+      "MC 1.21.11",
+      "MC 1.21.4",
+      "MC 1.21.4 - Copy",
+      "MC GTNH",
+      "MC Skyblock",
+      "MC Tech"
+    ],
+    "notServers": [
+      "MC 26.1",
+      "clientpacks"
+    ]
+  },
+  "identity": {
+    "MC 1.21.11": true,
+    "MC 1.21.4": true,
+    "MC 1.21.4 - Copy": false,
+    "MC GTNH": true,
+    "MC Skyblock": true,
+    "MC Tech": false
+  },
+  "normalise": {
+    "object": {
+      "version": {
+        "name": "Paper 1.21.4"
+      }
+    },
+    "double-encoded": {
+      "version": {
+        "name": "1.7.10"
+      }
+    },
+    "bare-string": {
+      "version": {
+        "name": "Server is still starting! Please wait before reconnecting."
+      }
+    }
+  },
+  "normaliseInput": {
+    "object": "{\"version\":{\"name\":\"Paper 1.21.4\"}}",
+    "double-encoded": "\"{\\\"version\\\": {\\\"name\\\": \\\"1.7.10\\\"}}\"",
+    "bare-string": "\"Server is still starting! Please wait before reconnecting.\""
+  }
+}

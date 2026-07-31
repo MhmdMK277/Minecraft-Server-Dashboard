@@ -1,0 +1,1339 @@
+{
+  "slp": {
+    "MC 1.21.11": {
+      "parsed": {
+        "description": "A Minecraft Server",
+        "players": {
+          "max": 30,
+          "online": 0
+        },
+        "version": {
+          "name": "Paper 1.21.11",
+          "protocol": 774
+        },
+        "enforcesSecureChat": true
+      },
+      "versionName": "Paper 1.21.11",
+      "playersOnline": 0,
+      "playersMax": 30,
+      "readyByMarker": true
+    },
+    "MC 1.21.4": {
+      "parsed": {
+        "version": {
+          "name": "Paper 1.21.4",
+          "protocol": 769
+        },
+        "enforcesSecureChat": true,
+        "description": "A Minecraft Server",
+        "players": {
+          "max": 20,
+          "online": 0
+        }
+      },
+      "versionName": "Paper 1.21.4",
+      "playersOnline": 0,
+      "playersMax": 20,
+      "readyByMarker": true
+    },
+    "MC 1.21.4 - Copy": {
+      "skipped": "no process owns this directory"
+    },
+    "MC GTNH": {
+      "parsed": {
+        "description": "GT:New Horizons 2.8.4",
+        "players": {
+          "max": 20,
+          "online": 0
+        },
+        "version": {
+          "name": "1.7.10",
+          "protocol": 5
+        },
+        "favicon": "data:image/png;base64,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\n2TYat6ki5LiPWuZzIToyq5zuAfuqgVuWVbhyshRd2vkDFTtSL6as9M53/6/WOYOPV3y//9tvp2qo\nrRqlr7+HWZtrMce3XmV71JYx24Zo1nf3pChZwPVjW5il0t88HDGc7sWArUvZidoQ1tuVyPr1dzBH\npnjlzM3VuSkLfSo/z5QnT5mwUHXqR3q8F5cGNnywNqV/1RaRTGdHLpz3SBCrKZXlamZfq9wdJGg9\n5q3ec9xz86XjHpsv6Xvv7FUPiGzTEF2pOiAdFO+VIGFnLty3ZMmOrUu9uWZ5aNsni4yjX5n6udpU\n9sR0Cm6juAg/Yxi/u/tndqopil1qI2vQ2iBvf7n+/19Jg9wCXDB5RX0126+3jek/MVo+T+dOXXD+\nxVkJx1y2UBo16TmlL04lKy2Pv/qEatrAhJ/T8NLaDHy4QYifNolk29TSb+qsi79wRiWgzmGpR4n7\nUvdi9xV+NY5rY7vNNqXfOKomku2ge1eszcQnP6fjFdVU2aRlcf1jFttKlMe++ConC8fcs+4+l2NO\n0bma69jBw2pMlykOSv8rhyTvEvdQrkXm0iFXWnJW8aeLm7mCLQoB2x4DphIP5eVJGKMqwPhVAkxe\nJRiYpcrvf21l7KX5K6N7FhC/tzLm4juqiddep/+bvSoVU+neZ1byMWZFApQ38MFYNpil1V/+vQAn\nCzfKuysfd/2n8v0TursDj2RW2gIw5wNgKwMIkCQoqaZCebUIo5YmEydh1KpMYgGUVyRDaVUo2BZt\nMK1GsHf/+o8k/ogeWbbH9Jge02N6TI/p/zH9L4tV/0geMpLuAAAAAElFTkSuQmCC",
+        "modinfo": {
+          "type": "FML",
+          "modList": [
+            {
+              "modid": "mcp",
+              "version": "9.05"
+            },
+            {
+              "modid": "FML",
+              "version": "7.10.99.99"
+            },
+            {
+              "modid": "Forge",
+              "version": "10.13.4.1614"
+            },
+            {
+              "modid": "appliedenergistics2-core",
+              "version": "rv3-beta-695-GTNH"
+            },
+            {
+              "modid": "CodeChickenCore",
+              "version": "1.4.10"
+            },
+            {
+              "modid": "CropLoadCoreASM",
+              "version": "0.0.2"
+            },
+            {
+              "modid": "NotEnoughItems",
+              "version": "2.8.44-GTNH"
+            },
+            {
+              "modid": "OpenComputers|Core",
+              "version": "1.11.20-GTNH"
+            },
+            {
+              "modid": "MobiusCore",
+              "version": "1.4.6-mapless"
+            },
+            {
+              "modid": "PlayerAPI",
+              "version": "1.5.0"
+            },
+            {
+              "modid": "ThE-core",
+              "version": "1.0.0.1"
+            },
+            {
+              "modid": "GTNHLib Core",
+              "version": "0.7.10"
+            },
+            {
+              "modid": "ThaumicTinkerer-preloader",
+              "version": "0.1"
+            },
+            {
+              "modid": "OpenModsCore",
+              "version": "0.10.11"
+            },
+            {
+              "modid": "<CoFH ASM>",
+              "version": "000"
+            },
+            {
+              "modid": "unimixins",
+              "version": "0.1.23"
+            },
+            {
+              "modid": "unimixins-mixin",
+              "version": "0.1.23"
+            },
+            {
+              "modid": "unimixins-compat",
+              "version": "0.1.23"
+            },
+            {
+              "modid": "mixingasm",
+              "version": "0.3"
+            },
+            {
+              "modid": "spongemixins",
+              "version": "2.0.1"
+            },
+            {
+              "modid": "mixinbooterlegacy",
+              "version": "1.2.1"
+            },
+            {
+              "modid": "gasstation",
+              "version": "0.5.1"
+            },
+            {
+              "modid": "gtnhmixins",
+              "version": "2.2.0"
+            },
+            {
+              "modid": "mixinextras",
+              "version": "0.1.23"
+            },
+            {
+              "modid": "IC2",
+              "version": "2.2.828-experimental"
+            },
+            {
+              "modid": "AdvancedSolarPanel",
+              "version": "1.7.10-3.5.1"
+            },
+            {
+              "modid": "battlegear2",
+              "version": "1.5.9-backhand"
+            },
+            {
+              "modid": "CoFHCore",
+              "version": "1.7.10R3.1.4"
+            },
+            {
+              "modid": "Baubles",
+              "version": "2.1.19-GTNH"
+            },
+            {
+              "modid": "ForgeMultipart",
+              "version": "1.7.2"
+            },
+            {
+              "modid": "Thaumcraft",
+              "version": "4.2.3.5"
+            },
+            {
+              "modid": "BuildCraft|Core",
+              "version": "7.1.44"
+            },
+            {
+              "modid": "ExtraUtilities",
+              "version": "1.2.12"
+            },
+            {
+              "modid": "Mantle",
+              "version": "0.5.1"
+            },
+            {
+              "modid": "Waila",
+              "version": "1.8.15"
+            },
+            {
+              "modid": "TConstruct",
+              "version": "1.13.57-GTNH"
+            },
+            {
+              "modid": "adventurebackpack",
+              "version": "1.3.13-GTNH"
+            },
+            {
+              "modid": "gtnhlib",
+              "version": "0.7.10"
+            },
+            {
+              "modid": "appliedenergistics2",
+              "version": "rv3-beta-695-GTNH"
+            },
+            {
+              "modid": "thaumicenergistics",
+              "version": "1.7.14-GTNH"
+            },
+            {
+              "modid": "ae2wct",
+              "version": "1.12.7"
+            },
+            {
+              "modid": "ae2fc",
+              "version": "1.4.120-gtnh"
+            },
+            {
+              "modid": "ae2noultimatepatterns",
+              "version": "1.0.1"
+            },
+            {
+              "modid": "bdlib",
+              "version": "1.11.0-GTNH"
+            },
+            {
+              "modid": "ae2stuff",
+              "version": "0.9.9-GTNH"
+            },
+            {
+              "modid": "AFSU",
+              "version": "1.3.1-GTNH"
+            },
+            {
+              "modid": "akashictome",
+              "version": "1.2.6"
+            },
+            {
+              "modid": "alchgrate",
+              "version": "1.3.1-GTNH"
+            },
+            {
+              "modid": "amazingtrophies",
+              "version": "1.3.8"
+            },
+            {
+              "modid": "BuildCraft|Energy",
+              "version": "7.1.44"
+            },
+            {
+              "modid": "GalacticraftCore",
+              "version": "3.3.13-GTNH"
+            },
+            {
+              "modid": "GalacticraftMars",
+              "version": "3.3.13-GTNH"
+            },
+            {
+              "modid": "backhand",
+              "version": "1.7.7"
+            },
+            {
+              "modid": "betterquesting",
+              "version": "3.7.15-GTNH"
+            },
+            {
+              "modid": "endercore",
+              "version": "0.4.8"
+            },
+            {
+              "modid": "Natura",
+              "version": "2.8.9"
+            },
+            {
+              "modid": "BiomesOPlenty",
+              "version": "2.1.0"
+            },
+            {
+              "modid": "HardcoreEnderExpansion",
+              "version": "1.12.16-GTNH"
+            },
+            {
+              "modid": "Forestry",
+              "version": "4.10.17"
+            },
+            {
+              "modid": "BuildCraft|Builders",
+              "version": "7.1.44"
+            },
+            {
+              "modid": "BuildCraft|Factory",
+              "version": "7.1.44"
+            },
+            {
+              "modid": "Railcraft",
+              "version": "9.16.33"
+            },
+            {
+              "modid": "EnderIO",
+              "version": "2.9.28"
+            },
+            {
+              "modid": "supersolarpanel",
+              "version": "1.1.4"
+            },
+            {
+              "modid": "YAMCore",
+              "version": "0.7.1"
+            },
+            {
+              "modid": "dreamcraft",
+              "version": "2.7.268"
+            },
+            {
+              "modid": "IronChest",
+              "version": "6.1.6"
+            },
+            {
+              "modid": "GalacticraftAmunRa",
+              "version": "0.8.2"
+            },
+            {
+              "modid": "angermod",
+              "version": "0.9.0"
+            },
+            {
+              "modid": "AppleCore",
+              "version": "3.3.7"
+            },
+            {
+              "modid": "archaicfix",
+              "version": "0.7.7"
+            },
+            {
+              "modid": "ArchitectureCraft",
+              "version": "1.11.6"
+            },
+            {
+              "modid": "asielib",
+              "version": "0.7.0"
+            },
+            {
+              "modid": "Automagy",
+              "version": "0.28.2"
+            },
+            {
+              "modid": "AWWayofTime",
+              "version": "1.7.52"
+            },
+            {
+              "modid": "Botania",
+              "version": "1.12.28-GTNH"
+            },
+            {
+              "modid": "Avaritia",
+              "version": "1.77"
+            },
+            {
+              "modid": "wanionlib",
+              "version": "1.10.0"
+            },
+            {
+              "modid": "avaritiaddons",
+              "version": "1.9.3-GTNH"
+            },
+            {
+              "modid": "Backpack",
+              "version": "2.5.10-GTNH"
+            },
+            {
+              "modid": "Baubles|Expanded",
+              "version": "2.1.19-GTNH"
+            },
+            {
+              "modid": "betterbuilderswands",
+              "version": "0.13.3-GTNH"
+            },
+            {
+              "modid": "forgelin",
+              "version": "2.0.3-GTNH"
+            },
+            {
+              "modid": "betterp2p",
+              "version": "1.3.3"
+            },
+            {
+              "modid": "cb4bq",
+              "version": "3.7.15-GTNH"
+            },
+            {
+              "modid": "bq_standard",
+              "version": "3.7.15-GTNH"
+            },
+            {
+              "modid": "questbook",
+              "version": "3.7.15-GTNH"
+            },
+            {
+              "modid": "BiblioCraft",
+              "version": "1.11.7"
+            },
+            {
+              "modid": "BiblioWoodsBoP",
+              "version": "1.9"
+            },
+            {
+              "modid": "BiblioWoodsForestry",
+              "version": "1.7"
+            },
+            {
+              "modid": "BiblioWoodsNatura",
+              "version": "1.5"
+            },
+            {
+              "modid": "BinnieCore",
+              "version": "2.5.24"
+            },
+            {
+              "modid": "ExtraBees",
+              "version": "2.5.24"
+            },
+            {
+              "modid": "Genetics",
+              "version": "2.5.24"
+            },
+            {
+              "modid": "ExtraTrees",
+              "version": "2.5.24"
+            },
+            {
+              "modid": "Botany",
+              "version": "2.5.24"
+            },
+            {
+              "modid": "blocklimiter",
+              "version": "0.7.0"
+            },
+            {
+              "modid": "structurelib",
+              "version": "1.4.23"
+            },
+            {
+              "modid": "blockrenderer6343",
+              "version": "1.3.17"
+            },
+            {
+              "modid": "ThaumicTinkerer",
+              "version": "2.11.27"
+            },
+            {
+              "modid": "ForbiddenMagic",
+              "version": "0.8.4-GTNH"
+            },
+            {
+              "modid": "BloodArsenal",
+              "version": "1.4.10"
+            },
+            {
+              "modid": "craftingtweaks",
+              "version": "1.2.68-GTNH"
+            },
+            {
+              "modid": "hodgepodge",
+              "version": "2.6.112"
+            },
+            {
+              "modid": "modularui2",
+              "version": "2.2.18-1.7.10"
+            },
+            {
+              "modid": "bogosorter",
+              "version": "1.2.68-GTNH"
+            },
+            {
+              "modid": "MouseTweaks",
+              "version": "1.2.68-GTNH"
+            },
+            {
+              "modid": "TwilightForest",
+              "version": "2.7.13"
+            },
+            {
+              "modid": "chisel",
+              "version": "2.16.15-GTNH"
+            },
+            {
+              "modid": "MineTweaker3",
+              "version": "3.4.2"
+            },
+            {
+              "modid": "etfuturum",
+              "version": "2.6.2.25-GTNH"
+            },
+            {
+              "modid": "BuildCraft|Silicon",
+              "version": "7.1.44"
+            },
+            {
+              "modid": "BuildCraft|Transport",
+              "version": "7.1.44"
+            },
+            {
+              "modid": "MagicBees",
+              "version": "2.9.4-GTNH"
+            },
+            {
+              "modid": "gendustry",
+              "version": "1.9.4-GTNH"
+            },
+            {
+              "modid": "ggfab",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "harvestcraft",
+              "version": "1.3.2-GTNH"
+            },
+            {
+              "modid": "modularui",
+              "version": "1.2.20"
+            },
+            {
+              "modid": "Translocator",
+              "version": "1.3.1"
+            },
+            {
+              "modid": "witchery",
+              "version": "0.24.1"
+            },
+            {
+              "modid": "botanichorizons",
+              "version": "1.11.27-GTNH"
+            },
+            {
+              "modid": "BrandonsCore",
+              "version": "1.2.0-GTNH"
+            },
+            {
+              "modid": "bugtorch",
+              "version": "1.2.14"
+            },
+            {
+              "modid": "BuildCraft|Robotics",
+              "version": "7.1.44"
+            },
+            {
+              "modid": "BuildCraft|Compat",
+              "version": "7.1.18"
+            },
+            {
+              "modid": "OilTweak",
+              "version": "1.1.1"
+            },
+            {
+              "modid": "CarpentersBlocks",
+              "version": "3.7.0-GTNH"
+            },
+            {
+              "modid": "catwalks",
+              "version": "2.0.4"
+            },
+            {
+              "modid": "Ztones",
+              "version": "1.7.10"
+            },
+            {
+              "modid": "chiseltones",
+              "version": "1.2.0-GTNH"
+            },
+            {
+              "modid": "compactkineticgenerators",
+              "version": "1.7.10-1.0"
+            },
+            {
+              "modid": "EnderStorage",
+              "version": "1.7.7"
+            },
+            {
+              "modid": "MrTJPCoreMod",
+              "version": "1.3.4"
+            },
+            {
+              "modid": "ProjRed|Core",
+              "version": "4.12.6-GTNH"
+            },
+            {
+              "modid": "ProjRed|Transmission",
+              "version": "4.12.6-GTNH"
+            },
+            {
+              "modid": "OpenComputers",
+              "version": "1.11.20-GTNH"
+            },
+            {
+              "modid": "computronics",
+              "version": "1.9.3-GTNH"
+            },
+            {
+              "modid": "cookingforblockheads",
+              "version": "1.4.4-GTNH"
+            },
+            {
+              "modid": "coretweaks",
+              "version": "0.3.3.6-GTNH"
+            },
+            {
+              "modid": "DummyCore",
+              "version": "1.20.0"
+            },
+            {
+              "modid": "thaumicbases",
+              "version": "1.8.13"
+            },
+            {
+              "modid": "croploadcore",
+              "version": "0.2.0"
+            },
+            {
+              "modid": "berriespp",
+              "version": "1.8.11"
+            },
+            {
+              "modid": "darkerer",
+              "version": "1.0.6"
+            },
+            {
+              "modid": "DraconicEvolution",
+              "version": "1.4.27-GTNH"
+            },
+            {
+              "modid": "EMT",
+              "version": "1.6.18"
+            },
+            {
+              "modid": "EnderZoo",
+              "version": "1.3.3"
+            },
+            {
+              "modid": "enhancedlootbags",
+              "version": "1.2.8"
+            },
+            {
+              "modid": "universalsingularities",
+              "version": "8.10.0"
+            },
+            {
+              "modid": "eternalsingularity",
+              "version": "1.2.3"
+            },
+            {
+              "modid": "findit",
+              "version": "1.4.0"
+            },
+            {
+              "modid": "FloodLights",
+              "version": "1.5.4"
+            },
+            {
+              "modid": "McMultipart",
+              "version": "1.7.2"
+            },
+            {
+              "modid": "ForgeMicroblock",
+              "version": "1.7.2"
+            },
+            {
+              "modid": "ForgeRelocation",
+              "version": "0.3.4"
+            },
+            {
+              "modid": "MCFrames",
+              "version": "0.3.4"
+            },
+            {
+              "modid": "RelocationFMP",
+              "version": "0.2.0"
+            },
+            {
+              "modid": "gadomancy",
+              "version": "1.4.8"
+            },
+            {
+              "modid": "GalaxySpace",
+              "version": "1.1.121-GTNH"
+            },
+            {
+              "modid": "GraviSuite",
+              "version": "1.7.10-2.0.3"
+            },
+            {
+              "modid": "gravisuiteneo",
+              "version": "1.3.6"
+            },
+            {
+              "modid": "gtneioreplugin",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "galacticgreg",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "tectech",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "ProjRed|Illumination",
+              "version": "4.12.6-GTNH"
+            },
+            {
+              "modid": "RandomThings",
+              "version": "2.6.6"
+            },
+            {
+              "modid": "bartworks",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "GoodGenerator",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "gtnhlanth",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "bartworkscrossmodtgregworkscontainer",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "gregtech_nh",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "IC2NuclearControl",
+              "version": "2.6.20"
+            },
+            {
+              "modid": "OpenMods",
+              "version": "0.10.11"
+            },
+            {
+              "modid": "OpenBlocks",
+              "version": "1.11.7-GTNH"
+            },
+            {
+              "modid": "StevesCarts",
+              "version": "2.3.12"
+            },
+            {
+              "modid": "TGregworks",
+              "version": "1.7.10-GTNH-1.0.28"
+            },
+            {
+              "modid": "miscutils",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "bartworkscrossmod",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "InfernalMobs",
+              "version": "1.10.3-GTNH"
+            },
+            {
+              "modid": "mobsinfo",
+              "version": "0.5.6-GTNH"
+            },
+            {
+              "modid": "kubatech",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "detravscannermod",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "kekztech",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "openmodularturrets",
+              "version": "2.4.3"
+            },
+            {
+              "modid": "gtnhintergalactic",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "ToxicEverglades",
+              "version": "5.09.51.482"
+            },
+            {
+              "modid": "TaintedMagic",
+              "version": "r7.6"
+            },
+            {
+              "modid": "ThaumicExploration",
+              "version": "1.4.8-GTNH"
+            },
+            {
+              "modid": "gtnhtcwands",
+              "version": "1.4.6"
+            },
+            {
+              "modid": "GTTweaker",
+              "version": "2.3.1"
+            },
+            {
+              "modid": "HelpFixer",
+              "version": "1.3.0"
+            },
+            {
+              "modid": "holoinventory",
+              "version": "2.5.5-GTNH"
+            },
+            {
+              "modid": "hydroenergy",
+              "version": "1.4.10"
+            },
+            {
+              "modid": "ifu",
+              "version": "1.11.2"
+            },
+            {
+              "modid": "LunatriusCore",
+              "version": "1.2.1-GTNH"
+            },
+            {
+              "modid": "InGameInfoXML",
+              "version": "2.8.30"
+            },
+            {
+              "modid": "ironchestminecarts",
+              "version": "1.2.0"
+            },
+            {
+              "modid": "irontank",
+              "version": "1.4.2"
+            },
+            {
+              "modid": "irontankminecarts",
+              "version": "1.0.12"
+            },
+            {
+              "modid": "JABBA",
+              "version": "1.5.10"
+            },
+            {
+              "modid": "JourneyMapServer",
+              "version": "1.0.5_MC1.7.10"
+            },
+            {
+              "modid": "littletiles",
+              "version": "1.5.14-GTNH"
+            },
+            {
+              "modid": "creativecore",
+              "version": "1.5.14-GTNH"
+            },
+            {
+              "modid": "LogisticsPipes",
+              "version": "1.4.24-GTNH"
+            },
+            {
+              "modid": "lootgames",
+              "version": "2.2.0.1"
+            },
+            {
+              "modid": "lwjgl3ify",
+              "version": "2.1.16"
+            },
+            {
+              "modid": "malisiscore",
+              "version": "1.18.2-GTNH"
+            },
+            {
+              "modid": "malisisdoors",
+              "version": "1.18.2-GTNH"
+            },
+            {
+              "modid": "matter-manipulator",
+              "version": "0.0.51-GTNH"
+            },
+            {
+              "modid": "modernmarkings",
+              "version": "0.3.12-1.7.10"
+            },
+            {
+              "modid": "modtweaker2",
+              "version": "0.12.0"
+            },
+            {
+              "modid": "Morpheus",
+              "version": "1.7.10-1.6.21"
+            },
+            {
+              "modid": "naturescompass",
+              "version": "1.5.0-GTNH"
+            },
+            {
+              "modid": "navigator",
+              "version": "1.0.17"
+            },
+            {
+              "modid": "NEIAddons",
+              "version": "1.17.0"
+            },
+            {
+              "modid": "NEIAddons|Botany",
+              "version": "1.17.0"
+            },
+            {
+              "modid": "NEIAddons|Developer",
+              "version": "1.17.0"
+            },
+            {
+              "modid": "NEIAddons|ExNihilo",
+              "version": "1.17.0"
+            },
+            {
+              "modid": "NEIAddons|CraftingTables",
+              "version": "1.17.0"
+            },
+            {
+              "modid": "NEIAddons|Forestry",
+              "version": "1.17.0"
+            },
+            {
+              "modid": "NEIAddons|AppEng",
+              "version": "1.17.0"
+            },
+            {
+              "modid": "neicustomdiagram",
+              "version": "1.7.5"
+            },
+            {
+              "modid": "neiintegration",
+              "version": "1.5.0"
+            },
+            {
+              "modid": "netherportalfix",
+              "version": "1.4.0"
+            },
+            {
+              "modid": "NodalMechanics",
+              "version": "1.3.1-GTNH"
+            },
+            {
+              "modid": "neenergistics",
+              "version": "1.7.14"
+            },
+            {
+              "modid": "neid",
+              "version": "2.1.10"
+            },
+            {
+              "modid": "nutrition",
+              "version": "0.1.3"
+            },
+            {
+              "modid": "openglasses",
+              "version": "1.6.1-GTNH"
+            },
+            {
+              "modid": "openprinter",
+              "version": "0.3.0-GTNH"
+            },
+            {
+              "modid": "opensecurity",
+              "version": "1.2.0-GTNH"
+            },
+            {
+              "modid": "Opis",
+              "version": "1.4.6-mapless"
+            },
+            {
+              "modid": "harvestthenether",
+              "version": "1.7.10"
+            },
+            {
+              "modid": "personalspace",
+              "version": "1.0.33"
+            },
+            {
+              "modid": "postea",
+              "version": "1.1.3"
+            },
+            {
+              "modid": "ProjectBlue",
+              "version": "1.2.1-GTNH"
+            },
+            {
+              "modid": "ProjRed|Integration",
+              "version": "4.12.6-GTNH"
+            },
+            {
+              "modid": "ProjRed|Fabrication",
+              "version": "4.12.6-GTNH"
+            },
+            {
+              "modid": "ProjRed|Transportation",
+              "version": "4.12.6-GTNH"
+            },
+            {
+              "modid": "ProjRed|Exploration",
+              "version": "4.12.6-GTNH"
+            },
+            {
+              "modid": "ProjRed|Compatibility",
+              "version": "4.12.6-GTNH"
+            },
+            {
+              "modid": "ProjRed|Expansion",
+              "version": "4.12.6-GTNH"
+            },
+            {
+              "modid": "RIO",
+              "version": "2.7.6"
+            },
+            {
+              "modid": "Roguelike",
+              "version": "1.6.6-GTNH"
+            },
+            {
+              "modid": "RWG",
+              "version": "alpha-1.5.0"
+            },
+            {
+              "modid": "tc4tweak",
+              "version": "1.5.39"
+            },
+            {
+              "modid": "salisarcana",
+              "version": "1.1.33-GTNH"
+            },
+            {
+              "modid": "serverutilities",
+              "version": "2.2.2"
+            },
+            {
+              "modid": "SGCraft",
+              "version": "1.4.5-GTNH"
+            },
+            {
+              "modid": "sharewhereiam",
+              "version": "2.1.4"
+            },
+            {
+              "modid": "sleepingbag",
+              "version": "0.3.0"
+            },
+            {
+              "modid": "SpecialMobs",
+              "version": "3.6.3"
+            },
+            {
+              "modid": "SpiceOfLife",
+              "version": "2.2.3-carrot"
+            },
+            {
+              "modid": "StevesFactoryManager",
+              "version": "1.3.4-GTNH"
+            },
+            {
+              "modid": "StevesAddons",
+              "version": "0.14.2"
+            },
+            {
+              "modid": "StorageDrawers",
+              "version": "2.1.10-GTNH"
+            },
+            {
+              "modid": "StorageDrawersBop",
+              "version": "2.1.10-GTNH"
+            },
+            {
+              "modid": "StorageDrawersMisc",
+              "version": "2.1.10-GTNH"
+            },
+            {
+              "modid": "StorageDrawersForestry",
+              "version": "2.1.10-GTNH"
+            },
+            {
+              "modid": "StorageDrawersNatura",
+              "version": "2.1.10-GTNH"
+            },
+            {
+              "modid": "StorageDrawersErebus",
+              "version": "2.1.10-GTNH"
+            },
+            {
+              "modid": "structurecompat",
+              "version": "0.7.4"
+            },
+            {
+              "modid": "SuperTic",
+              "version": "1.5.0"
+            },
+            {
+              "modid": "thaumcraftneiplugin",
+              "version": "1.7.10-1.7a"
+            },
+            {
+              "modid": "tcneiadditions",
+              "version": "1.5.4"
+            },
+            {
+              "modid": "ThaumcraftMobAspects",
+              "version": "1.2.1-GTNH"
+            },
+            {
+              "modid": "ThaumcraftResearchTweaks",
+              "version": "1.3.0"
+            },
+            {
+              "modid": "ThaumicMachina",
+              "version": "0.2.1"
+            },
+            {
+              "modid": "thaumicboots",
+              "version": "1.4.14"
+            },
+            {
+              "modid": "ThaumicHorizons",
+              "version": "1.7.9"
+            },
+            {
+              "modid": "thaumicinsurgence",
+              "version": "0.4.0"
+            },
+            {
+              "modid": "tinkersdefense",
+              "version": "1.3.2"
+            },
+            {
+              "modid": "TMechworks",
+              "version": "0.4.1"
+            },
+            {
+              "modid": "TML",
+              "version": "4.3.0-GTNH"
+            },
+            {
+              "modid": "visualprospecting",
+              "version": "1.4.8"
+            },
+            {
+              "modid": "WailaHarvestability",
+              "version": "1.3.4-GTNH"
+            },
+            {
+              "modid": "wailaplugins",
+              "version": "0.6.0"
+            },
+            {
+              "modid": "WarpTheory",
+              "version": "1.5.0-GTNH"
+            },
+            {
+              "modid": "wawla",
+              "version": "1.3.1-GTNH"
+            },
+            {
+              "modid": "WitcheryExtras",
+              "version": "1.3.8"
+            },
+            {
+              "modid": "WitchingGadgets",
+              "version": "1.7.25-GTNH"
+            },
+            {
+              "modid": "WR-CBE|Core",
+              "version": "1.7.1"
+            },
+            {
+              "modid": "WR-CBE|Logic",
+              "version": "1.7.1"
+            },
+            {
+              "modid": "WR-CBE|Addons",
+              "version": "1.7.1"
+            },
+            {
+              "modid": "HungerOverhaul",
+              "version": "1.7.10-1.0.0.jenkins104"
+            },
+            {
+              "modid": "IguanaTweaksTConstruct",
+              "version": "2.6.6"
+            },
+            {
+              "modid": "gregtech",
+              "version": "MC1710"
+            }
+          ]
+        }
+      },
+      "versionName": "1.7.10",
+      "playersOnline": 0,
+      "playersMax": 20,
+      "readyByMarker": true
+    },
+    "MC Skyblock": {
+      "parsed": {
+        "enforcesSecureChat": true,
+        "forgeData": {
+          "channels": [],
+          "mods": [],
+          "truncated": false,
+          "fmlNetworkVersion": 3,
+          "d": "ą\u0000\u0000ࠐ㐤獋㙖⹌ᦘ̺⸱恤䒸⡑⛧沮婙㨹牥ఈㄵচ₀沮婙㨹牥ఈㄵচ瀠湡Ṛ㘱捯䓖◕⍣♖↮஌᠙ㄮ橚䒸ᥱ⌳ⷁ崙㐱湡䫜঱ᆈ ᩛ㰱ㄍ摜㣀榉捒䘅ోԙ敮䛨֡獳䙖⁍ఌ\u0000猐嫒㇁挫㝖⵬ᢞ㞶正戊䂸ű偃泀岛㊳ఀ勨䦕᫻⛷⺎定Ƴ⸱`䰔掃䚖⁮䮌Ѓ䋔ᖑ灓䙖滮岛㒵杮搂Єじ♖⹎崚ㆲ牯ӊ⠌䬫Ⴖ䚦䲋᜘⸰桢᳐䌘昖ⷍ嬙ᢂ〮恜\u0004"
+        },
+        "description": {
+          "text": "Skyblock (Skyblock Builder + Lucky Blocks)"
+        },
+        "players": {
+          "max": 20,
+          "online": 0
+        },
+        "version": {
+          "name": "1.20.1",
+          "protocol": 763
+        }
+      },
+      "versionName": "1.20.1",
+      "playersOnline": 0,
+      "playersMax": 20,
+      "readyByMarker": true
+    },
+    "MC Tech": {
+      "skipped": "no process owns this directory"
+    }
+  },
+  "rcon": {
+    "MC 1.21.11": {
+      "connected": true,
+      "commands": {
+        "list": {
+          "raw": "§6There are §c0§6 out of maximum §c30§6 players online.\n",
+          "ms": 1.1
+        },
+        "tps": {
+          "raw": "§6TPS from last 1m, 5m, 15m: §a20.0§r, §a20.0§r, §a20.0\n",
+          "ms": 3.1
+        },
+        "forge tps": {
+          "raw": "Unknown or incomplete command. See below for error\nforge tps<--[HERE]",
+          "ms": 0.7
+        },
+        "cofh tps": {
+          "raw": "Unknown or incomplete command. See below for error\ncofh tps<--[HERE]",
+          "ms": 0.5
+        }
+      }
+    },
+    "MC 1.21.4": {
+      "connected": true,
+      "commands": {
+        "list": {
+          "raw": "There are 0 of a max of 20 players online: ",
+          "ms": 0.4
+        },
+        "tps": {
+          "raw": "§6TPS from last 1m, 5m, 15m: §a20.0§r, §a20.0§r, §a20.0\n",
+          "ms": 0.4
+        },
+        "forge tps": {
+          "raw": "Unknown or incomplete command, see below for error\nforge tps<--[HERE]",
+          "ms": 0.6
+        },
+        "cofh tps": {
+          "raw": "Unknown or incomplete command, see below for error\ncofh tps<--[HERE]",
+          "ms": 59.7
+        }
+      }
+    },
+    "MC 1.21.4 - Copy": {
+      "connected": false,
+      "note": "no process owns this directory"
+    },
+    "MC GTNH": {
+      "connected": true,
+      "commands": {
+        "list": {
+          "raw": "There are 0/20 players online:",
+          "ms": 18.4
+        },
+        "cofh tps": {
+          "raw": "Overall: 20.00 TPS/0.94MS (100%)Overworld [0]: 20.00 TPS/0.09MS (100%)Nether [-1]: 20.00 TPS/0.01MS (100%)Seth [94]: 20.00 TPS/0.08MS (100%)Horus [93]: 20.00 TPS/0.02MS (100%)Anubis [92]: 20.00 TPS/0.02MS (100%)Maahes [91]: 20.00 TPS/0.01MS (100%)Neper [90]: 20.00 TPS/0.01MS (100%)Miranda [86]: 20.00 TPS/0.01MS (100%)T Ceti E [85]: 20.00 TPS/0.01MS (100%)Vega B [84]: 20.00 TPS/0.01MS (100%)Haumea [83]: 20.00 TPS/0.01MS (100%)Barnarda F [82]: 20.00 TPS/0.01MS (100%)Barnarda E [81]: 20.00 TPS/0.01MS (100%)Outer Lands [173]: 20.00 TPS/0.01MS (100%)Saturn [77]: 20.00 TPS/0.01MS (100%)Neptune [74]: 20.00 TPS/0.01MS (100%)Jupiter [71]: 20.00 TPS/0.01MS (100%)Mirror [70]: 20.00 TPS/0.01MS (100%)Pocket Plane [69]: 20.00 TPS/0.01MS (100%)Ross128b [64]: 20.00 TPS/0.01MS (100%)Ross128ba [63]: 20.00 TPS/0.01MS (100%)Bedrock [60]: 20.00 TPS/0.01MS (100%)Torment [56]: 20.00 TPS/0.01MS (100%)Spirit World [55]: 20.00 TPS/0.01MS (100%)Uranus [51]: 20.00 TPS/0.01MS (100%)The Outer Lands [50]: 20.00 TPS/0.01MS (100%)Pluto [49]: 20.00 TPS/0.01MS (100%)Triton [48]: 20.00 TPS/0.01MS (100%)Proteus [47]: 20.00 TPS/0.01MS (100%)Oberon [46]: 20.00 TPS/0.01MS (100%)Callisto [45]: 20.00 TPS/0.01MS (100%)Titan [44]: 20.00 TPS/0.01MS (100%)Ganymede [43]: 20.00 TPS/0.01MS (100%)Ceres [42]: 20.00 TPS/0.01MS (100%)Enceladus [41]: 20.00 TPS/0.01MS (100%)Deimos [40]: 20.00 TPS/0.01MS (100%)Venus [39]: 20.00 TPS/0.01MS (100%)Phobos [38]: 20.00 TPS/0.01MS (100%)Mercury [37]: 20.00 TPS/0.01MS (100%)dimensionDarkWorld [227]: 20.00 TPS/0.02MS (100%)Io [36]: 20.00 TPS/0.01MS (100%)Europa [35]: 20.00 TPS/0.01MS (100%)Kuiper Belt [33]: 20.00 TPS/0.01MS (100%)Barnarda C [32]: 20.00 TPS/0.01MS (100%)α Centauri Bb [31]: 20.00 TPS/0.01MS (100%)Asteroids [30]: 20.00 TPS/0.01MS (100%)Mars [29]: 20.00 TPS/0.01MS (100%)Moon [28]: 20.00 TPS/0.01MS (100%)Makemake [25]: 20.00 TPS/0.01MS (100%)The Last Millenium [112]: 20.00 TPS/0.01MS (100%)Twilight Forest [7]: 20.00 TPS/0.01MS (100%)Underdark [100]: 20.00 TPS/0.01MS (100%)SpectreWorld [2]: 20.00 TPS/0.01MS (100%)Mehen Belt [95]: 20.00 TPS/0.02MS (100%)",
+          "ms": 52.5
+        },
+        "tps": {
+          "raw": "You must specify which player you wish to perform this action on.",
+          "ms": 51.1
+        },
+        "forge tps": {
+          "raw": "Dim 94 : Mean tick time: 0.078 ms. Mean TPS: 20.000Dim 93 : Mean tick time: 0.023 ms. Mean TPS: 20.000Dim 92 : Mean tick time: 0.017 ms. Mean TPS: 20.000Dim 91 : Mean tick time: 0.015 ms. Mean TPS: 20.000Dim 90 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 86 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 85 : Mean tick time: 0.015 ms. Mean TPS: 20.000Dim 84 : Mean tick time: 0.014 ms. Mean TPS: 20.000Dim 83 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 82 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 81 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 173 : Mean tick time: 0.015 ms. Mean TPS: 20.000Dim 77 : Mean tick time: 0.014 ms. Mean TPS: 20.000Dim 74 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 71 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 70 : Mean tick time: 0.015 ms. Mean TPS: 20.000Dim 69 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 64 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 63 : Mean tick time: 0.015 ms. Mean TPS: 20.000Dim 60 : Mean tick time: 0.015 ms. Mean TPS: 20.000Dim 56 : Mean tick time: 0.014 ms. Mean TPS: 20.000Dim 55 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 51 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 50 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 49 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 48 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 47 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 46 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 45 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 44 : Mean tick time: 0.014 ms. Mean TPS: 20.000Dim 43 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 42 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 41 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 40 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 39 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 38 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 37 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 227 : Mean tick time: 0.016 ms. Mean TPS: 20.000Dim 36 : Mean tick time: 0.014 ms. Mean TPS: 20.000Dim 35 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 33 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 32 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 31 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 30 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 29 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 28 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 25 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 112 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 7 : Mean tick time: 0.013 ms. Mean TPS: 20.000Dim 100 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 2 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim -1 : Mean tick time: 0.012 ms. Mean TPS: 20.000Dim 0 : Mean tick time: 0.088 ms. Mean TPS: 20.000Dim 95 : Mean tick time: 0.018 ms. Mean TPS: 20.000Overall : Mean tick time: 0.970 ms. Mean TPS: 20.000",
+          "ms": 52.0
+        }
+      }
+    },
+    "MC Skyblock": {
+      "connected": true,
+      "commands": {
+        "list": {
+          "raw": "There are 0 of a max of 20 players online: \n",
+          "ms": 0.3
+        },
+        "forge tps": {
+          "raw": "Dim minecraft:overworld (minecraft:overworld): Mean tick time: 0.513 ms. Mean TPS: 20.000\nDim minecraft:the_end (minecraft:the_end): Mean tick time: 0.007 ms. Mean TPS: 20.000\nDim minecraft:the_nether (minecraft:the_nether): Mean tick time: 0.004 ms. Mean TPS: 20.000\nOverall: Mean tick time: 1.512 ms. Mean TPS: 20.000\n",
+          "ms": 0.6
+        },
+        "tps": {
+          "raw": "Unknown or incomplete command, see below for error\ntps<--[HERE]\n",
+          "ms": 0.3
+        },
+        "cofh tps": {
+          "raw": "Unknown or incomplete command, see below for error\ncofh tps<--[HERE]\n",
+          "ms": 0.3
+        }
+      }
+    },
+    "MC Tech": {
+      "connected": false,
+      "note": "no process owns this directory"
+    }
+  },
+  "generatedAt": "2026-07-28T21:49:15"
+}

@@ -1,0 +1,105 @@
+# ---------------------------------------------------------------------------
+# CREDENTIAL SAFETY  --  read this before adding anything below
+#
+# This app reads RCON passwords out of server.properties and touches plugin
+# configs that contain bot tokens. Nothing from a Minecraft server directory,
+# and nothing derived from one, may ever be committed. When in doubt, add it.
+# ---------------------------------------------------------------------------
+
+# Whole server / backup trees, wherever they land relative to the repo
+MC Servers/
+mcbackups/
+servers/
+**/MC Servers/**
+**/mcbackups/**
+
+# Individual server-state files, by name, anywhere in the tree
+server.properties
+ops.json
+whitelist.json
+banned-players.json
+banned-ips.json
+banned-*.json
+usercache.json
+eula.txt
+config.yml
+paper-global.yml
+paper-world-defaults.yml
+bukkit.yml
+spigot.yml
+
+# Databases (CoreProtect SQLite, LuckPerms H2, anything else live)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.mv.db
+*.trace.db
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+secrets.json
+credentials.json
+*.pem
+*.key
+*.pfx
+*.p12
+config.local.*
+userData/
+
+# Logs (may contain IPs, player names, command echoes)
+*.log
+*.log.gz
+logs/
+crash-reports/
+
+# Archives that could wrap any of the above
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+*.rar
+*.mrpack
+
+# Rendered UI states (scripts/preview-states.tsx). Synthetic data only, but it
+# is a generated artefact and does not belong in history.
+preview-states.html
+portability-render.html
+
+# The operational handoff document. It names this machine's hostname, LAN
+# addresses and paths, which the rest of the repo is deliberately free of.
+# Local only, by decision 2026-07-31.
+HANDOFF.md
+
+# ---------------------------------------------------------------------------
+# Build / tooling
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+dist-electron/
+out/
+release/
+build/
+.vite/
+*.tsbuildinfo
+coverage/
+.eslintcache
+
+# Editor / OS / agent tooling
+.vscode/*
+!.vscode/extensions.json
+# Machine-local agent tooling. `.agents/skills/` and `skills-lock.json` ARE
+# tracked -- they are a deliberate project-level install and the lock makes the
+# set reproducible -- but `.claude/` holds per-machine settings and third-party
+# skill content whose licences do not belong in this repo.
+.claude/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp

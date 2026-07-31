@@ -1,0 +1,122 @@
+[
+  {
+    "name": "MC 1.21.11",
+    "expectedClass": "server-live",
+    "isServer": true,
+    "kind": "paper",
+    "levelName": "world",
+    "worldDirs": [
+      "world",
+      "world_nether",
+      "world_the_end"
+    ],
+    "levelDatRelative": "world/level.dat",
+    "gamePort": 25566,
+    "rconEnabled": true,
+    "expectedTpsCommand": "tps",
+    "runningAtCapture": true
+  },
+  {
+    "name": "MC 1.21.4",
+    "expectedClass": "server-live",
+    "isServer": true,
+    "kind": "paper",
+    "levelName": "world",
+    "worldDirs": [
+      "world",
+      "world_nether",
+      "world_the_end"
+    ],
+    "levelDatRelative": "world/level.dat",
+    "gamePort": 25565,
+    "rconEnabled": true,
+    "expectedTpsCommand": "tps",
+    "runningAtCapture": true
+  },
+  {
+    "name": "MC 1.21.4 - Copy",
+    "expectedClass": "server-stale",
+    "isServer": true,
+    "kind": "paper",
+    "levelName": "world",
+    "worldDirs": [
+      "world",
+      "world_nether",
+      "world_the_end"
+    ],
+    "levelDatRelative": "world/level.dat",
+    "gamePort": 25565,
+    "rconEnabled": false,
+    "expectedTpsCommand": "tps",
+    "runningAtCapture": false
+  },
+  {
+    "name": "MC 26.1",
+    "expectedClass": "not-a-server",
+    "isServer": false,
+    "kind": "unknown",
+    "levelName": null,
+    "worldDirs": [],
+    "levelDatRelative": null,
+    "gamePort": null,
+    "rconEnabled": false,
+    "expectedTpsCommand": null
+  },
+  {
+    "name": "MC GTNH",
+    "expectedClass": "server-live",
+    "isServer": true,
+    "kind": "forge-1710",
+    "levelName": "World",
+    "worldDirs": [
+      "World"
+    ],
+    "levelDatRelative": "World/level.dat",
+    "gamePort": 25567,
+    "rconEnabled": true,
+    "expectedTpsCommand": "cofh tps",
+    "runningAtCapture": true
+  },
+  {
+    "name": "MC Skyblock",
+    "expectedClass": "server-live",
+    "isServer": true,
+    "kind": "forge-modern",
+    "levelName": "world",
+    "worldDirs": [
+      "world"
+    ],
+    "levelDatRelative": "world/level.dat",
+    "gamePort": 25568,
+    "rconEnabled": true,
+    "expectedTpsCommand": "forge tps",
+    "runningAtCapture": true
+  },
+  {
+    "name": "MC Tech",
+    "expectedClass": "server-retired",
+    "isServer": true,
+    "kind": "forge-modern",
+    "levelName": "world",
+    "worldDirs": [
+      "world"
+    ],
+    "levelDatRelative": "world/level.dat",
+    "gamePort": 25567,
+    "rconEnabled": true,
+    "expectedTpsCommand": "forge tps",
+    "runningAtCapture": false
+  },
+  {
+    "name": "clientpacks",
+    "expectedClass": "not-a-server",
+    "isServer": false,
+    "kind": "unknown",
+    "levelName": null,
+    "worldDirs": [],
+    "levelDatRelative": null,
+    "gamePort": null,
+    "rconEnabled": false,
+    "expectedTpsCommand": null
+  }
+]

@@ -1,0 +1,443 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+/* No fontsource import here. See the warning below: shadcn init re-added it
+   once already and it ships broken font URLs. Fonts load from main.tsx. */
+@custom-variant dark (&:is(.dark *));
+
+/*
+  The Geist font imports are in `main.tsx`, NOT here, and that is deliberate.
+
+  Importing them from this file builds without error and ships a broken page:
+  Tailwind's `@import 'tailwindcss'` processing inlines the fontsource CSS and
+  loses its base path, so every `url(./files/*.woff2)` survives into the bundle
+  pointing at a directory that does not exist in dist/. Vite says so, but only
+  as a warning among nine others, and the build still exits 0. Caught by
+  checking dist/ for woff2 files rather than by trusting the exit code.
+
+  Imported from JS, Vite resolves each url() against the real package location
+  and emits the files with hashed names.
+*/
+
+@theme {
+  /*
+    ---------------------------------------------------------------------------
+    Surfaces. One cool family, hue 216-223, spread 11 degrees.
+    The previous palette was already consistent here and was not the problem.
+    ---------------------------------------------------------------------------
+  */
+  /*
+    The surface ladder was the reason the first pass "looked the same". bg and
+    panel sat 1.066x apart, which is not enough for a card to read as an OBJECT
+    on a page -- the whole screen resolved as one grey field and no amount of
+    typography inside the cards could fix it. Now 1.139x, with two surfaces
+    above it so a card has anatomy instead of being one flat rectangle.
+  */
+  --color-bg: #070a10;
+  --color-panel: #141a27;
+  --color-panel2: #1b2231;
+  --color-edge: #28324a;
+  --color-edge-strong: #3a4763;
+
+  /* Three text tiers, AA on the LIGHTEST surface (13.6 / 6.9 / 4.7) and each
+     visibly apart from the next (2.11x, 1.56x) so the hierarchy survives. */
+  --color-ink: #e8eef5;
+  --color-muted: #9fabbd;
+  --color-faint: #7f8c9f;
+
+  /*
+    ---------------------------------------------------------------------------
+    State. Rebuilt because the old palette failed the only contrast that
+    matters for a glance: ok #3fb950 and warn #d29922 had luminance 0.3633 and
+    0.3660 -- a ratio of 1.01. They were the same brightness, so hue carried
+    100% of the signal and a red-green colourblind reader got none of it.
+
+    Now separated in GREYSCALE as well as hue:
+        ok  0.1947  <  bad 0.2937  <  warn 0.4891
+        ok/warn 2.51x   ok/bad 1.51x   warn/bad 1.67x
+
+    And healthy is the QUIETEST thing on screen, which is the half-second read:
+    a calm fleet has no bright colour in it, so any brightness means attention.
+
+    --color-ok is an INDICATOR colour, not a text colour. Healthy renders its
+    label in muted and keeps green only for the dot. That is what let it go dim
+    enough to separate from red; it also means four healthy cards are four
+    colourless cards, so colour never means "nothing to report".
+  */
+  --color-ok: #2b8b4a;
+  --color-warn: #e8b13a;
+  --color-bad: #fb5f56;
+
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'Cascadia Mono', monospace;
+
+  /* Softer on containers, tighter on the things inside them. */
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 10px;
+}
+
+/*
+  ---------------------------------------------------------------------------
+  Depth, and why there is any at all.
+
+  The brief is a dense monitoring tool, so this is not decoration: it is how a
+  card becomes a thing you can point at rather than a region of a grey field.
+  Three static properties, no animation, no repaint cost:
+
+    - a hairline top highlight, so surfaces read as lit from above
+    - a tinted shadow carrying the background's own hue rather than black,
+      which is what stops it looking like a sticker dropped on the page
+    - a slightly stronger border than the fill difference alone
+
+  All three are composited once. Nothing here costs frames.
+  ---------------------------------------------------------------------------
+*/
+@utility surface {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 4%),
+    0 1px 2px rgb(4 6 10 / 40%),
+    0 8px 24px -14px rgb(4 6 10 / 80%);
+}
+
+/* Elevated one step: the host panel, which is the statement of the page. */
+@utility surface-raised {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 6%),
+    0 2px 4px rgb(4 6 10 / 45%),
+    0 18px 40px -20px rgb(4 6 10 / 90%);
+}
+
+/*
+  The status rail.
+
+  A 3px coloured edge down the left of every card. This is the single biggest
+  change for the across-the-room read the brief asks for: colour at the SCALE of
+  the card, not the scale of a dot. A healthy fleet is four hairlines of the same
+  quiet green; one fault is a bar of a different colour in a different place, and
+  that is legible at a distance where neither the dot nor the label is.
+*/
+@utility rail {
+  position: relative;
+  overflow: hidden;
+}
+.rail::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: currentColor;
+  opacity: 0.9;
+}
+/* Doubt gets a broken rail, for the same reason UNKNOWN gets a dashed dot:
+   the confidence axis has to survive at every scale it is drawn at. */
+.rail-dashed::before {
+  background: repeating-linear-gradient(
+    to bottom,
+    currentColor 0 6px,
+    transparent 6px 11px
+  );
+  opacity: 0.75;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/*
+  Every number in this UI is re-rendered every ten seconds. Proportional digits
+  change width as they change value, so a column of figures twitches sideways on
+  each snapshot and the eye reads movement where there is no news. Tabular
+  figures pin the width.
+*/
+.tnum,
+[data-metric],
+code,
+kbd,
+pre,
+.font-mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/*
+  The prose is the product -- the host sentence, the attribution explanation,
+  the NAT-hairpinning paragraph. Give it a measure and stop it orphaning words.
+*/
+.prose-line {
+  max-width: 68ch;
+  text-wrap: pretty;
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+
+/* Keyboard focus was entirely missing before. */
+:focus-visible {
+  outline: 2px solid var(--color-muted);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/*
+  ---------------------------------------------------------------------------
+  The confidence indicator.
+
+  This is the one piece of visual language the product thesis actually needs.
+  Health says WHAT is wrong; confidence says whether we are in a position to
+  say so at all. They are different axes and they were rendering identically --
+  STARTING and UNKNOWN were both a plain amber dot, though one is a claim about
+  the server and the other is a claim about the measurement.
+
+  FORM carries confidence, so it survives greyscale, distance and colourblind
+  vision, and stays readable independently of severity:
+
+     solid     we measured this, and this is what the server is doing
+     ring      degraded, but the cause is not this server
+     dashed    no usable reading -- this is a statement about the measurement
+
+  SIZE carries attention: healthy is small, anything else is large. Four healthy
+  servers are a regular field of small quiet marks, and a fault breaks the
+  pattern. Pattern-break is the strongest pre-attentive signal available.
+  ---------------------------------------------------------------------------
+*/
+.ind {
+  display: inline-block;
+  flex: none;
+  border-radius: 9999px;
+  box-sizing: border-box;
+}
+.ind-sm {
+  width: 8px;
+  height: 8px;
+}
+.ind-lg {
+  width: 12px;
+  height: 12px;
+}
+.ind-solid {
+  background: currentColor;
+}
+.ind-ring {
+  background: transparent;
+  border: 2px solid currentColor;
+}
+.ind-dashed {
+  background: transparent;
+  border: 1.5px dashed currentColor;
+}
+
+/*
+  ---------------------------------------------------------------------------
+  Motion.
+
+  This is watched for hours. Anything that moves without news trains the
+  operator to ignore movement, which is the opposite of what a monitor is for.
+  So there are no entry animations, no staggered reveals, no ambient motion, and
+  nothing animates on the ten-second snapshot.
+
+  Motion is spent on exactly two things: interaction feedback, and a single
+  one-shot flash when a server's health state actually CHANGES -- which is news,
+  and is the only time the operator should be pulled back to the screen.
+  ---------------------------------------------------------------------------
+*/
+/*
+  The one thing on the page that is allowed to move on a timer.
+
+  A single 6px dot beside the scan clock, pulsing once when a snapshot lands.
+  It is the answer to "is this screen still live, or am I looking at a frozen
+  picture of ten minutes ago" -- which is a real question for a wall display and
+  the one thing a static dashboard genuinely cannot tell you.
+
+  It is deliberately ONE element, and deliberately not on any data: nothing that
+  carries a reading animates, so movement never competes with the numbers. One
+  dot on a ten-second cadence stays background; the same motion on four cards
+  would be the thing that teaches you to stop looking.
+*/
+@keyframes live-tick {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  35% {
+    transform: scale(1.9);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+}
+.live-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.55;
+  will-change: transform;
+}
+.live-dot-tick {
+  animation: live-tick 900ms cubic-bezier(0.16, 1, 0.3, 1) 1;
+}
+
+@keyframes state-change {
+  0% {
+    box-shadow: inset 0 0 0 1px currentColor;
+    background-color: color-mix(in srgb, currentColor 9%, transparent);
+  }
+  100% {
+    box-shadow: inset 0 0 0 1px transparent;
+    background-color: transparent;
+  }
+}
+.state-changed {
+  animation: state-change 1.6s ease-out 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+/*
+  ---break---
+*/
+/*
+  The shadcn variable layer. The @theme block above stays the source of truth
+  for the legacy utilities (bg-panel, text-muted, ...) while the components in
+  web/components/ui consume these. Both map onto ONE palette; if a colour
+  changes, change it in :root below and in the @theme block together.
+*/
+@theme inline {
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  /* sm/md/lg deliberately NOT derived from --radius: the 3/5/10px ladder in
+     the @theme block above stays authoritative, so nothing already shipped
+     changes shape. */
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+/*
+  ---break---
+*/
+/*
+  Dark only, by decision (this is a wall monitor for one operator, not a
+  product with visitors). Values live in :root and <html class="dark"> exists
+  only so the components' dark: variants match. Same cool family as the
+  @theme palette, hue 216-223.
+
+  The inset shell reads as three surfaces, darkest outward:
+    --sidebar     #070a10   the page rim and sidebar (the old --color-bg)
+    --background  #0d1320   the floating content panel
+    --card        #141a27   cards on that panel (the old --color-panel)
+
+  --primary is the ONE interactive accent, and it is none of ok/warn/bad.
+  State colours keep their monopoly on meaning: green never decorates a
+  button, and blue never claims a server is fine.
+
+  The first accent was #7fa8ec, a pastel that read as a DISABLED grey at
+  button size: an accent that cannot be told from a disabled state is not an
+  accent. Now a saturated blue for fills (#2563eb, 5.2:1 against its light
+  foreground) with a lighter tint (#8ab1f2) reserved for accent TEXT on the
+  dark rail, where the fill colour would vanish.
+*/
+:root {
+  --background: #0d1320;
+  --foreground: #e8eef5;
+  --card: #141a27;
+  --card-foreground: #e8eef5;
+  --popover: #1b2231;
+  --popover-foreground: #e8eef5;
+  --primary: #2563eb;
+  --primary-foreground: #f5f8ff;
+  --secondary: #1b2231;
+  --secondary-foreground: #e8eef5;
+  --muted: #1b2231;
+  --muted-foreground: #9fabbd;
+  --accent: #1b2231;
+  --accent-foreground: #e8eef5;
+  --destructive: #fb5f56;
+  --border: #28324a;
+  --input: #28324a;
+  --ring: #5a8df5;
+  --chart-1: #5a8df5;
+  --chart-2: #9fabbd;
+  --chart-3: #7f8c9f;
+  --chart-4: #3a4763;
+  --chart-5: #28324a;
+  --radius: 0.625rem;
+  --sidebar: #070a10;
+  --sidebar-foreground: #9fabbd;
+  --sidebar-primary: #8ab1f2;
+  --sidebar-primary-foreground: #0b101a;
+  --sidebar-accent: #141a27;
+  --sidebar-accent-foreground: #e8eef5;
+  --sidebar-border: #1c2434;
+  --sidebar-ring: #5a8df5;
+}
+/*
+  ---break---
+*/
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
