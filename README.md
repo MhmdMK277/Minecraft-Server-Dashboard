@@ -225,6 +225,17 @@ servers are the source of truth. Sessions and passwords are scrypt-hashed and
 stored in the per-user data directory; credentials from server directories
 never cross the wire, asserted by `npm run prove-websocket`.
 
+## Security
+
+[docs/security-audit.md](docs/security-audit.md) records the M4 audit: the
+threat model, every check with its command and result, what is deliberately
+out of scope and why, and what a stranger should run to reproduce all of it.
+It found and fixed one critical vulnerability (an authentication bypass via
+URL percent-encoding) and four lower-severity issues, and it is explicit
+about which parts of the audit are independent of the author and which are
+not. CodeQL runs on every push and weekly; results are in this repository's
+Security tab.
+
 ## Provenance
 
 This repository was published as a single commit. The development history
