@@ -1,4 +1,4 @@
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { Classification, ServerStatus, Snapshot, IgnoredDirectory, TpsInfo } from '@shared/api'
 import {
   listDirectories,
@@ -23,7 +23,8 @@ import { observeFleet } from './hostwatch'
 import { loadPolicy, isBackupEnabled, type BackupPolicy } from './backuppolicy'
 import { primeHistory, timingFor, observe as observeBoot, flush as flushBootTimes } from './boottime'
 import { dataDir } from './config'
-import { detectLauncher, indexTasks, type TaskIndex } from './launcher'
+import { detectLauncher, indexTasks, type Launcher, type TaskIndex } from './launcher'
+import { loadAttached, type AttachedServer } from './attach'
 import { isBusy, doubleSpawnAlerts } from './control'
 
 /**
@@ -72,6 +73,32 @@ export async function scan(
       continue
     }
     candidates.push({ name, dir })
+  }
+
+  /**
+   * Folders the operator attached (server/attach.ts) join the candidate list
+   * here, before anything else runs.
+   *
+   * That position is the whole point. Everything downstream, the dir hints
+   * the identity provider needs, the port-conflict map, launcher detection
+   * and the control layer's pre-check, works off `candidates`. An attached
+   * directory that arrived later, or through a side channel, would be a
+   * server the double-spawn guard cannot see: the dashboard would not know a
+   * JVM already owns that world, and Start would launch a second one.
+   */
+  const attached = loadAttached(dataDir())
+  for (const a of attached) {
+    if (candidates.some((c) => c.dir.toLowerCase() === a.dir.toLowerCase())) continue
+    if (!levelDatPath(a.dir)) {
+      ignored.push({
+        name: basename(a.dir),
+        dir: a.dir,
+        reason:
+          'Attached by hand, but there is no world with a level.dat here now. The folder may have been moved or renamed.',
+      })
+      continue
+    }
+    candidates.push({ name: basename(a.dir), dir: a.dir })
   }
 
   // Port conflicts. Spec §1: two directories can legitimately declare the same
@@ -198,6 +225,36 @@ export async function scan(
   }
 }
 
+/** The attachment record for a directory, if it is one. */
+function attachedFor(dir: string): AttachedServer | null {
+  const key = dir.replace(/[\\/]+$/, '').toLowerCase()
+  return loadAttached(dataDir()).find((a) => a.dir.replace(/[\\/]+$/, '').toLowerCase() === key) ?? null
+}
+
+/** Only what the operator confirmed becomes a launcher. See inspect(). */
+function launcherFromAttachment(a: AttachedServer, dir: string): Launcher {
+  const c = a.confirmedLaunch
+  if (c?.strategy === 'script') {
+    return {
+      strategy: 'script',
+      script: c.script,
+      detail: `Starts with ${c.script}, confirmed when this folder was attached on ${new Date(a.attachedAt).toLocaleDateString()}.`,
+    }
+  }
+  if (c?.strategy === 'windows-task') {
+    return {
+      strategy: 'windows-task',
+      taskName: c.task,
+      detail: `Starts through the scheduled task ${c.task}, confirmed when this folder was attached.`,
+    }
+  }
+  return {
+    strategy: 'none',
+    detail:
+      'This folder was attached without confirming how the server starts, so the dashboard will not start it. Stopping still works over RCON. To enable starting, detach and attach it again, confirming the launch method.',
+  }
+}
+
 async function inspect(
   name: string,
   dir: string,
@@ -229,7 +286,23 @@ async function inspect(
   // Reading the tail of gc.log is synchronous file I/O, so it belongs up here
   // with everything else that blocks -- above the first await. Spec §11.
   const gc = gcSummary(dir)
-  const launcher = detectLauncher(dir, tasks)
+  /**
+   * An ATTACHED folder gets the launch method the operator confirmed while
+   * looking at it, and nothing else.
+   *
+   * A start.bat sitting in an attached folder is deliberately NOT promoted
+   * into a launcher by detection. The dashboard has never run that script;
+   * it does not know whether it starts one server or four, whether it
+   * assumes a working directory, or whether the operator uses it at all.
+   * Discovering it later and quietly arming the Start button is precisely
+   * the silent inference that puts a second JVM on a live world. So an
+   * attachment with no confirmed method reports `none`, with a reason that
+   * says how to fix it.
+   */
+  const attachedRecord = attachedFor(dir)
+  const launcher = attachedRecord
+    ? launcherFromAttachment(attachedRecord, dir)
+    : detectLauncher(dir, tasks)
   const jvm = jvmForDir(jvms, dir)
   // Synchronous stat + read, so it belongs above the first await with the rest
   // of the blocking filesystem work. Spec §11 -- see the note at the top of

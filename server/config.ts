@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { loadAttached } from './attach'
 
 /**
  * App configuration.
@@ -37,6 +38,8 @@ export type AppConfig = {
    * docs/decisions/0001-backups.md.
    */
   externalBackupPaths: string[]
+  /** Absolute paths of folders the operator attached. See server/attach.ts. */
+  attachedDirs: string[]
   serversRootExists: boolean
   source: 'env' | 'config' | 'default'
 }
@@ -118,6 +121,10 @@ export function loadConfig(userData: string): AppConfig {
       ? fromFile.externalBackupPaths.filter((x): x is string => typeof x === 'string')
       : [],
     serversRootExists: existsSync(serversRoot),
+    // Folders attached by the operator, from attached.json. Read here so
+    // every caller of loadConfig sees one list of directories to scan and
+    // nothing has to remember that a second source exists.
+    attachedDirs: loadAttached(userData).map((a) => a.dir),
     source,
   }
 }

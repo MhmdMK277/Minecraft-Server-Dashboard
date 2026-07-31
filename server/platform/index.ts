@@ -59,8 +59,23 @@ export function knownPlatforms(): Array<{ platform: string; name: string; availa
   return REGISTRY.map((p) => ({ platform: p.platform, name: p.name, available: p.available }))
 }
 
+/**
+ * The hints handed to the last identity scan.
+ *
+ * Recorded so that "was the identity layer even told about this directory?"
+ * is a question a proof can answer, rather than one a reader has to trace by
+ * eye. It matters for attached servers specifically: a directory that never
+ * reaches the hints is a directory whose running JVM the double-spawn
+ * pre-check cannot see, and that is how a second JVM lands on a live world.
+ */
+let lastHints: DirHint[] = []
+export function lastDirHints(): DirHint[] {
+  return lastHints
+}
+
 /** One identity scan, including what it could NOT resolve. Prefer this. */
 export function scanJvms(hints?: DirHint[]): Promise<JvmScan> {
+  lastHints = hints ?? []
   return processProvider().scanJvms(hints)
 }
 
