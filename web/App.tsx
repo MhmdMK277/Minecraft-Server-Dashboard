@@ -269,6 +269,7 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
               buffers={buffers}
               rotations={rotations}
               ensureBacklog={ensureBacklog}
+              canEdit={isAdmin}
             />
           </div>
         )}
