@@ -152,9 +152,23 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
                   <BreadcrumbLink href={href({ name: 'fleet' })}>Servers</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage>{selected?.name ?? route.id}</BreadcrumbPage>
-                </BreadcrumbItem>
+                {route.page !== 'overview' ? (
+                  <>
+                    <BreadcrumbItem>
+                      <BreadcrumbLink href={href({ name: 'server', id: route.id, page: 'overview' })}>
+                        {selected?.name ?? route.id}
+                      </BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator />
+                    <BreadcrumbItem>
+                      <BreadcrumbPage className="capitalize">{route.page}</BreadcrumbPage>
+                    </BreadcrumbItem>
+                  </>
+                ) : (
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>{selected?.name ?? route.id}</BreadcrumbPage>
+                  </BreadcrumbItem>
+                )}
               </>
             ) : (
               <BreadcrumbItem>
@@ -267,6 +281,7 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
           selected ? (
             <ServerDetail
               s={selected}
+              page={route.page}
               canEdit={isAdmin}
               lines={buffers[selected.id] ?? []}
               ensureBacklog={ensureBacklog}
@@ -318,7 +333,7 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
                 design. A departure board is read down, not tiled. */}
             <div className="border-t border-border/60">
               {live.map((s) => (
-                <ServerRow key={s.id} s={s} onOpen={(id) => navigate({ name: 'server', id })} />
+                <ServerRow key={s.id} s={s} onOpen={(id) => navigate({ name: 'server', id, page: 'overview' })} />
               ))}
             </div>
 
@@ -330,7 +345,7 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
                 />
                 <div>
                   {other.map((s) => (
-                    <ServerRow key={s.id} s={s} onOpen={(id) => navigate({ name: 'server', id })} />
+                    <ServerRow key={s.id} s={s} onOpen={(id) => navigate({ name: 'server', id, page: 'overview' })} />
                   ))}
                 </div>
               </section>

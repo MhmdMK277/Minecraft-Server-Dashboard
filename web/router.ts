@@ -1,29 +1,44 @@
 import { useEffect, useState } from 'react'
 
 /**
- * A hash router in thirty lines, and no dependency.
+ * A hash router, still dependency-free.
  *
  * Hash rather than the History API because a path route needs the server to
- * serve index.html for URLs it has never heard of, and this pass is presentation
- * only -- `server/http.ts` is not being touched to add a design feature. The
- * hash never reaches the server, so deep links and refreshes work as they are.
+ * serve index.html for URLs it has never heard of, and presentation work does
+ * not touch `server/http.ts`. The hash never reaches the server, so deep
+ * links and refreshes work as they are.
  *
- * What this buys, which the previous `useState<View>` could not: a server is
- * addressable. You can leave a tab open on one server, reload without losing
- * your place, and send someone a link to the thing you are looking at.
+ * A server page is addressable: `#/server/<id>/<page>`. The id is encoded
+ * (server names contain spaces); the page is a fixed vocabulary and anything
+ * unknown falls back to overview, so an old bookmark `#/server/<id>` still
+ * lands somewhere sensible.
  */
+
+export const SERVER_PAGES = ['overview', 'players', 'console', 'backups', 'settings'] as const
+export type ServerPage = (typeof SERVER_PAGES)[number]
 
 export type Route =
   | { name: 'fleet' }
-  | { name: 'server'; id: string }
+  | { name: 'server'; id: string; page: ServerPage }
   | { name: 'console' }
   | { name: 'addresses' }
+
+function asPage(raw: string | undefined): ServerPage {
+  return (SERVER_PAGES as readonly string[]).includes(raw ?? '') ? (raw as ServerPage) : 'overview'
+}
 
 export function parseRoute(hash: string): Route {
   const path = hash.replace(/^#\/?/, '')
   const [head, ...rest] = path.split('/')
   if (head === 'server' && rest.length > 0) {
-    return { name: 'server', id: decodeURIComponent(rest.join('/')) }
+    // The last segment is the page only when it is a known page name;
+    // otherwise the whole rest is the id (ids may contain a slash once
+    // decoded, and old links have no page segment at all).
+    const last = rest[rest.length - 1] ?? ''
+    if (rest.length > 1 && (SERVER_PAGES as readonly string[]).includes(last)) {
+      return { name: 'server', id: decodeURIComponent(rest.slice(0, -1).join('/')), page: asPage(last) }
+    }
+    return { name: 'server', id: decodeURIComponent(rest.join('/')), page: 'overview' }
   }
   if (head === 'console') return { name: 'console' }
   if (head === 'addresses') return { name: 'addresses' }
@@ -33,7 +48,9 @@ export function parseRoute(hash: string): Route {
 export function href(route: Route): string {
   switch (route.name) {
     case 'server':
-      return `#/server/${encodeURIComponent(route.id)}`
+      return route.page === 'overview'
+        ? `#/server/${encodeURIComponent(route.id)}`
+        : `#/server/${encodeURIComponent(route.id)}/${route.page}`
     case 'console':
       return '#/console'
     case 'addresses':

@@ -83,6 +83,14 @@ live inside, never on the board.
    chips beside headings.
 5. Every interactive element keeps a visible focus state; keyboard paths
    survive the restyle.
+6. **Content never dictates column width** (operator amendment, 2026-07-31,
+   root cause of every observed squeeze). Columns get their widths from the
+   layout: every fr track is `minmax(0, fr)` or its children are `min-w-0`.
+   Console and log panes get a capped width inside their column, and long
+   log lines wrap or scroll horizontally within the pane, never resizing
+   it. The left column of any two-column page has a guaranteed minimum
+   width. Verified specifically on GTNH and Skyblock, whose log lines are
+   the longest, on the per-server pages and the fleet console.
 
 ## What survives any refinement
 

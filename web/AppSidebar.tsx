@@ -1,4 +1,16 @@
-import { ChevronsUpDown, LayoutDashboard, LogOut, Network, Terminal } from 'lucide-react'
+import {
+  Archive,
+  ArrowLeft,
+  ChevronsUpDown,
+  Gauge,
+  LayoutDashboard,
+  LogOut,
+  Network,
+  Settings2,
+  Terminal,
+  Users,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import type { ServerStatus, SessionUser } from '@shared/api'
 import {
   Sidebar,
@@ -22,7 +34,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Indicator, TONE_TEXT, verdict, verdictSentence } from './status'
-import { href, type Route } from './router'
+import { href, type Route, type ServerPage } from './router'
 import logo from '../docs/images/logo.png'
 
 const VIEWS = [
@@ -31,16 +43,28 @@ const VIEWS = [
   { route: { name: 'addresses' } as Route, label: 'Addresses', icon: Network },
 ]
 
+const SERVER_NAV: Array<{ page: ServerPage; label: string; icon: LucideIcon; adminOnly?: boolean }> = [
+  { page: 'overview', label: 'Overview', icon: Gauge },
+  { page: 'players', label: 'Players', icon: Users },
+  { page: 'console', label: 'Console', icon: Terminal },
+  { page: 'backups', label: 'Backups', icon: Archive },
+  { page: 'settings', label: 'Settings', icon: Settings2, adminOnly: true },
+]
+
 function viewActive(view: Route, route: Route): boolean {
   if (view.name === 'fleet') return route.name === 'fleet'
   return view.name === route.name
 }
 
 /**
- * The navigation rail. Views on top; one entry per live server below, each
- * carrying the same tone + confidence indicator as its card, so the sidebar
- * is a miniature of the fleet read: a calm fleet is a column of small quiet
- * dots, and a fault is visible from every screen, not only the fleet.
+ * The navigation rail. Two contexts, the VoxelDash model:
+ *
+ * On fleet views: the three views plus one entry per live server, each
+ * carrying the same tone + confidence indicator as its row, so the sidebar
+ * is a miniature of the board and a fault is visible from every screen.
+ *
+ * Inside a server: a way back, that server's pages, and the same server
+ * list as a switcher. The colour channel still belongs to the lamps.
  */
 export function AppSidebar({
   route,
@@ -54,6 +78,8 @@ export function AppSidebar({
   onSignOut: () => void
 }) {
   const live = servers.filter((s) => s.classification === 'live')
+  const isAdmin = user.role === 'admin'
+  const current = route.name === 'server' ? servers.find((s) => s.id === route.id) : undefined
 
   return (
     <Sidebar variant="inset" collapsible="icon">
@@ -62,8 +88,8 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <a href={href({ name: 'fleet' })}>
-                {/* The brand block: glyph in a tile, name, version. The tile is
-                    what survives icon-collapse, so it has to read alone. */}
+                {/* The brand block: glyph in a tile, name, version tag. The
+                    tile is what survives icon-collapse, so it reads alone. */}
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary ring-1 ring-border">
                   <img src={logo} alt="" width={20} height={20} className="rounded-[3px]" />
                 </span>
@@ -82,30 +108,81 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {VIEWS.map((v) => (
-                <SidebarMenuItem key={v.label}>
-                  {/* The active view carries the accent. Server entries below
-                      deliberately do NOT: their colour channel belongs to the
-                      status indicator, and blue must never dress a server. */}
-                  <SidebarMenuButton
-                    asChild
-                    isActive={viewActive(v.route, route)}
-                    tooltip={v.label}
-                    className="data-[active=true]:text-sidebar-primary"
-                  >
-                    <a href={href(v.route)}>
-                      <v.icon />
-                      <span>{v.label}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {current ? (
+          <>
+            <SidebarGroup>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild tooltip="All servers">
+                      <a href={href({ name: 'fleet' })}>
+                        <ArrowLeft />
+                        <span>All servers</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup>
+              <SidebarGroupLabel className="gap-1.5 font-mono uppercase tracking-[0.1em]">
+                <span className={TONE_TEXT[verdict(current).tone]}>
+                  <Indicator
+                    tone={verdict(current).tone}
+                    confidence={verdict(current).confidence}
+                    large={false}
+                  />
+                </span>
+                <span className="truncate">{current.name}</span>
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {SERVER_NAV.filter((n) => !n.adminOnly || isAdmin).map((n) => (
+                    <SidebarMenuItem key={n.page}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={route.name === 'server' && route.page === n.page}
+                        tooltip={n.label}
+                        className="data-[active=true]:text-sidebar-primary"
+                      >
+                        <a href={href({ name: 'server', id: current.id, page: n.page })}>
+                          <n.icon />
+                          <span>{n.label}</span>
+                        </a>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        ) : (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {VIEWS.map((v) => (
+                  <SidebarMenuItem key={v.label}>
+                    {/* The active view carries the accent. Server entries
+                        deliberately do NOT: their colour channel belongs to
+                        the status indicator. */}
+                    <SidebarMenuButton
+                      asChild
+                      isActive={viewActive(v.route, route)}
+                      tooltip={v.label}
+                      className="data-[active=true]:text-sidebar-primary"
+                    >
+                      <a href={href(v.route)}>
+                        <v.icon />
+                        <span>{v.label}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {live.length > 0 && (
           <SidebarGroup>
@@ -121,9 +198,7 @@ export function AppSidebar({
                         isActive={route.name === 'server' && route.id === s.id}
                         tooltip={`${s.name}: ${verdictSentence(v)}`}
                       >
-                        <a href={href({ name: 'server', id: s.id })}>
-                          {/* Not a lucide icon: the same mark as the card, so
-                              tone and confidence read identically everywhere. */}
+                        <a href={href({ name: 'server', id: s.id, page: 'overview' })}>
                           <span className={`flex size-4 items-center justify-center ${TONE_TEXT[v.tone]}`}>
                             <Indicator tone={v.tone} confidence={v.confidence} large={v.attention} />
                           </span>
