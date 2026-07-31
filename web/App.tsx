@@ -55,6 +55,61 @@ export default function App() {
   return <Dashboard user={auth.user} onSignedOut={refreshAuth} />
 }
 
+/**
+ * The first-run state, in board grammar. Shown when discovery found nothing:
+ * the one moment the product must explain itself instead of its servers.
+ * The masthead above already says no reading is being claimed; this says how
+ * to become visible.
+ */
+function FirstRun() {
+  return (
+    <div className="mx-auto max-w-2xl">
+      <section className="border-t border-border/60 pt-3 pb-6">
+        <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+          How discovery works
+        </h2>
+        <p className="prose-line mt-3 text-[13px] leading-relaxed text-muted-foreground">
+          This dashboard does not keep a list of servers. Every ten seconds it scans the servers
+          root, by default <code className="font-mono text-ink">Documents\MC Servers</code>, or
+          wherever <code className="font-mono text-ink">MCDASH_SERVERS_ROOT</code> points, and
+          treats each direct subdirectory containing a{' '}
+          <code className="font-mono text-ink">level.dat</code> as a server. Running servers are
+          recognised by matching Java processes to those directories through the process tree and
+          their launch tasks, never by port.
+        </p>
+      </section>
+      <section className="border-t border-border/60 pt-3 pb-6">
+        <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">
+          For a server to appear here
+        </h2>
+        <ul className="mt-3 space-y-2 text-[13px] leading-relaxed text-muted-foreground">
+          <li className="prose-line">
+            Its directory sits directly under the servers root and contains a world with a{' '}
+            <code className="font-mono text-ink">level.dat</code>. A stopped server still appears;
+            it is shown as not running.
+          </li>
+          <li className="prose-line">
+            For health beyond up-or-down, its <code className="font-mono text-ink">server.properties</code>{' '}
+            sets <code className="font-mono text-ink">enable-rcon=true</code> with a port and
+            password. Without RCON the main game thread cannot be probed, and health honestly
+            reads UNKNOWN rather than guessed.
+          </li>
+          <li className="prose-line">
+            For the start button, the server needs a way to start that the dashboard can find: a
+            Windows scheduled task whose action names the server directory, or a{' '}
+            <code className="font-mono text-ink">start.bat</code> in it. Without one, the
+            dashboard will not guess a command line.
+          </li>
+        </ul>
+        <p className="prose-line mt-4 text-[12px] leading-relaxed text-faint">
+          If your servers live somewhere else, set the root and restart the service. Directories
+          without a level.dat are listed under ignored, with the reason each was skipped.
+        </p>
+      </section>
+    </div>
+  )
+}
+
 /** A board section label: mono, uppercase, tracked, with its reason beneath. */
 function SectionHead({ title, note }: { title: string; note: string }) {
   return (
@@ -339,11 +394,15 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
 
             {/* The board: one full-width row per live server, single column by
                 design. A departure board is read down, not tiled. */}
-            <div className="border-t border-border/60">
-              {live.map((s) => (
-                <ServerRow key={s.id} s={s} onOpen={(id) => navigate({ name: 'server', id, page: 'overview' })} />
-              ))}
-            </div>
+            {live.length === 0 && other.length === 0 ? (
+              <FirstRun />
+            ) : (
+              <div className="border-t border-border/60">
+                {live.map((s) => (
+                  <ServerRow key={s.id} s={s} onOpen={(id) => navigate({ name: 'server', id, page: 'overview' })} />
+                ))}
+              </div>
+            )}
 
             {other.length > 0 && (
               <section className="mt-7">

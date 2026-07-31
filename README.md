@@ -166,6 +166,32 @@ npm start
 | `MCDASH_DATA_DIR` | OS app-data directory | Config, sessions, audit log |
 | `MCDASH_TRUST_PROXY` | off | Set to `1` behind a reverse proxy or tunnel |
 
+### How discovery works
+
+There is no server list to maintain. Every scan, the dashboard reads the
+servers root and treats each direct subdirectory containing a `level.dat` as
+a server. Running servers are recognised by matching Java processes to those
+directories through the process tree and their launch mechanisms (a Windows
+scheduled task whose action names the directory, or a `start.bat` inside
+it), never by port, because two directories can declare the same port and
+one of them is usually a copy.
+
+For a fresh machine, that means a server appears when:
+
+1. its directory sits directly under the servers root and holds a world
+   with a `level.dat` (a stopped server still appears, shown as not
+   running);
+2. `enable-rcon=true` is set for health beyond up-or-down, since only an
+   RCON round trip can probe the main game thread; without it the server
+   honestly reads `UNKNOWN`;
+3. it has a findable way to start, a scheduled task or a `start.bat`, or
+   the dashboard offers no start button rather than guessing a command
+   line.
+
+Directories without a `level.dat` are listed as ignored, with the reason
+each was skipped. Marking a server `retired` is an operator judgement and
+lives in `config.json` in the data directory, never inferred.
+
 > **Do not port-forward this panel.** It is plain HTTP holding RCON
 > credentials server-side. For remote access use a tunnel (Tailscale,
 > Cloudflare Tunnel) and `MCDASH_TRUST_PROXY=1`.

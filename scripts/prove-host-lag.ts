@@ -316,6 +316,32 @@ check(
   blindCase.fault === 'server' && blindCase.probed === 3,
 )
 
+// An empty machine must not be reported as a healthy fleet. "All 0 probed
+// servers are answering normally. Nothing is wrong" is a lie by this
+// product's own standard: nothing was measured, so nothing may be reassured
+// about. Written before the fix, per the standing instruction.
+const emptyCase = inferFault([], assessHost(FLAT), FLAT)
+console.log(`\n   zero discovered servers  [${emptyCase.headline}]`)
+check(
+  'zero discovered servers is never reported as nothing-is-wrong',
+  !emptyCase.headline.includes('Nothing is wrong') && !emptyCase.detail.includes('answering normally'),
+)
+check(
+  'the empty fleet names its own state in plain language',
+  /no servers|discovered/i.test(emptyCase.headline + ' ' + emptyCase.detail),
+)
+check('and accuses no one', emptyCase.fault === 'none' && emptyCase.probed === 0)
+
+// Discovered but unprobable is a different sentence: directories exist, but
+// no reading can be taken, and that must not be dressed as health either.
+const unprobable = [{ ...srv('no-rcon-1', 'UNKNOWN'), rconConfigured: false }]
+const unprobableCase = inferFault(unprobable, assessHost(FLAT), FLAT)
+console.log(`   discovered but unprobable  [${unprobableCase.headline}]`)
+check(
+  'a fleet that cannot be probed is not reported as answering normally',
+  !unprobableCase.detail.includes('answering normally'),
+)
+
 // ===========================================================================
 // 4. Persistence: the same fault held across scans, and a persistent UNKNOWN
 //    that explains itself

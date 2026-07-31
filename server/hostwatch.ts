@@ -184,6 +184,23 @@ export function inferFault(
   const elevated = host.state === 'BUSY' || host.state === 'STALLING'
   const lagPhrase = `loop lag p95 ${lag.p95Ms} ms, worst ${dur(lag.maxMs)} in the last ${lag.windowSeconds}s`
 
+  // Zero probed servers is not a healthy fleet: nothing was measured, so
+  // nothing may be reassured about. "All 0 probed servers are answering
+  // normally" was the product lying by its own standard.
+  if (probed === 0) {
+    const discovered = servers.filter((s) => s.classification !== 'not-a-server').length
+    return {
+      fault: 'none',
+      headline: discovered === 0 ? 'No servers discovered' : 'No server can be measured',
+      detail:
+        discovered === 0
+          ? 'Nothing under the servers root looks like a Minecraft server yet, so no reading has been taken and none is being claimed. Discovery scans the configured servers root for directories containing a level.dat, and matches running Java processes to them through the process tree and their launch tasks.'
+          : `${discovered} server director${discovered === 1 ? 'y was' : 'ies were'} discovered, but none can be probed for health right now: a server must be running and have enable-rcon=true in its server.properties before its main thread can be measured. Nothing is being claimed about what cannot be measured.`,
+      degraded,
+      probed,
+    }
+  }
+
   if (n === 0) {
     return {
       fault: 'none',
