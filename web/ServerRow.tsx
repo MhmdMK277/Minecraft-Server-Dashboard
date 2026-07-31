@@ -10,6 +10,7 @@ import {
   TONE_RAIL,
 } from './status'
 import { age, Note } from './controls'
+import { href } from './router'
 
 /**
  * One line of the departure board.
@@ -89,7 +90,22 @@ export function ServerRow({ s, onOpen }: { s: ServerStatus; onOpen?: (id: string
     >
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
         <Indicator tone={v.tone} confidence={v.confidence} large={v.attention} className="self-center" />
-        <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{s.name}</h3>
+        {/* The keyboard path onto the board's primary action (layout law 5):
+            the name is a real link; the whole-row onClick is the mouse-sized
+            target on top of it. */}
+        <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">
+          {onOpen ? (
+            <a
+              href={href({ name: 'server', id: s.id, page: 'overview' })}
+              className="rounded-sm text-inherit no-underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {s.name}
+            </a>
+          ) : (
+            s.name
+          )}
+        </h3>
         {/* Healthy renders colourless: on a calm board any colour is news. */}
         <span
           className={`text-[12px] ${

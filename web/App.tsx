@@ -248,7 +248,14 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
               {conn === 'connecting' ? 'Connecting…' : 'Disconnected'}
             </span>
           )}
-          <Button variant="outline" size="sm" onClick={() => void dashboard.refresh()}>
+          {/* Quiet chrome: a maintenance control must never be the brightest
+              thing on a calm board (finish review, fix 7). */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-ink"
+            onClick={() => void dashboard.refresh()}
+          >
             Refresh
           </Button>
         </div>

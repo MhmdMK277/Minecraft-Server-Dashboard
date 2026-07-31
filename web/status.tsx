@@ -237,10 +237,15 @@ export function Metric({
     // wrap to a second line; a meta value (a world name, a path fragment)
     // breaks and wraps. Lead figures are numbers and cannot overflow, so
     // they keep the single line their size implies.
+    //
+    // The board voice (DESIGN.md Own world): mono carries every figure and
+    // label; sans is reserved for prose.
     <div title={title} className="min-w-0">
-      <div className="text-[10px] leading-4 tracking-[0.02em] text-faint">{label}</div>
+      <div className="font-mono text-[9px] uppercase leading-4 tracking-[0.1em] text-faint">
+        {label}
+      </div>
       <div
-        className={`tnum ${tier === 'meta' ? 'break-words font-mono' : 'truncate'} ${size} ${colour}`}
+        className={`tnum font-mono ${tier === 'meta' ? 'break-words' : 'truncate'} ${size} ${colour}`}
       >
         {value}
       </div>

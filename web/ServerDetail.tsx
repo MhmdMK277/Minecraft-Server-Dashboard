@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { X } from 'lucide-react'
 import type { ServerStatus, LogLine } from '@shared/api'
 import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT } from './status'
 import { ControlPanel, BackupToggle, CommandBox, Btn, age } from './controls'
@@ -287,16 +288,17 @@ function Overview({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
             label="Start window"
             note="The window that decides STARTING from HUNG, measured from this server's own boots where possible."
           >
+            {/* An unmeasured default is DOUBT, not danger: it rides the same
+                `?` treatment as the row meta, never amber. Amber on a calm
+                page would mark a non-event (finish review, fix 6). */}
             <div className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
               <Metric
                 label="Window"
-                value={`${s.boot.graceSeconds}s`}
-                tone={s.boot.source === 'measured' ? undefined : 'warn'}
+                value={s.boot.source === 'measured' ? `${s.boot.graceSeconds}s` : `${s.boot.graceSeconds}s?`}
               />
               <Metric
                 label="Source"
                 value={s.boot.source === 'measured' ? 'measured' : 'default'}
-                tone={s.boot.source === 'measured' ? undefined : 'warn'}
               />
               <Metric label="Boots seen" value={String(s.boot.samples)} />
               <Metric label="Longest" value={s.boot.maxSeconds != null ? `${s.boot.maxSeconds}s` : '–'} />
@@ -447,7 +449,7 @@ function Players({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
       {canEdit && (
         <Section
           label="Whitelist"
-          note="Read from and written to the running server over the audited RCON route. This is what is enforced right now; the white-list switch in Settings edits the file, which waits for a restart."
+          note="Read from and written to the running server over the audited RCON route. This is what is enforced right now; the white-list switch in Settings edits the file, which waits for a restart. Names match exactly, and capitalization matters on an offline-mode server."
         >
           {!s.rconConfigured ? (
             <p className="prose-line text-[12px] text-faint">
@@ -501,9 +503,10 @@ function Players({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
                           disabled={busy}
                           onClick={() => setArmed(n)}
                           title={`Remove ${n} from the whitelist (asks to confirm)`}
-                          className="rounded-md border border-border bg-secondary px-2 py-0.5 font-mono text-[11px] text-ink transition-colors duration-150 hover:border-bad/60 hover:text-bad"
+                          className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary px-2 py-0.5 font-mono text-[11px] text-ink transition-colors duration-150 hover:border-bad/60 hover:text-bad"
                         >
-                          {n} <span aria-hidden="true">×</span>
+                          {n}
+                          <X className="size-3" aria-hidden="true" />
                         </button>
                       </li>
                     ),
@@ -517,7 +520,7 @@ function Players({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') add()
                   }}
-                  placeholder="Exact name, capitalization matters offline"
+                  placeholder="Exact player name"
                   spellCheck={false}
                   autoComplete="off"
                   className="font-mono text-[12px]"

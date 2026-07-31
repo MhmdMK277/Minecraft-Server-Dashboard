@@ -1,8 +1,19 @@
 # Design
 
-Draft for operator sign-off, 2026-07-31. This is the binding direction
-contract for redesign v2 (Phase A); per the impeccable flow it is refined
-against the built result at finish, never contradicted by it.
+Approved by the operator 2026-07-31 (with the two-surface amendment below).
+This is the binding direction contract for redesign v2; per the impeccable
+flow it is refined against the built result at finish, never contradicted
+by it.
+
+## Form
+
+The railway operations board: candidate 5 of the seven-candidate derivation
+(control-room HMI, mission control, aviation caution panels, broadcast
+master control, railway boards, Minecraft vernacular, rack-room faceplates),
+assigned by the concept roll, seed key `0d83d6ea`, mode `operate`. The
+dealt challengers (one-bit desktop, teletext, WPA poster) were weighed and
+lost on product truth: each destroys or monopolizes the colour channel the
+status semantics require.
 
 ## Thesis
 

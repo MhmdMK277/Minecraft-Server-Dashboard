@@ -86,15 +86,16 @@ export function AppSidebar({
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            <SidebarMenuButton size="lg" asChild className="h-auto py-2">
               <a href={href({ name: 'fleet' })}>
                 {/* The brand block: glyph in a tile, name, version tag. The
-                    tile is what survives icon-collapse, so it reads alone. */}
+                    tile is what survives icon-collapse, so it reads alone.
+                    The wordmark wraps rather than clipping (layout law 1). */}
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-secondary ring-1 ring-border">
                   <img src={logo} alt="" width={20} height={20} className="rounded-[3px]" />
                 </span>
                 <span className="grid leading-tight">
-                  <span className="text-[13px] font-semibold tracking-[-0.01em] text-foreground">
+                  <span className="whitespace-normal text-[13px] font-semibold tracking-[-0.01em] text-foreground [text-wrap:balance]">
                     Minecraft Server Dashboard
                   </span>
                   <span className="font-mono text-[10px] text-muted-foreground">
