@@ -61,6 +61,7 @@ jobs:
         run: |
           $suites = @(
             'prove-authgate', 'prove-auth', 'prove-attach', 'prove-scan',
+            'prove-history',
             'prove-portability', 'prove-settings', 'prove-control',
             'prove-concurrent-start', 'prove-backup-policy', 'prove-backup-route'
           )

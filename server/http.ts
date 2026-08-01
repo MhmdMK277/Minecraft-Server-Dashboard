@@ -36,6 +36,7 @@ declare module 'fastify' {
 
 import { scan } from './discovery'
 import { readWorlds } from './worlds'
+import { historyFor } from './history'
 import { validateAttachCandidate, attachDir, detachDir, setLaunchMethod } from './attach'
 import { scanForServers } from './scan'
 import { consoleBus, syncConsoles, backlogFor, stopAllConsoles } from './consoles'
@@ -611,6 +612,22 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
   app.get<{ Params: { id: string } }>('/api/servers/:id/log', async (req, reply) => {
     if (!require_(req, reply, 'viewer', 'log.read')) return
     return backlogFor(req.params.id)
+  })
+
+  /**
+   * The rolling hour behind the Overview sparklines.
+   *
+   * A separate route rather than a field on the snapshot: three series times
+   * an hour of samples times every server would be pushed over the socket
+   * every ten seconds to be read by whoever happens to have one Overview
+   * open. The board stays lean and the page that draws graphs fetches them.
+   */
+  app.get<{ Params: { id: string } }>('/api/servers/:id/history', async (req, reply) => {
+    if (!require_(req, reply, 'viewer', 'history.read')) return
+    const snap = latest ?? (await doScan())
+    const s = snap.servers.find((x) => x.id === req.params.id)
+    if (!s) return reply.code(404).send({ error: 'no server with that id' })
+    return historyFor(s.dir, POLL_MS / 1000)
   })
 
   // Read-only world enumeration. The directory and world list come from the

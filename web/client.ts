@@ -8,6 +8,7 @@ import type {
   SessionSummary,
   SessionUser,
   Snapshot,
+  ServerHistory,
   ServerSettingKey,
   WorldsReading,
   ConfirmedLaunch,
@@ -225,6 +226,7 @@ export const dashboard = {
   setAttachLaunch: (dir: string, confirmedLaunch: ConfirmedLaunch | null) =>
     send<unknown>(API.attachLaunch, 'POST', { dir, confirmedLaunch }),
   detach: (dir: string) => send<{ ok: boolean }>(API.attachDetach, 'POST', { dir }),
+  getHistory: (id: string) => get<ServerHistory>(API.history(id)),
   setPlayerAvatars: (playerAvatars: boolean) =>
     send<{ ok: boolean }>(API.prefs, 'POST', { playerAvatars }),
   refresh: () => post<{ ok: boolean }>(API.refresh),

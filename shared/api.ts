@@ -737,6 +737,45 @@ export type WorldInfo = z.infer<typeof WorldInfo>
  * ports as live servers, and resolving by port would map one JVM onto three
  * directories. Spec section 1.
  */
+/**
+ * One scan's reading for one server, for the Overview sparklines.
+ *
+ * Every field is nullable and null means NOT MEASURED, never zero. A stopped
+ * server, a process whose counters could not be read, or a server without
+ * RCON all produce nulls, and the UI must draw those as gaps. Zero is a
+ * measurement and says the opposite thing.
+ */
+export const HistorySample = z.object({
+  at: z.string(),
+  /**
+   * Percent of ONE core, so a server pegging a single core reads as ~100
+   * rather than as a single digit on a many-core machine. Can legitimately
+   * exceed 100 for a multi-threaded server. Derived by differencing the
+   * cumulative CPU counter, never read directly; null across a restart,
+   * because the counter resets and there is nothing to difference against.
+   */
+  cpuPercentOfCore: z.number().nullable(),
+  ramMb: z.number().nullable(),
+  tps: z.number().nullable(),
+})
+export type HistorySample = z.infer<typeof HistorySample>
+
+export const ServerHistory = z.object({
+  windowMinutes: z.number(),
+  /** Nominal scan cadence. The real gap between samples is in the samples. */
+  intervalSeconds: z.number(),
+  /**
+   * When this process started collecting. The ring is in memory and does not
+   * survive a restart, so a short graph can mean a recent restart rather than
+   * a quiet server, and the UI has to say which.
+   */
+  collectingSince: z.string(),
+  /** The denominator the UI must state alongside a CPU percentage. */
+  cores: z.number(),
+  samples: z.array(HistorySample),
+})
+export type ServerHistory = z.infer<typeof ServerHistory>
+
 export const ScanRoot = z.object({ dir: z.string(), depth: z.number() })
 export type ScanRoot = z.infer<typeof ScanRoot>
 
@@ -807,6 +846,7 @@ export const API = {
   attachLaunch: '/api/attach/launch',
   attachDetach: '/api/attach/detach',
   prefs: '/api/prefs',
+  history: (id: string) => `/api/servers/${encodeURIComponent(id)}/history`,
   worldIcon: (id: string, dir: string) =>
     `/api/servers/${encodeURIComponent(id)}/worlds/${encodeURIComponent(dir)}/icon`,
   ackIpChange: '/api/network/ack-ip-change',

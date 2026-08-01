@@ -4,6 +4,7 @@ import type { ServerStatus, LogLine, Snapshot } from '@shared/api'
 import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT, fmtMemPair } from './status'
 import type { DimensionInfo, WorldsReading } from '@shared/api'
 import { WorldIcon } from './WorldIcon'
+import { HistoryPanel } from './History'
 import { API } from '@shared/api'
 import { ControlPanel, BackupToggle, CommandBox, Btn, age } from './controls'
 import { formatMc } from './mcformat'
@@ -263,6 +264,18 @@ function Overview({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
           <Metric label="Uptime" value={age(s.proc?.uptimeSeconds ?? null)} tier="lead" />
         </div>
       )}
+
+      {/*
+        The rolling hour, directly under the figures it is the history of.
+        Full width rather than in a column, because three sparklines side by
+        side are read across and a narrow column would stack them.
+      */}
+      <Section
+        label="Last hour"
+        note="Sampled on the same scan that produces the figures above. A gap in a line is a scan where that reading could not be taken, never a zero."
+      >
+        <HistoryPanel id={s.id} />
+      </Section>
 
       {/* Law 6: minmax(0, fr) tracks; the left column keeps a real minimum. */}
       <div className="grid gap-x-8 lg:grid-cols-[minmax(300px,1.15fr)_minmax(0,1fr)]">

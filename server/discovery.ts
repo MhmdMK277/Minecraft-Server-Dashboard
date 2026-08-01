@@ -33,6 +33,7 @@ import { dataDir } from './config'
 import { detectLauncher, indexTasks, type Launcher, type TaskIndex } from './launcher'
 import { loadAttached, type AttachedServer } from './attach'
 import { loadPrefs, AVATAR_ORIGIN } from './prefs'
+import { observe as observeHistory, forgetAllExcept } from './history'
 import { existsSync } from 'node:fs'
 import { isBusy, doubleSpawnAlerts } from './control'
 
@@ -204,6 +205,37 @@ export async function scan(
     })
     s.boot = timingFor(s.kind, s.name)
   }
+
+  /**
+   * One history sample per server per scan, INCLUDING servers that are down.
+   *
+   * Skipping a down server would compress the time axis and draw an outage as
+   * a seam rather than a gap. Every field here is null when nothing could be
+   * read, and null means not measured; server/history.ts is where that
+   * distinction is enforced and proved.
+   *
+   * The CPU counter is passed through cumulative. Turning it into a rate
+   * requires the previous reading for the same pid, which only the ring has.
+   */
+  const scanAt = Date.now()
+  // The cumulative counter is read from the identity layer rather than from
+  // the wire contract: it is an input to a rate, not a fact about the server,
+  // and putting a monotonically climbing number in the snapshot would invite
+  // someone to render it.
+  const cpuByPid = new Map(jvms.map((j) => [j.pid, j.cpuMs]))
+  for (const s of servers) {
+    observeHistory({
+      dir: s.dir,
+      pid: s.proc?.pid ?? null,
+      cpuMs: s.proc ? (cpuByPid.get(s.proc.pid) ?? null) : null,
+      ramMb: s.proc?.workingSetMb ?? null,
+      tps: s.tps?.overall ?? null,
+      at: scanAt,
+    })
+  }
+  // A directory that has gone stops consuming memory. Bounded by the fleet,
+  // not by how long the process has been up.
+  forgetAllExcept(servers.map((s) => s.dir))
 
   // Host health and the fault attribution are computed AFTER every server has
   // been assessed, because the question they answer -- "is this the machine or

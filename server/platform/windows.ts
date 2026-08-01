@@ -109,6 +109,10 @@ foreach ($k in $all.Keys) {
     ownCmd    = $p.CommandLine
     ws        = $p.WorkingSetSize
     priv      = $p.PrivatePageCount
+    # Cumulative CPU since process start, in 100-nanosecond units, kernel plus
+    # user. A COUNTER, not a rate: the rate is differenced across scans in
+    # server/history.ts, where a pid change can be seen and the sample dropped.
+    cpu100ns  = [double]$p.KernelModeTime + [double]$p.UserModeTime
     start     = if ($p.CreationDate) { $p.CreationDate.ToString('o') } else { $null }
   }
 }
@@ -236,6 +240,8 @@ type JvmRow = {
   ws: number | null
   priv: number | null
   start: number
+  /** Cumulative CPU since process start, milliseconds. A counter. */
+  cpuMs: number | null
 }
 
 async function ps(script: string, env: NodeJS.ProcessEnv, timeoutMs = 30_000): Promise<string> {
@@ -324,6 +330,8 @@ export const windowsProvider: ProcessProvider = {
         ws: typeof r.ws === 'number' ? Math.round(r.ws / 1048576) : null,
         priv: typeof r.priv === 'number' ? Math.round(r.priv / 1048576) : null,
         start: r.start ? Date.parse(String(r.start)) : NaN,
+        // 100-nanosecond units to milliseconds. Still cumulative.
+        cpuMs: typeof r.cpu100ns === 'number' ? Math.round(r.cpu100ns / 10_000) : null,
       })
     }
 
@@ -379,6 +387,7 @@ export const windowsProvider: ProcessProvider = {
         privateMb: row.priv,
         heapMaxMb: parseXmx(row.ownCmd || ''),
         uptimeSeconds: Number.isFinite(row.start) ? Math.round((now - row.start) / 1000) : null,
+        cpuMs: row.cpuMs,
         attributedBy: by,
         sessionId: row.sessionId,
         startedBy: startedBy(row, viaTask),

@@ -58,6 +58,13 @@ export type JvmProcess = {
   /** -Xmx parsed from the command line; null when unreadable (session 0). */
   heapMaxMb: number | null
   uptimeSeconds: number | null
+  /**
+   * Cumulative CPU consumed since this process started, in milliseconds.
+   * A COUNTER and never a rate: it only becomes a percentage after being
+   * differenced against a previous sample of the SAME pid, which is
+   * server/history.ts's job.
+   */
+  cpuMs: number | null
   attributedBy: Attribution
   /** Windows session. 0 means a service or a scheduled task, never a desktop. */
   sessionId: number | null

@@ -32,6 +32,7 @@
     "prove-authgate": "tsx scripts/prove-authgate.ts",
     "prove-attach": "tsx scripts/prove-attach.ts",
     "prove-scan": "tsx scripts/prove-scan.ts",
+    "prove-history": "tsx scripts/prove-history.ts",
     "package-release": "tsx scripts/package-release.ts",
     "accept-release": "tsx scripts/accept-release.ts",
     "scoop-manifest": "tsx scripts/scoop-manifest.ts",
