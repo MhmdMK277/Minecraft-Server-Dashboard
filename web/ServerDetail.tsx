@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import type { ServerStatus, LogLine } from '@shared/api'
 import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT, fmtMemPair } from './status'
 import type { DimensionInfo, WorldsReading } from '@shared/api'
+import { WorldIcon } from './WorldIcon'
 import { API } from '@shared/api'
 import { ControlPanel, BackupToggle, CommandBox, Btn, age } from './controls'
 import { formatMc } from './mcformat'
@@ -615,7 +616,10 @@ function DimensionRow({ d }: { d: DimensionInfo }) {
         empty ? 'opacity-55' : ''
       }`}
     >
-      <code className="truncate font-mono text-[12px] text-ink">{d.path}</code>
+      <span className="flex min-w-0 items-center gap-2">
+        <WorldIcon kind={d.kind} size={13} className="text-muted-foreground" />
+        <code className="truncate font-mono text-[12px] text-ink">{d.path}</code>
+      </span>
       <span className="tnum font-mono text-[11px] text-muted-foreground">{fmtBytes(d.sizeBytes)}</span>
       <span className="tnum w-20 text-right font-mono text-[11px] text-faint">
         {d.regionFiles} {d.regionFiles === 1 ? 'region' : 'regions'}
@@ -779,7 +783,15 @@ function Worlds({ s }: { s: ServerStatus }) {
             )}
             <div className="min-w-0 flex-1">
               <div className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
-                <Metric label="Kind" value={DIM_LABEL[w.kind]} tier="meta" />
+                <div>
+                  <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-faint">
+                    Kind
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <WorldIcon kind={w.kind} size={15} className="text-muted-foreground" />
+                    <span className="font-mono text-[13px] text-ink">{DIM_LABEL[w.kind]}</span>
+                  </div>
+                </div>
                 <Metric label="Size" value={fmtBytes(w.sizeBytes)} tier="body" />
                 <Metric label="Region files" value={String(w.regionFiles)} tier="body" />
                 <Metric
