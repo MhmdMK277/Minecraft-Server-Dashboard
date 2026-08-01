@@ -159,6 +159,39 @@ export async function fetchText(url: string, allowHosts: string[]): Promise<stri
   return res.text()
 }
 
+/**
+ * POST a JSON body to an allowlisted HTTPS host and return the JSON reply.
+ * Same URL discipline as every other fetch here; redirects are NOT followed
+ * for a POST (a redirected write is a write to somewhere we did not check).
+ * Non-2xx replies still return their body when it is JSON, because APIs like
+ * playit's put the refusal reason there; the caller decides what a status
+ * means. Network-level failures throw.
+ */
+export async function postJson(
+  url: string,
+  allowHosts: string[],
+  body: unknown,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: unknown }> {
+  const u = checkUrl(url, allowHosts)
+  const res = await fetch(u, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify(body ?? {}),
+  })
+  if (res.status >= 300 && res.status < 400) {
+    throw new VerifyError('a POST was redirected; refusing to follow it', 'http')
+  }
+  let parsed: unknown = null
+  try {
+    parsed = await res.json()
+  } catch {
+    /* non-JSON body; the status carries what we know */
+  }
+  return { status: res.status, body: parsed }
+}
+
 /** Fetch a small JSON document from an allowlisted HTTPS host. */
 export async function fetchJson(url: string, allowHosts: string[]): Promise<unknown> {
   const u = checkUrl(url, allowHosts)

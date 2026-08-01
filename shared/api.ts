@@ -915,6 +915,90 @@ export type CreationInfo = {
  */
 export type RemoveFailedResult = { ok: true; removed: string[]; kept: string[] }
 
+/**
+ * Public access via a tunnel (playit.gg). The boundaries from DESIGN.md are
+ * visible in this contract: exposure is armed by a typed confirmation naming
+ * the server (`confirmServerName`); running the downloaded agent binary is
+ * its own consent field, separate from installing it; and the tunnel
+ * address field is null unless the agent process is reporting connected,
+ * enforced server-side, so a stale address cannot be handed out.
+ */
+export type TunnelAgentStatus = {
+  state:
+    | 'not-installed' // no verified agent binary on disk
+    | 'installed' // binary verified; no credential yet
+    | 'claimed' // credential on disk; agent not running
+    | 'starting' // process spawned, connection not yet reported
+    | 'connected' // the agent itself reported its tunnels are up
+    | 'disconnected' // process alive but not connected, or exited
+    | 'error'
+  /** One human sentence about where it is or why it stopped. */
+  detail: string
+  /** Release tag of the installed binary, e.g. "v1.0.10". */
+  version: string | null
+  secretPresent: boolean
+  /** The operator has approved running the downloaded binary (audited). */
+  runConfirmed: boolean
+}
+
+export type TunnelEntry = {
+  /** Provider tunnel id (uuid). */
+  tunnelId: string
+  /** Server id/name this tunnel exposes. */
+  serverId: string
+  dir: string
+  localPort: number
+  /**
+   * The public address. Null unless the agent currently reports connected;
+   * a tunnel that exists but is not being served has no address to show.
+   */
+  address: string | null
+  detail: string
+}
+
+export type TunnelStatus = {
+  agent: TunnelAgentStatus
+  tunnels: TunnelEntry[]
+}
+
+export type TunnelClaimState =
+  | 'none' // no claim in progress
+  | 'waiting-visit' // link not yet opened
+  | 'waiting-approval' // opened, not yet approved
+  | 'accepted' // approved; exchanging for the credential
+  | 'claimed' // credential stored
+  | 'rejected'
+  | 'timed-out'
+  | 'error'
+
+/** Claim progress. The URL is shown; the secret key never appears here. */
+export type TunnelClaimStatus = {
+  state: TunnelClaimState
+  /** https://playit.gg/claim/<code>; null when no claim is in progress. */
+  url: string | null
+  detail: string
+}
+
+export const TunnelRunAgentRequest = z.object({
+  /**
+   * The wire shape of "I understand I am running a downloaded program."
+   * Same standard as the Forge/NeoForge installer; anything but literal
+   * true is a refusal.
+   */
+  confirmRunDownloadedProgram: z.boolean(),
+})
+
+export const TunnelEnableRequest = z.object({
+  id: z.string().min(1).max(128),
+  /**
+   * Typed confirmation: must equal the server's name exactly. Exposing a
+   * world to the internet is a security decision, not a toggle.
+   */
+  confirmServerName: z.string().min(1).max(64),
+})
+
+export const TunnelDisableRequest = z.object({ id: z.string().min(1).max(128) })
+
 /** HTTP routes. Was `CH`, the Electron IPC channel list. */
 export const API = {
   appInfo: '/api/info',
@@ -945,6 +1029,14 @@ export const API = {
   createJobs: '/api/create/jobs',
   createRunInstaller: '/api/create/run-installer',
   createRemoveFailed: '/api/create/remove-failed',
+  tunnelStatus: '/api/tunnel/status',
+  tunnelInstall: '/api/tunnel/install',
+  tunnelClaimStart: '/api/tunnel/claim/start',
+  tunnelClaimStatus: '/api/tunnel/claim/status',
+  tunnelRunAgent: '/api/tunnel/agent/run',
+  tunnelStopAgent: '/api/tunnel/agent/stop',
+  tunnelEnable: '/api/tunnel/enable',
+  tunnelDisable: '/api/tunnel/disable',
   authState: '/api/auth/state',
   login: '/api/auth/login',
   logout: '/api/auth/logout',

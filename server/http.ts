@@ -25,6 +25,9 @@ import {
   CreateServerRequest,
   RunInstallerRequest,
   RemoveFailedCreationRequest,
+  TunnelRunAgentRequest,
+  TunnelEnableRequest,
+  TunnelDisableRequest,
   type CreationInfo,
   type AuthState,
   type LogBatch,
@@ -76,6 +79,17 @@ import {
 } from './creation'
 import { listVanillaVersions, listPaperVersions, listForgeVersions } from './mcsources'
 import { provisionJava } from './javaprovision'
+import {
+  installAgent,
+  startClaim,
+  pollClaim,
+  claimStatusOf,
+  runAgent,
+  stopAgent,
+  enableTunnel,
+  disableTunnel,
+  tunnelStatus,
+} from './tunnel'
 import { basename } from 'node:path'
 
 /**
@@ -957,6 +971,93 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     })
     if (!result.ok) return reply.code(409).send({ error: result.reason })
     await pushSnapshot()
+    return result
+  })
+
+  /**
+   * Public access (playit tunnel). All admin-only; the boundaries live in
+   * server/tunnel.ts: exposure needs the server's name typed back, running
+   * the downloaded binary needs its own confirmation every time, and the
+   * address field is null unless the agent reports connected.
+   */
+  const tunnelDeps = (session: Session, req: { ip?: string } & object) => ({
+    actor: session.username,
+    role: session.role,
+    ip: clientIp(req as Parameters<typeof clientIp>[0]),
+  })
+
+  app.get(API.tunnelStatus, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'tunnel.status')
+    if (!session) return
+    return tunnelStatus(tunnelDeps(session, req))
+  })
+
+  app.post(API.tunnelInstall, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'tunnel.install')
+    if (!session) return
+    const result = await installAgent(tunnelDeps(session, req))
+    if (!result.ok) {
+      audit({
+        actor: session.username, role: session.role, action: 'tunnel.install',
+        target: 'playit agent', outcome: 'failed', ip: clientIp(req), detail: result.reason,
+      })
+      return reply.code(409).send({ error: result.reason })
+    }
+    return result
+  })
+
+  app.post(API.tunnelClaimStart, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'tunnel.claim-start')
+    if (!session) return
+    return startClaim(tunnelDeps(session, req))
+  })
+
+  app.get(API.tunnelClaimStatus, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'tunnel.claim-status')
+    if (!session) return
+    // The GET drives one poll step; there is no background loop anywhere.
+    return claimStatusOf().state === 'none' ? claimStatusOf() : pollClaim(tunnelDeps(session, req))
+  })
+
+  app.post(API.tunnelRunAgent, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'tunnel.run-agent')
+    if (!session) return
+    const body = TunnelRunAgentRequest.safeParse(req.body)
+    if (!body.success) return reply.code(400).send({ error: 'invalid request' })
+    const result = runAgent(body.data.confirmRunDownloadedProgram, tunnelDeps(session, req))
+    if (!result.ok) return reply.code(409).send({ error: result.reason })
+    return { ok: true }
+  })
+
+  app.post(API.tunnelStopAgent, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'tunnel.stop-agent')
+    if (!session) return
+    return stopAgent(tunnelDeps(session, req))
+  })
+
+  app.post(API.tunnelEnable, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'tunnel.enable')
+    if (!session) return
+    const body = TunnelEnableRequest.safeParse(req.body)
+    if (!body.success) return reply.code(400).send({ error: 'invalid request' })
+    const server = latest?.servers.find((s) => s.id === body.data.id)
+    if (!server) return reply.code(404).send({ error: 'no server with that id in the current scan' })
+    const result = await enableTunnel(
+      { id: server.id, name: server.name, dir: server.dir, gamePort: server.gamePort },
+      body.data.confirmServerName,
+      tunnelDeps(session, req),
+    )
+    if (!result.ok) return reply.code(409).send({ error: result.reason })
+    return result
+  })
+
+  app.post(API.tunnelDisable, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'tunnel.disable')
+    if (!session) return
+    const body = TunnelDisableRequest.safeParse(req.body)
+    if (!body.success) return reply.code(400).send({ error: 'invalid request' })
+    const result = await disableTunnel(body.data.id, tunnelDeps(session, req))
+    if (!result.ok) return reply.code(409).send({ error: result.reason })
     return result
   })
 
