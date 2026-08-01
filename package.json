@@ -35,6 +35,7 @@
     "prove-history": "tsx scripts/prove-history.ts",
     "prove-creation": "tsx scripts/prove-creation.ts",
     "prove-creation-route": "tsx scripts/prove-creation-route.ts",
+    "accept-creation": "tsx scripts/accept-creation.ts",
     "package-release": "tsx scripts/package-release.ts",
     "accept-release": "tsx scripts/accept-release.ts",
     "scoop-manifest": "tsx scripts/scoop-manifest.ts",
