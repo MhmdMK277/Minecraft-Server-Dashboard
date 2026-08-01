@@ -143,6 +143,22 @@ export async function fetchVerified(input: FetchVerifiedInput): Promise<{ bytes:
   return { bytes: st.size }
 }
 
+/**
+ * Fetch a checksum sidecar (or other small text) from an allowlisted host.
+ * Sidecars come as bare hex or as `hex *filename`; the caller parses.
+ */
+export async function fetchText(url: string, allowHosts: string[]): Promise<string> {
+  const u = checkUrl(url, allowHosts)
+  const res = await fetch(u, { redirect: 'manual' })
+  if (res.status >= 300 && res.status < 400) {
+    const loc = res.headers.get('location')
+    if (!loc) throw new VerifyError('redirect without a location', 'http')
+    return fetchText(new URL(loc, u).toString(), allowHosts)
+  }
+  if (!res.ok) throw new VerifyError(`HTTP ${res.status} from ${u.hostname}`, 'http')
+  return res.text()
+}
+
 /** Fetch a small JSON document from an allowlisted HTTPS host. */
 export async function fetchJson(url: string, allowHosts: string[]): Promise<unknown> {
   const u = checkUrl(url, allowHosts)

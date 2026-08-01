@@ -196,6 +196,144 @@ async function main() {
     check('the oversized staged file was deleted', !existsSync(dest) && !existsSync(`${dest}.part`))
   }
 
+  // =========================================================================
+  console.log('\n=== 5. no resolver can produce a hashless download ===\n')
+  // =========================================================================
+  {
+    // Fixture metadata standing in for each publisher's API. The proof drives
+    // the resolvers through injected fetchers; no network is touched.
+    const manifest = {
+      versions: [
+        { id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v1/packages/abc/1.21.4.json' },
+        { id: '1.0-nohash', type: 'release', url: 'https://piston-meta.mojang.com/v1/packages/def/nohash.json' },
+        { id: '1.0-noserver', type: 'release', url: 'https://piston-meta.mojang.com/v1/packages/ghi/noserver.json' },
+      ],
+    }
+    const versionDocs: Record<string, unknown> = {
+      'https://piston-meta.mojang.com/v1/packages/abc/1.21.4.json': {
+        downloads: { server: { url: 'https://piston-data.mojang.com/v1/objects/aa/server.jar', sha1: 'a'.repeat(40) } },
+      },
+      'https://piston-meta.mojang.com/v1/packages/def/nohash.json': {
+        downloads: { server: { url: 'https://piston-data.mojang.com/v1/objects/bb/server.jar' } },
+      },
+      'https://piston-meta.mojang.com/v1/packages/ghi/noserver.json': { downloads: {} },
+    }
+    const f = {
+      json: async (url: string) =>
+        url.includes('version_manifest') ? manifest : (versionDocs[url] ?? { builds: [], versions: [], promos: {} }),
+      text: async () => {
+        throw new Error('unexpected text fetch')
+      },
+    }
+
+    const { resolveVanilla, resolvePaper, resolveForge, resolveNeoForge, resolveFabric, flavorCatalog, parseSidecar, neoPrefixFor, requiredJavaMajor } =
+      await import('../server/mcsources')
+
+    const v = await resolveVanilla('1.21.4', f)
+    check('vanilla resolves url + sha1 from piston metadata', v.url.includes('piston-data') && v.algo === 'sha1' && v.expected === 'a'.repeat(40))
+
+    let e1: unknown = null
+    try {
+      await resolveVanilla('1.0-nohash', f)
+    } catch (e) {
+      e1 = e
+    }
+    check('vanilla metadata without a hash is refused, stated', e1 instanceof Error && e1.message.includes('no server jar hash'))
+
+    let e2: unknown = null
+    try {
+      await resolveVanilla('1.0-noserver', f)
+    } catch (e) {
+      e2 = e
+    }
+    check('a version with no server jar is refused', e2 instanceof Error && e2.message.includes('no server jar'))
+
+    // Paper (v3 Fill API): newest-first list, newest STABLE preferred over a
+    // newer pre-release; hashless build refused.
+    const paperF = {
+      json: async () => [
+        { id: 11, channel: 'BETA', downloads: { 'server:default': { name: 'paper-11.jar', url: 'https://fill-data.papermc.io/v1/objects/cc/paper-11.jar', checksums: { sha256: 'c'.repeat(64) } } } },
+        { id: 10, channel: 'STABLE', downloads: { 'server:default': { name: 'paper-10.jar', url: 'https://fill-data.papermc.io/v1/objects/bb/paper-10.jar', checksums: { sha256: 'b'.repeat(64) } } } },
+      ],
+      text: f.text,
+    }
+    const p = await resolvePaper('1.21.4', paperF)
+    check('paper prefers the newest STABLE build over a newer pre-release', p.artifactName === 'paper-10.jar' && p.algo === 'sha256')
+    const paperNoHash = {
+      json: async () => [
+        { id: 5, channel: 'STABLE', downloads: { 'server:default': { name: 'paper-5.jar', url: 'https://fill-data.papermc.io/v1/objects/dd/paper-5.jar' } } },
+      ],
+      text: f.text,
+    }
+    let e3: unknown = null
+    try {
+      await resolvePaper('1.21.4', paperNoHash)
+    } catch (e) {
+      e3 = e
+    }
+    check('a paper build without a hash is refused', e3 instanceof Error && e3.message.includes('no hash'))
+
+    // Forge: recommended promotion + sha512 sidecar, `hex *name` form.
+    const forgeF = {
+      json: async () => ({ promos: { '1.20.1-recommended': '47.3.0', '1.20.1-latest': '47.4.0' } }),
+      text: async (url: string) =>
+        url.endsWith('.sha512') ? `${'d'.repeat(128)} *forge-1.20.1-47.3.0-installer.jar` : '',
+    }
+    const fo = await resolveForge('1.20.1', null, forgeF)
+    check(
+      'forge picks the recommended build and parses the sidecar',
+      fo.expected === 'd'.repeat(128) && fo.url.includes('forge-1.20.1-47.3.0-installer.jar') && fo.kind === 'installer-jar',
+    )
+    let e4: unknown = null
+    try {
+      parseSidecar('not a digest at all', 'sha512')
+    } catch (e) {
+      e4 = e
+    }
+    check('a sidecar without a digest is an error, not an empty match', e4 instanceof Error)
+
+    // NeoForge: version prefix mapping, and the pre-1.20.2 refusal.
+    const neoF = {
+      json: async () => ({ versions: ['21.4.10', '21.4.11-beta', '21.4.12'] }),
+      text: async () => 'e'.repeat(128),
+    }
+    const neo = await resolveNeoForge('1.21.4', null, neoF)
+    check('neoforge maps 1.21.4 to 21.4.x, skipping betas', neo.url.includes('neoforge-21.4.12-installer.jar'))
+    let e5: unknown = null
+    try {
+      neoPrefixFor('1.20.1')
+    } catch (e) {
+      e5 = e
+    }
+    check('neoforge refuses 1.20.1 and points at Forge', e5 instanceof Error && e5.message.includes('use Forge'))
+
+    // Fabric: refused, with the reason the UI will show.
+    let e6: unknown = null
+    try {
+      resolveFabric()
+    } catch (e) {
+      e6 = e
+    }
+    check(
+      'fabric is refused with the stated reason',
+      e6 instanceof Error && e6.message.includes('nobody publishes a checksum'),
+    )
+    const cat = flavorCatalog()
+    const fabric = cat.find((c) => c.flavor === 'fabric')
+    check('the catalog carries the refusal for the UI', !!fabric && !fabric.available && 'reason' in fabric && fabric.reason.length > 50)
+    check('four flavors are available', cat.filter((c) => c.available).length === 4)
+
+    // Java floor mapping, the number the UI must state.
+    check(
+      'java majors follow Mojang: 1.16=8, 1.17=17, 1.20.4=17, 1.20.5=21, 1.21.4=21',
+      requiredJavaMajor('1.16.5') === 8 &&
+        requiredJavaMajor('1.17') === 17 &&
+        requiredJavaMajor('1.20.4') === 17 &&
+        requiredJavaMajor('1.20.5') === 21 &&
+        requiredJavaMajor('1.21.4') === 21,
+    )
+  }
+
   await new Promise<void>((r) => fixture.close(() => r()))
   report()
 }
