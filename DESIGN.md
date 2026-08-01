@@ -117,3 +117,43 @@ Product truth and the honest-status semantics (PRODUCT.md, Brand
 Commitments); the arm/confirm inline pattern; empty states that explain
 themselves; tabular numerals on every figure; the accent's monopoly on
 interactivity and the state colours' monopoly on meaning.
+
+## Boundaries (operator decisions, 2026-08-01)
+
+These sit next to the never-own rule because they are the same kind of rule:
+things this product will not do, stated as a boundary rather than apologised
+for as a missing feature.
+
+- **The router is read-only. Always.** The dashboard reads the network and
+  never configures it. **No UPnP**, not to open a port and not to close one
+  we opened. UPnP exists to let any process on a LAN punch a hole in the
+  firewall without anyone being asked, which is a security hole wearing a
+  convenience label. A tunnel is the supported answer for reaching a server
+  from outside, and a tunnel needs nothing from the router.
+- **Public access is never a side effect.** Exposing a world to the internet
+  is a security decision, so it is armed by its own confirmation naming the
+  server and what becomes reachable, per server, admin only, audited, and
+  revocable from the same place. It is never a consequence of pressing
+  Start, and never a silent fallback when something else fails.
+- **A credential is minted by the party who owns it.** For any tunnel
+  provider, the operator authenticates to that provider directly and the
+  credential is issued to them. If a provider only supports third-party
+  provisioning through an intermediary, we do not integrate it, and the
+  reason is stated publicly rather than left as a gap.
+- **We refuse what we cannot verify, out loud.** Server creation offers only
+  sources that publish a checksum with the download. The refusal is shown in
+  the UI with its reason, as a standard being kept, not an apology.
+- **A folder we created from nothing is ours until creation completes.**
+  Server creation writes the folder, the jar, `eula.txt`, `server.properties`
+  and `start.bat`. The moment creation completes the folder is the
+  operator's and the ordinary never-write rules resume: nothing is written
+  into it again except through an audited setting the operator changed.
+
+## Deferred indefinitely, with the reason (2026-08-01)
+
+- **Plugin and mod management.** It means downloading third-party code into
+  a server folder, which is the opposite of what this tool is for. Every
+  other write this product makes is a value in a file the operator asked to
+  change; this would be executable code fetched from a marketplace, landing
+  in a directory we promise not to touch. Deferred indefinitely, not
+  forgotten, and it does not become acceptable because a competitor has it.
