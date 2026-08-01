@@ -95,13 +95,15 @@ function FirstRun({ canEdit, onChanged }: { canEdit: boolean; onChanged: () => v
           How discovery works
         </h2>
         <p className="prose-line mt-3 text-[13px] leading-relaxed text-muted-foreground">
-          This dashboard does not keep a list of servers. Every ten seconds it scans the servers
-          root, by default <code className="font-mono text-ink">Documents\MC Servers</code>, or
-          wherever <code className="font-mono text-ink">MCDASH_SERVERS_ROOT</code> points, and
-          treats each direct subdirectory containing a{' '}
-          <code className="font-mono text-ink">level.dat</code> as a server. Running servers are
-          recognised by matching Java processes to those directories through the process tree and
-          their launch tasks, never by port.
+          This dashboard keeps no registry of the servers under its root (folders you attach are
+          the one recorded list). Every ten seconds it scans the servers root, by default{' '}
+          <code className="font-mono text-ink">Documents\MC Servers</code>, or wherever{' '}
+          <code className="font-mono text-ink">MCDASH_SERVERS_ROOT</code> points. A direct
+          subdirectory with a world (<code className="font-mono text-ink">level.dat</code>) is a
+          server; one with a <code className="font-mono text-ink">server.properties</code> but no
+          world yet is shown as a server that has never started. Running servers are recognised by
+          matching Java processes to those directories through the process tree, their launch
+          tasks, and which folder a process is holding open, never by port alone.
         </p>
       </section>
       <section className="border-t border-border/60 pt-3 pb-6">
@@ -110,9 +112,10 @@ function FirstRun({ canEdit, onChanged }: { canEdit: boolean; onChanged: () => v
         </h2>
         <ul className="mt-3 space-y-2 text-[13px] leading-relaxed text-muted-foreground">
           <li className="prose-line">
-            Its directory sits directly under the servers root and contains a world with a{' '}
-            <code className="font-mono text-ink">level.dat</code>. A stopped server still appears;
-            it is shown as not running.
+            Its directory sits directly under the servers root with a world (
+            <code className="font-mono text-ink">level.dat</code>), or with a{' '}
+            <code className="font-mono text-ink">server.properties</code> awaiting its first
+            start. A stopped server still appears; it is shown as not running.
           </li>
           <li className="prose-line">
             For health beyond up-or-down, its <code className="font-mono text-ink">server.properties</code>{' '}

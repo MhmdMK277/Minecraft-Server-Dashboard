@@ -184,7 +184,7 @@ export function ServerRow({ s, onOpen }: { s: ServerStatus; onOpen?: (id: string
                     (s.gc.truncated
                       ? ` Only ${s.gc.coveredMinutes} of the intended ${s.gc.windowMinutes} min could be read, so the true counts are higher.`
                       : '')
-                  : 'This server was not started with -Xlog:gc, so its pauses are invisible to the dashboard.'
+                  : 'No GC log is being read: the server is not running, or it was not started with -Xlog:gc, so its pauses are invisible to the dashboard.'
               }
             >
               {s.gc && <div className="mt-0.5 text-[10px] text-faint">{s.gc.stoppedPercent}% stopped</div>}
