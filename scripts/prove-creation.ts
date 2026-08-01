@@ -33,7 +33,7 @@
  */
 import { createServer, type Server } from 'node:http'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fetchVerified, VerifyError } from '../server/fetchverify'
@@ -332,6 +332,227 @@ async function main() {
         requiredJavaMajor('1.20.5') === 21 &&
         requiredJavaMajor('1.21.4') === 21,
     )
+  }
+
+  // =========================================================================
+  console.log('\n=== 6. no EULA, no creation, and acceptance is audited ===\n')
+  // =========================================================================
+  const { initAudit } = await import('../server/audit')
+  const {
+    startCreation, runInstaller, removeFailedCreation, collectTakenPorts, suggestPort,
+    generateRconPassword, validateName, jobFor, resetJobs,
+  } = await import('../server/creation')
+
+  const AUDIT_DIR = join(ROOT, 'audit')
+  mkdirSync(AUDIT_DIR, { recursive: true })
+  initAudit(AUDIT_DIR)
+  const auditLines = () =>
+    existsSync(join(AUDIT_DIR, 'audit.jsonl'))
+      ? readFileSync(join(AUDIT_DIR, 'audit.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { action: string; outcome: string; detail?: string })
+      : []
+
+  const PARENT = join(ROOT, 'servers-root')
+  mkdirSync(PARENT, { recursive: true })
+  const DEPS = { knownDirs: [] as string[], actor: 'prover', role: 'admin', ip: '127.0.0.1' }
+
+  // Fixture fetchers that resolve a vanilla download served by our fixture
+  // HTTP server, so the whole pipeline runs without the internet.
+  const vanillaFx = {
+    json: async (url: string) =>
+      url.includes('version_manifest')
+        ? { versions: [{ id: '1.21.4', type: 'release', url: 'https://piston-meta.mojang.com/v1/x.json' }] }
+        : { downloads: { server: { url: `${base}/good.jar`, sha1: createHash('sha1').update(JAR).digest('hex') } } },
+    text: async () => {
+      throw new Error('unexpected')
+    },
+  }
+  // The download seam runs the REAL fetchVerified against the loopback
+  // fixture, so verification stays in the loop.
+  const realDownload = (r: { url: string; algo: 'sha1' | 'sha256' | 'sha512'; expected: string }, dest: string) =>
+    fetchVerified({ url: r.url, dest, algo: r.algo, expected: r.expected, allowHosts: ['127.0.0.1'] })
+
+  const baseReq = {
+    name: 'Proof Vanilla',
+    flavor: 'vanilla' as const,
+    mcVersion: '1.21.4',
+    loaderVersion: null,
+    gamePort: 25765,
+    rconPort: 25775,
+    eulaAccepted: true,
+    memoryMb: null,
+    java: { mode: 'existing' as const },
+    parentDir: PARENT,
+  }
+
+  {
+    resetJobs()
+    const r = await startCreation({ ...baseReq, eulaAccepted: false }, { ...DEPS, fetchers: vanillaFx, download: realDownload })
+    check('creation without the EULA is refused', !r.ok && r.reason.includes('EULA'))
+    check('the refusal names the real EULA link', !r.ok && r.reason.includes('https://aka.ms/MinecraftEULA'))
+    check('and NOTHING was created', !existsSync(join(PARENT, 'Proof Vanilla')))
+    check('no acceptance was audited for a refusal', !auditLines().some((l) => l.action === 'create.eula-accepted'))
+  }
+
+  // =========================================================================
+  console.log('\n=== 7. ports are checked against everything the fleet declares ===\n')
+  // =========================================================================
+  {
+    const other = join(ROOT, 'existing-server')
+    mkdirSync(other, { recursive: true })
+    writeFileSync(
+      join(other, 'server.properties'),
+      'server-port=25565\r\nenable-rcon=true\r\nrcon.port=25575\r\nrcon.password=sekrit\r\n',
+      'utf8',
+    )
+    const taken = collectTakenPorts([other])
+    check('the port map carries the declared game port', taken.get(25565)?.includes('25565') === true)
+    check('and the declared RCON port', taken.get(25575)?.includes('25575') === true)
+
+    const withFleet = { ...DEPS, knownDirs: [other], fetchers: vanillaFx, download: realDownload }
+    const r1 = await startCreation({ ...baseReq, gamePort: 25565 }, withFleet)
+    check('a game port the fleet declares is refused, naming the holder', !r1.ok && r1.reason.includes('existing-server'))
+    const r2 = await startCreation({ ...baseReq, rconPort: 25575 }, withFleet)
+    check('an RCON port the fleet declares is refused', !r2.ok && r2.reason.includes('25575'))
+    check('a refused creation leaves no folder behind', !existsSync(join(PARENT, 'Proof Vanilla')))
+
+    // A port something is LISTENING on right now, declared by nobody.
+    const squatter = createServer(() => {})
+    await new Promise<void>((res) => squatter.listen(25999, '0.0.0.0', res))
+    const r3 = await startCreation({ ...baseReq, gamePort: 25999 }, withFleet)
+    check('a port that is live on the host is refused even if no server declares it', !r3.ok && r3.reason.includes('listening'))
+    const suggested = await suggestPort(25565, taken)
+    check('the suggested port skips everything declared', suggested !== 25565 && suggested !== 25575 && !taken.has(suggested))
+    await new Promise<void>((res) => squatter.close(() => res()))
+  }
+
+  // =========================================================================
+  console.log('\n=== 8. names cannot traverse and folders are never adopted ===\n')
+  // =========================================================================
+  {
+    check('a name with .. is refused', !validateName('evil..name').ok)
+    check('a name with a path separator is refused', !validateName('..\\up').ok && !validateName('a/b').ok)
+    check('a reserved device name is refused', !validateName('CON').ok && !validateName('com1.server').ok)
+    check('a trailing dot is refused (NTFS strips it silently)', !validateName('server.').ok)
+    check('an honest name passes', validateName('MC Proof 1.21').ok)
+
+    const taken2 = join(PARENT, 'Taken Name')
+    mkdirSync(taken2, { recursive: true })
+    const r = await startCreation({ ...baseReq, name: 'Taken Name' }, { ...DEPS, fetchers: vanillaFx, download: realDownload })
+    check('an existing folder is refused, never adopted', !r.ok && r.reason.includes('already exists'))
+  }
+
+  // =========================================================================
+  console.log('\n=== 9. a full creation: verified, configured, journaled ===\n')
+  // =========================================================================
+  {
+    resetJobs()
+    const r = await startCreation(baseReq, { ...DEPS, fetchers: vanillaFx, download: realDownload })
+    check('the creation is accepted', r.ok)
+    if (r.ok) {
+      // The pipeline is async; wait for the terminal state.
+      for (let i = 0; i < 100 && !['complete', 'failed'].includes(jobFor(r.opId)?.state ?? ''); i++) {
+        await new Promise((res) => setTimeout(res, 50))
+      }
+      const job = jobFor(r.opId)
+      check('the job completes', job?.state === 'complete', job?.error ?? job?.state)
+      const dir = join(PARENT, 'Proof Vanilla')
+      check('the verified jar is in place', existsSync(join(dir, 'server.jar')))
+      const eula = readFileSync(join(dir, 'eula.txt'), 'utf8')
+      check('eula.txt says eula=true and cites the real link', eula.includes('eula=true') && eula.includes('https://aka.ms/MinecraftEULA'))
+      const props = readFileSync(join(dir, 'server.properties'), 'utf8')
+      check('the chosen ports are written', props.includes('server-port=25765') && props.includes('rcon.port=25775'))
+      const pw = /rcon\.password=(.*)/.exec(props)?.[1]?.trim() ?? ''
+      check('RCON is enabled with a generated password, never blank', props.includes('enable-rcon=true') && pw.length >= 20)
+      check('the password appears in no job detail and no audit line', !(job?.detail ?? '').includes(pw) && !auditLines().some((l) => JSON.stringify(l).includes(pw)))
+      check('start.bat runs the jar', readFileSync(join(dir, 'start.bat'), 'utf8').includes('server.jar'))
+      const journal = JSON.parse(readFileSync(join(dir, '.mcdash-creation.json'), 'utf8')) as { state: string; files: string[] }
+      check('the journal is complete and lists every file written', journal.state === 'complete' && ['server.jar', 'eula.txt', 'server.properties', 'start.bat'].every((f2) => journal.files.includes(f2)))
+      check('the acceptance was audited', auditLines().some((l) => l.action === 'create.eula-accepted'))
+      check('completion was audited', auditLines().some((l) => l.action === 'create.complete'))
+    }
+  }
+
+  // =========================================================================
+  console.log('\n=== 10. a failed creation is marked, and removal is scoped ===\n')
+  // =========================================================================
+  {
+    resetJobs()
+    const badDownload = async () => {
+      throw new Error('checksum mismatch: the staged file was deleted (simulated)')
+    }
+    const r = await startCreation({ ...baseReq, name: 'Proof Failed' }, { ...DEPS, fetchers: vanillaFx, download: badDownload })
+    check('the creation starts', r.ok)
+    if (r.ok) {
+      for (let i = 0; i < 100 && jobFor(r.opId)?.state !== 'failed'; i++) {
+        await new Promise((res) => setTimeout(res, 50))
+      }
+      const dir = join(PARENT, 'Proof Failed')
+      const job = jobFor(r.opId)
+      check('the job reports failed with the reason', job?.state === 'failed' && (job.error ?? '').includes('checksum'))
+      const journal = JSON.parse(readFileSync(join(dir, '.mcdash-creation.json'), 'utf8')) as { state: string }
+      check('the folder is left MARKED as a failed creation', journal.state === 'failed')
+      check('the failure was audited', auditLines().some((l) => l.action === 'create.failed'))
+
+      // Removal refuses folders that are not ours.
+      const foreign = join(ROOT, 'not-ours')
+      mkdirSync(foreign, { recursive: true })
+      writeFileSync(join(foreign, 'somebody-elses.txt'), 'x', 'utf8')
+      const r1 = removeFailedCreation(foreign, DEPS)
+      check('removal refuses a folder without our journal', !r1.ok && r1.reason.includes('did not create'))
+      check('and touched nothing in it', existsSync(join(foreign, 'somebody-elses.txt')))
+
+      // Removal refuses a COMPLETE creation: that is a server now.
+      const r2 = removeFailedCreation(join(PARENT, 'Proof Vanilla'), DEPS)
+      check('removal refuses a completed creation', !r2.ok && r2.reason.includes('server'))
+
+      // A stray file the journal does not list survives removal, named.
+      writeFileSync(join(dir, 'operator-notes.txt'), 'do not lose me', 'utf8')
+      const r3 = removeFailedCreation(dir, DEPS)
+      check('removal with a stray file keeps the folder', r3.ok && 'kept' in r3 && r3.kept.includes('operator-notes.txt'))
+      check('the stray file survives', existsSync(join(dir, 'operator-notes.txt')))
+      check('the journal survives with it, so the folder stays marked', existsSync(join(dir, '.mcdash-creation.json')))
+
+      // With the stray gone, removal takes exactly the journaled files and
+      // then the folder.
+      unlinkSync(join(dir, 'operator-notes.txt'))
+      const r4 = removeFailedCreation(dir, DEPS)
+      check('a clean failed creation is fully removed', r4.ok && !existsSync(dir))
+      check('the removal was audited', auditLines().some((l) => l.action === 'create.remove-failed' && l.outcome === 'ok'))
+    }
+  }
+
+  // =========================================================================
+  console.log('\n=== 11. an installer runs only behind its own confirmation ===\n')
+  // =========================================================================
+  {
+    resetJobs()
+    const forgeFx = {
+      json: async () => ({ promos: { '1.20.1-recommended': '47.3.0' } }),
+      text: async () => createHash('sha512').update(JAR).digest('hex'),
+    }
+    const forgeDownload = (r2: { algo: 'sha1' | 'sha256' | 'sha512'; expected: string }, dest: string) =>
+      fetchVerified({ url: `${base}/good.jar`, dest, algo: 'sha512', expected: r2.expected, allowHosts: ['127.0.0.1'] })
+    const r = await startCreation(
+      { ...baseReq, name: 'Proof Forge', flavor: 'forge', mcVersion: '1.20.1', gamePort: 25865, rconPort: 25875 },
+      { ...DEPS, fetchers: forgeFx, download: forgeDownload },
+    )
+    check('the forge creation starts', r.ok)
+    if (r.ok) {
+      for (let i = 0; i < 100 && jobFor(r.opId)?.state !== 'awaiting-installer'; i++) {
+        await new Promise((res) => setTimeout(res, 50))
+      }
+      const job = jobFor(r.opId)
+      check('it STOPS at awaiting-installer after the verified download', job?.state === 'awaiting-installer')
+      check('the pause explains it is about running a downloaded program', (job?.detail ?? '').includes('downloaded program'))
+
+      const deny = await runInstaller(r.opId, false, DEPS)
+      check('without the confirmation field the installer does not run', !deny.ok && deny.reason.includes('explicitly confirm'))
+      check('the refusal was audited as denied', auditLines().some((l) => l.action === 'create.run-installer' && l.outcome === 'denied'))
+      check('the job still awaits the installer', jobFor(r.opId)?.state === 'awaiting-installer')
+
+      const wrongState = await runInstaller('no-such-op', true, DEPS)
+      check('an unknown operation is refused', !wrongState.ok)
+    }
   }
 
   await new Promise<void>((r) => fixture.close(() => r()))
