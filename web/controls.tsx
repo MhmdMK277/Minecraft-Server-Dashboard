@@ -81,11 +81,12 @@ export function Btn({
 /**
  * The backup tick.
  *
- * Deliberately worded as a schedule, not as a state of the files. "Backed up"
- * would read as a claim about what is on disk; the switch only decides whether
- * the next run includes this directory. The reassurance underneath is there
- * because the obvious fear on unticking a server is that something is about to
- * be thrown away, and the answer is that nothing is.
+ * Worded as what it IS: intent recorded in a policy file that an external
+ * script may read. Not as a schedule ("nightly" was an assumption imported
+ * from one machine's Task Scheduler job) and never as a state of the files
+ * ("backed up" would claim something no code here verifies). The reassurance
+ * underneath is there because the obvious fear on unticking a server is that
+ * something is about to be thrown away, and the answer is that nothing is.
  */
 export function BackupToggle({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
   // Optimistic, because the round trip includes a full rescan and a tick that
@@ -117,18 +118,19 @@ export function BackupToggle({ s, canEdit }: { s: ServerStatus; canEdit: boolean
         }`}
         title={
           canEdit
-            ? 'Whether the nightly backup includes this directory. Unticking changes the schedule only, archives already written are left exactly where they are.'
-            : 'Only an admin can change the backup schedule.'
+            ? 'Whether backup-policy.json lists this directory as included. Only a backup script that reads that file acts on it; archives already written are left exactly where they are.'
+            : 'Only an admin can change the backup policy file.'
         }
       >
         <Switch size="sm" checked={on} disabled={!canEdit} onCheckedChange={toggle} />
         <span className={on ? 'text-muted-foreground' : 'text-faint'}>
-          {on ? 'In the nightly backup' : 'Excluded from the nightly backup'}
+          {on ? 'Included in the policy file' : 'Excluded in the policy file'}
         </span>
       </label>
       {!on && (
         <p className="prose-line mt-1 pl-8 text-[11px] leading-relaxed text-faint">
-          Existing archives are kept. This only stops new ones being made.
+          Existing archives are kept. This only records intent; a script that honours the file
+          stops making new ones.
         </p>
       )}
       {error && <p className="mt-1 pl-8 text-[11px] text-bad">{error}</p>}

@@ -937,17 +937,24 @@ function Worlds({ s }: { s: ServerStatus }) {
   )
 }
 
-/** Management surface: the schedule opt-in. The dashboard owns no backups. */
+/**
+ * Management surface: the policy-file opt-in. The dashboard owns no backups,
+ * and this page claims NOTHING about whether backups happen: no detection
+ * exists, so no detection is claimed. The previous copy here asserted "the
+ * external backup system this dashboard detected" and a "nightly" schedule;
+ * both were assumptions imported from one machine's setup, recorded as a
+ * found defect in docs/security-audit.md.
+ */
 function Backups({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
   return (
     <Section
       label="Backups"
-      note="Backups are made by the external backup system this dashboard detected, on its own schedule. The dashboard schedules, runs and deletes nothing."
+      note="The dashboard owns no backups. This switch records intent in a policy file (backup-policy.json in the dashboard's data folder) that an external backup script can read. If your backup system does not read that file, or you have none, this switch changes nothing, and nothing on this page means your worlds are backed up."
     >
       <BackupToggle s={s} canEdit={canEdit} />
       <p className="prose-line mt-3 text-[12px] leading-relaxed text-faint">
-        The switch decides whether the next nightly run includes this directory. Archives already
-        written are never touched, whichever way it points.
+        A script that honours the policy file skips excluded directories before its rotation runs,
+        so archives already written are never touched, whichever way the switch points.
       </p>
     </Section>
   )
