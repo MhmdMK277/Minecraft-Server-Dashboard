@@ -379,9 +379,23 @@ h3 {
   @theme palette, hue 216-223.
 
   The inset shell reads as three surfaces, darkest outward:
-    --sidebar     #070a10   the page rim and sidebar (the old --color-bg)
-    --background  #0d1320   the floating content panel
+    --sidebar     #04060b   the page rim and sidebar
+    --background  #111927   the floating content panel, the BOARD
     --card        #141a27   cards on that panel (the old --color-panel)
+
+  Those first two were #070a10 and #0d1320, six points of luminance apart,
+  which measured as separation and read as none: in a screenshot of the fleet
+  the rail and the board were the same dark. The gap is now wider and the
+  board carries a hairline edge (see [data-slot='sidebar-inset'] below), so
+  the board is a plane with a boundary rather than a region that fades into
+  its surround. This is structure, not decoration: it says where the
+  instrument ends.
+
+  A texture was tried on the rim as the alternative, a 4px dot tile at 3.5%
+  white, and REJECTED. At the distance this thing is read from it was
+  invisible, and at 1:1 it resolved into a regular woven grid, which is
+  decoration by any honest reading. Something that is either imperceptible or
+  ornamental is not carrying information, so it is not here.
 
   --primary is the ONE interactive accent, and it is none of ok/warn/bad.
   State colours keep their monopoly on meaning: green never decorates a
@@ -393,8 +407,17 @@ h3 {
   foreground) with a lighter tint (#8ab1f2) reserved for accent TEXT on the
   dark rail, where the fill colour would vanish.
 */
+/*
+  The board's own boundary. One hairline, no shadow spread and no glow: the
+  edge exists to say the plane ends here, which a soft shadow says less
+  clearly and a glow does not say at all.
+*/
+[data-slot='sidebar-inset'] {
+  box-shadow: 0 0 0 1px #222c40;
+}
+
 :root {
-  --background: #0d1320;
+  --background: #111927;
   --foreground: #e8eef5;
   --card: #141a27;
   --card-foreground: #e8eef5;
@@ -418,7 +441,7 @@ h3 {
   --chart-4: #3a4763;
   --chart-5: #28324a;
   --radius: 0.625rem;
-  --sidebar: #070a10;
+  --sidebar: #04060b;
   --sidebar-foreground: #9fabbd;
   --sidebar-primary: #8ab1f2;
   --sidebar-primary-foreground: #0b101a;
