@@ -68,7 +68,7 @@ import {
  *     explicitly confirm.
  */
 
-export type JavaChoice = { mode: 'existing' } | { mode: 'adoptium'; javaHome: string }
+export type JavaChoice = { mode: 'existing' } | { mode: 'adoptium' }
 
 export type CreateRequest = {
   name: string
@@ -88,6 +88,7 @@ export type CreateRequest = {
 export type CreationState =
   | 'resolving'
   | 'downloading'
+  | 'provisioning-java'
   | 'writing-config'
   | 'awaiting-installer'
   | 'running-installer'
@@ -125,6 +126,8 @@ type Journal = {
   files: string[]
   /** Relative paths of directories this operation (or its installer) made. */
   dirs: string[]
+  /** Absolute home of a provisioned Java, when the operator chose that. */
+  javaHome?: string | null
 }
 
 const jobs = new Map<string, CreationJob>()
@@ -243,6 +246,8 @@ export type CreateDeps = {
   fetchers?: Fetchers
   /** Test seam: replaces the real download with a local fixture. */
   download?: (r: ResolvedDownload, dest: string) => Promise<{ bytes: number }>
+  /** Provisions a Java runtime; wired to javaprovision.provisionJava. */
+  provision?: (major: number) => Promise<{ javaHome: string; reused: boolean }>
   actor: string | null
   role: string | null
   ip: string
@@ -379,6 +384,19 @@ async function runCreation(req: CreateRequest, deps: CreateDeps, job: CreationJo
   job.bytes = dl.bytes
   journal.files.push(resolved.artifactName)
 
+  // Provisioned Java, when chosen: exactly the major this version needs,
+  // fetched now because the operator asked, never in the background.
+  if (req.java.mode === 'adoptium') {
+    if (!deps.provision) throw new Error('Java provisioning is not wired up.')
+    const major = requiredJavaMajor(req.mcVersion)
+    job.state = 'provisioning-java'
+    job.detail = `Downloading a Temurin ${major} runtime from Adoptium and verifying its checksum.`
+    journal.state = 'provisioning-java'
+    writeJournal(job.dir, journal)
+    const jp = await deps.provision(major)
+    journal.javaHome = jp.javaHome
+  }
+
   job.state = 'writing-config'
   job.detail = 'Verified. Writing eula.txt, server.properties and the start script.'
   journal.state = 'writing-config'
@@ -414,7 +432,7 @@ async function runCreation(req: CreateRequest, deps: CreateDeps, job: CreationJo
   )
 
   if (resolved.kind === 'server-jar') {
-    writeStartScript(req, job.dir, journal, resolved.artifactName)
+    writeStartScript(job.dir, journal, resolved.artifactName, req.memoryMb)
     complete(job, journal, deps)
     return
   }
@@ -456,15 +474,15 @@ function writeCreatedFile(dir: string, journal: Journal, rel: string, content: s
  * dashboard's data directory and this script breaks) is stated in the script
  * itself and in the UI before the choice is made.
  */
-function writeStartScript(req: CreateRequest, dir: string, journal: Journal, jarName: string | null): void {
-  const mem = req.memoryMb ?? 2048
+function writeStartScript(dir: string, journal: Journal, jarName: string | null, memoryMb: number | null): void {
+  const mem = memoryMb ?? 2048
   const lines = ['@echo off', 'cd /d "%~dp0"']
-  if (req.java.mode === 'adoptium') {
+  if (journal.javaHome) {
     lines.push(
       `REM Java below was provisioned by the dashboard (Adoptium Temurin).`,
       `REM The path is absolute: moving that folder or uninstalling the`,
       `REM dashboard breaks this script. Edit the line to use your own Java.`,
-      `set "PATH=${join(req.java.javaHome, 'bin')};%PATH%"`,
+      `set "PATH=${join(journal.javaHome, 'bin')};%PATH%"`,
     )
   }
   if (jarName) {
@@ -527,8 +545,11 @@ export async function runInstaller(
   writeJournal(job.dir, journal)
 
   const before = new Set(readdirSync(job.dir))
+  // A provisioned runtime is used for the installer too: the operator who
+  // chose "download Java for me" has no other java on PATH.
+  const javaBin = journal.javaHome ? join(journal.javaHome, 'bin', 'java.exe') : 'java'
   const code = await new Promise<number>((done) => {
-    const child = spawn('java', ['-jar', installerJar, '--installServer'], {
+    const child = spawn(javaBin, ['-jar', installerJar, '--installServer'], {
       cwd: job.dir,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -571,11 +592,7 @@ export async function runInstaller(
   }
 
   // The installer's run.bat is the real launcher; our start.bat wraps it.
-  const req = {
-    name: job.name, flavor: job.flavor, mcVersion: job.mcVersion,
-    memoryMb: null, java: { mode: 'existing' as const },
-  } as CreateRequest
-  writeStartScript(req, job.dir, journal, null)
+  writeStartScript(job.dir, journal, null, null)
   complete(job, journal, deps)
   return { ok: true }
 }

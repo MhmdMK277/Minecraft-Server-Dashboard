@@ -832,6 +832,81 @@ export const AttachLaunchRequest = z.object({
 })
 export const AttachDetachRequest = z.object({ dir: z.string().min(1).max(4096) })
 
+/**
+ * Server creation. The enum deliberately includes 'fabric' so a request for
+ * it reaches the catalog's refusal and the caller gets the stated reason,
+ * rather than a shapeless 400.
+ */
+export const CreateFlavor = z.enum(['vanilla', 'paper', 'forge', 'neoforge', 'fabric'])
+export type CreateFlavor = z.infer<typeof CreateFlavor>
+
+export const CreateServerRequest = z.object({
+  name: z.string().min(1).max(64),
+  flavor: CreateFlavor,
+  mcVersion: z.string().min(1).max(32),
+  loaderVersion: z.string().min(1).max(64).nullable(),
+  gamePort: z.number().int().min(1024).max(65535),
+  rconPort: z.number().int().min(1024).max(65535),
+  /** Must be true; the server refuses otherwise. Unticked by default in the UI. */
+  eulaAccepted: z.boolean(),
+  memoryMb: z.number().int().min(512).max(65536).nullable(),
+  javaMode: z.enum(['existing', 'adoptium']),
+})
+export type CreateServerRequest = z.infer<typeof CreateServerRequest>
+
+export const RunInstallerRequest = z.object({
+  opId: z.string().min(1).max(64),
+  /**
+   * The wire shape of "I understand I am running a downloaded program."
+   * Anything but literal true is a refusal.
+   */
+  confirmRunDownloadedProgram: z.boolean(),
+})
+
+export const RemoveFailedCreationRequest = z.object({
+  dir: z.string().min(1).max(4096),
+  /** Typed confirmation: must equal the folder's name exactly. */
+  folderName: z.string().min(1).max(64),
+})
+
+export type CreationJobStatus = {
+  opId: string
+  name: string
+  dir: string
+  flavor: CreateFlavor
+  mcVersion: string
+  state:
+    | 'resolving'
+    | 'downloading'
+    | 'provisioning-java'
+    | 'writing-config'
+    | 'awaiting-installer'
+    | 'running-installer'
+    | 'complete'
+    | 'failed'
+  detail: string
+  startedAt: string
+  error: string | null
+  bytes: number | null
+}
+
+export type CreationInfo = {
+  flavors: Array<
+    | { flavor: Exclude<CreateFlavor, 'fabric'>; available: true; label: string; kind: 'server-jar' | 'installer-jar' }
+    | { flavor: 'fabric'; available: false; label: string; reason: string }
+  >
+  /** Stated denominator for the default Java path. Null until a version is chosen. */
+  javaMajor: number | null
+  javaLink: string | null
+  /** The consequence of choosing provisioning, shown BEFORE the click. */
+  adoptiumConsequence: string
+  suggestedGamePort: number
+  suggestedRconPort: number
+  /** Where the folder will be created. */
+  parentDir: string
+  parentDirExists: boolean
+}
+
 /** HTTP routes. Was `CH`, the Electron IPC channel list. */
 export const API = {
   appInfo: '/api/info',
@@ -855,6 +930,13 @@ export const API = {
   control: (id: string, action: 'start' | 'stop' | 'restart') =>
     `/api/servers/${encodeURIComponent(id)}/${action}`,
   runCommand: (id: string) => `/api/servers/${encodeURIComponent(id)}/command`,
+  createInfo: (mcVersion?: string) =>
+    `/api/create/info${mcVersion ? `?mcVersion=${encodeURIComponent(mcVersion)}` : ''}`,
+  createVersions: (flavor: string) => `/api/create/versions?flavor=${encodeURIComponent(flavor)}`,
+  create: '/api/create',
+  createJobs: '/api/create/jobs',
+  createRunInstaller: '/api/create/run-installer',
+  createRemoveFailed: '/api/create/remove-failed',
   authState: '/api/auth/state',
   login: '/api/auth/login',
   logout: '/api/auth/logout',

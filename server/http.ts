@@ -22,6 +22,10 @@ import {
   AttachRequest,
   AttachLaunchRequest,
   AttachDetachRequest,
+  CreateServerRequest,
+  RunInstallerRequest,
+  RemoveFailedCreationRequest,
+  type CreationInfo,
   type AuthState,
   type LogBatch,
   type Role,
@@ -61,6 +65,18 @@ import { writeSetting } from './serversettings'
 import { startServer, stopServer, restartServer, runCommand } from './control'
 import { detectLauncher, indexTasks } from './launcher'
 import { loadPrefs, setPlayerAvatars, AVATAR_ORIGIN, type Prefs } from './prefs'
+import {
+  startCreation,
+  runInstaller,
+  removeFailedCreation,
+  listJobs,
+  creationInfo,
+  collectTakenPorts,
+  suggestPort,
+} from './creation'
+import { listVanillaVersions, listPaperVersions, listForgeVersions } from './mcsources'
+import { provisionJava } from './javaprovision'
+import { basename } from 'node:path'
 
 /**
  * The HTTP + WebSocket surface.
@@ -785,6 +801,153 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     if (!result.ok) return reply.code(404).send({ error: 'that folder is not attached' })
     await pushSnapshot()
     return { ok: true }
+  })
+
+  /**
+   * Server creation. All admin-only, all audited; the safety rules live in
+   * server/creation.ts, and the two decisions that must never be implicit
+   * are visible in the contract itself: eulaAccepted on the create request,
+   * confirmRunDownloadedProgram on the installer run.
+   */
+  const knownDirsForPorts = (): string[] => {
+    const cfg2 = loadConfig(dataDir())
+    const fromSnapshot = (latest?.servers ?? []).map((s) => s.dir)
+    return [...new Set([...fromSnapshot, ...cfg2.attachedDirs])]
+  }
+
+  app.get<{ Querystring: { mcVersion?: string } }>('/api/create/info', async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'create.info')
+    if (!session) return
+    const cfg2 = loadConfig(dataDir())
+    const taken = collectTakenPorts(knownDirsForPorts())
+    const suggestedGamePort = await suggestPort(25565, taken)
+    // The RCON suggestion must also dodge the game port it rides next to.
+    taken.set(suggestedGamePort, 'the suggested game port')
+    const suggestedRconPort = await suggestPort(25575, taken)
+    const info = creationInfo(req.query.mcVersion ?? null)
+    const { CONSEQUENCE_TEXT } = await import('./javaprovision')
+    const out: CreationInfo = {
+      flavors: info.flavors,
+      javaMajor: info.javaMajor,
+      javaLink: info.javaLink,
+      adoptiumConsequence: CONSEQUENCE_TEXT,
+      suggestedGamePort,
+      suggestedRconPort,
+      parentDir: cfg2.serversRoot,
+      parentDirExists: cfg2.serversRootExists,
+    }
+    return out
+  })
+
+  app.get<{ Querystring: { flavor?: string } }>('/api/create/versions', async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'create.versions')
+    if (!session) return
+    try {
+      switch (req.query.flavor) {
+        case 'vanilla':
+          return { versions: await listVanillaVersions() }
+        case 'paper':
+          return { versions: await listPaperVersions() }
+        case 'forge':
+          // The promotions map; the UI shows recommended/latest per MC version.
+          return { promos: await listForgeVersions() }
+        default:
+          return reply.code(400).send({ error: 'flavor must be vanilla, paper or forge' })
+      }
+    } catch (e) {
+      return reply.code(502).send({ error: e instanceof Error ? e.message : 'the publisher could not be reached' })
+    }
+  })
+
+  app.get(API.createJobs, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'create.jobs')
+    if (!session) return
+    return { jobs: listJobs() }
+  })
+
+  app.post(API.create, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'create.start')
+    if (!session) return
+    const body = CreateServerRequest.safeParse(req.body)
+    if (!body.success) return reply.code(400).send({ error: 'invalid creation request' })
+    const cfg2 = loadConfig(dataDir())
+    const result = await startCreation(
+      {
+        name: body.data.name,
+        flavor: body.data.flavor,
+        mcVersion: body.data.mcVersion,
+        loaderVersion: body.data.loaderVersion,
+        gamePort: body.data.gamePort,
+        rconPort: body.data.rconPort,
+        eulaAccepted: body.data.eulaAccepted,
+        memoryMb: body.data.memoryMb,
+        java: { mode: body.data.javaMode },
+        parentDir: cfg2.serversRoot,
+      },
+      {
+        knownDirs: knownDirsForPorts(),
+        provision: provisionJava,
+        actor: session.username,
+        role: session.role,
+        ip: clientIp(req),
+      },
+    )
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'create.start',
+      target: body.data.name,
+      outcome: result.ok ? 'ok' : 'denied',
+      ip: clientIp(req),
+      detail: result.ok ? `flavor=${body.data.flavor} version=${body.data.mcVersion}` : result.reason,
+    })
+    if (!result.ok) return reply.code(409).send({ error: result.reason })
+    return { opId: result.opId, dir: result.dir }
+  })
+
+  app.post(API.createRunInstaller, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'create.run-installer')
+    if (!session) return
+    const body = RunInstallerRequest.safeParse(req.body)
+    if (!body.success) return reply.code(400).send({ error: 'invalid request' })
+    const result = await runInstaller(body.data.opId, body.data.confirmRunDownloadedProgram, {
+      knownDirs: [],
+      actor: session.username,
+      role: session.role,
+      ip: clientIp(req),
+    })
+    if (!result.ok) return reply.code(409).send({ error: result.reason })
+    await pushSnapshot()
+    return { ok: true }
+  })
+
+  app.post(API.createRemoveFailed, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'create.remove-failed')
+    if (!session) return
+    const body = RemoveFailedCreationRequest.safeParse(req.body)
+    if (!body.success) return reply.code(400).send({ error: 'invalid request' })
+    // The typed confirmation: the caller must name the exact folder. A
+    // mismatch is a refusal, not a fuzzy match.
+    if (basename(body.data.dir) !== body.data.folderName) {
+      audit({
+        actor: session.username,
+        role: session.role,
+        action: 'create.remove-failed',
+        target: body.data.dir,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: `confirmation name "${body.data.folderName}" does not match the folder`,
+      })
+      return reply.code(400).send({ error: 'the confirmation name does not match the folder name' })
+    }
+    const result = removeFailedCreation(body.data.dir, {
+      actor: session.username,
+      role: session.role,
+      ip: clientIp(req),
+    })
+    if (!result.ok) return reply.code(409).send({ error: result.reason })
+    await pushSnapshot()
+    return result
   })
 
   /**

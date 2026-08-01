@@ -475,6 +475,25 @@ async function main() {
       check('the acceptance was audited', auditLines().some((l) => l.action === 'create.eula-accepted'))
       check('completion was audited', auditLines().some((l) => l.action === 'create.complete'))
     }
+
+    // The provisioned-Java variant: the start script carries the ABSOLUTE
+    // path and says so, which is the consequence the operator confirmed.
+    const fakeHome = join(ROOT, 'appdata', 'java', 'jdk-21.0.0-jre')
+    const r2 = await startCreation(
+      { ...baseReq, name: 'Proof Adoptium', gamePort: 25767, rconPort: 25777, java: { mode: 'adoptium' } },
+      { ...DEPS, fetchers: vanillaFx, download: realDownload, provision: async (major: number) => ({ javaHome: `${fakeHome}-${major}`, reused: false }) },
+    )
+    check('the adoptium creation is accepted', r2.ok)
+    if (r2.ok) {
+      for (let i = 0; i < 100 && !['complete', 'failed'].includes(jobFor(r2.opId)?.state ?? ''); i++) {
+        await new Promise((res) => setTimeout(res, 50))
+      }
+      check('it completes with the provision seam', jobFor(r2.opId)?.state === 'complete', jobFor(r2.opId)?.error ?? '')
+      const bat = readFileSync(join(PARENT, 'Proof Adoptium', 'start.bat'), 'utf8')
+      check('start.bat carries the absolute provisioned path', bat.includes(`${fakeHome}-21`))
+      check('and states the consequence in the script itself', bat.includes('absolute') && bat.includes('breaks this script'))
+      check('it asked for the major the version needs (21 for 1.21.4)', bat.includes('jdk-21'))
+    }
   }
 
   // =========================================================================
