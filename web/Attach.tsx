@@ -598,23 +598,17 @@ export function AttachPointer({
           ? `${unattributed} running java process${unattributed === 1 ? '' : 'es'} could not be matched to a folder`
           : null
 
-  if (!alert) {
-    return (
-      <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <a
-          href={href({ name: 'attach' })}
-          className="text-[12px] text-muted-foreground underline underline-offset-2 transition-colors duration-150 hover:text-ink"
-        >
-          Attach a server folder
-        </a>
-        {attachments.length > 0 && (
-          <span className="text-[12px] text-faint">
-            {attachments.length} attached, all present
-          </span>
-        )}
-      </div>
-    )
-  }
+  /**
+   * Nothing to report means nothing on the board.
+   *
+   * This used to render a bare "Attach a server folder" link floating between
+   * the host panel and the first server row, which was a control with no
+   * context sitting in the middle of a monitoring surface. Attaching now has
+   * a permanent home in the rail, so the board goes back to carrying only
+   * readings: this component speaks when something needs attention and is
+   * silent otherwise.
+   */
+  if (!alert) return null
 
   return (
     <section className="mt-4 rounded-lg border border-warn/40 bg-warn/5 p-3.5">

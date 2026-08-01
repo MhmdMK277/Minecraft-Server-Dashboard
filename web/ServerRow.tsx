@@ -205,8 +205,8 @@ export function ServerRow({ s, onOpen }: { s: ServerStatus; onOpen?: (id: string
               {ws != null && (
                 <div className="mt-0.5 text-[10px] text-faint">
                   {s.proc?.heapMaxMb != null
-                    ? `${residency ?? '?'}% of committed resident`
-                    : 'committed stands in for -Xmx'}
+                    ? `${residency ?? '?'}% of committed memory is in RAM`
+                    : 'committed memory stands in for the heap ceiling'}
                 </div>
               )}
             </Metric>
