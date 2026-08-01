@@ -504,14 +504,15 @@ export function AttachPage({
             ))}
           </ul>
         )}
+        {/* The rows above already say a folder is gone. What they cannot say is
+            which of the two causes it is, and the answer changes what the
+            operator should do, so the guidance sits here rather than being
+            repeated per row. */}
         {missing.length > 0 && (
           <p className="prose-line mt-3 text-[12px] leading-relaxed text-muted-foreground">
-            {missing.length === 1
-              ? 'One attached folder is'
-              : `${missing.length} attached folders are`}{' '}
-            not on disk any more. If the folder moved, detach it and attach it again at its new
-            path. If it is on a drive that is not connected, plugging that drive back in is enough,
-            and nothing needs detaching.
+            If a folder moved, detach it and attach it again at its new path. If it is on a drive
+            that is not connected, plugging that drive back in is enough and nothing needs
+            detaching.
           </p>
         )}
       </section>
