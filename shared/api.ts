@@ -331,6 +331,20 @@ export const PublicIpState = z.object({
   error: z.string().nullable(),
   /** Replaces the raw IP in the UI once DDNS exists. */
   hostname: z.string().nullable(),
+  /**
+   * WHO owned the internet route when the address was measured. A public IP
+   * without this is not information: measured through a VPN or tunnel
+   * adapter it is the VPN's exit, not this house (audit finding F7). Null
+   * means the route could not be read, which the UI states as such.
+   */
+  route: z
+    .object({
+      adapter: z.string(),
+      description: z.string(),
+      /** True when the default route is owned by a virtual (non-hardware) adapter. */
+      virtual: z.boolean(),
+    })
+    .nullable(),
 })
 export type PublicIpState = z.infer<typeof PublicIpState>
 

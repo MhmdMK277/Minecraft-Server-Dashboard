@@ -56,11 +56,41 @@ export default function Addresses({
   const live = servers.filter((s) => s.classification === 'live')
   const lan = network.lanAddress
   const ip = network.publicIp
+  /**
+   * When a virtual adapter owns the default route (a VPN, per the route
+   * read alongside every address fetch, PublicIpState.route), the measured
+   * public address is the VPN's exit, not this house. Handing it out as a
+   * join address would be finding F7 again, so the outside column is
+   * withheld and the reason is stated instead.
+   */
+  const viaVpn = ip.route?.virtual === true
   // Once DDNS exists, hostname replaces the raw address and nothing else changes.
-  const outside = ip.hostname ?? ip.address
+  const outside = viaVpn ? null : (ip.hostname ?? ip.address)
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
+      {viaVpn && (
+        <div className="rounded-lg border border-warn bg-warn/10 px-3 py-2.5 text-[12px]">
+          <p className="font-semibold text-warn">
+            A VPN owns this machine's internet route right now.
+          </p>
+          <p className="prose-line mt-0.5 leading-relaxed text-muted-foreground">
+            The default route goes through{' '}
+            <code className="font-mono text-ink">{ip.route?.adapter}</code> (
+            {ip.route?.description}), a virtual adapter, so the public address that can be measured
+            {ip.address ? (
+              <>
+                {' '}
+                (<code className="font-mono">{ip.address}</code>)
+              </>
+            ) : null}{' '}
+            is the VPN's exit, not this house. Players cannot join through it, and your home
+            address cannot be measured while the VPN carries the traffic, so the outside column is
+            withheld rather than shown wrong.
+          </p>
+        </div>
+      )}
+
       {ip.changed && (
         <div className="flex items-start gap-3 rounded-lg border border-bad bg-bad/10 px-3 py-2.5">
           <div className="flex-1 text-[12px]">
@@ -72,7 +102,9 @@ export default function Addresses({
                   <code className="font-mono">{ip.address}</code>.{' '}
                 </>
               ) : null}
-              Anyone using the old address cannot connect until you send them the new one.
+              {viaVpn
+                ? 'The route is currently through a VPN, so this is the VPN exit changing, not necessarily your home address.'
+                : 'Anyone using the old address cannot connect until you send them the new one.'}
             </p>
           </div>
           <Button variant="outline" size="sm" onClick={() => void dashboard.acknowledgeIpChange()}>
@@ -172,7 +204,11 @@ export default function Addresses({
           The public address is dynamic and changes without warning. Last checked{' '}
           {ip.fetchedAt ? new Date(ip.fetchedAt).toLocaleTimeString() : 'never'}
           {ip.stale ? ', could not be refreshed, showing last known value' : ''}
-          {ip.error ? ` (${ip.error})` : ''}.
+          {ip.error ? ` (${ip.error})` : ''}
+          {ip.route
+            ? `, measured while ${ip.route.adapter} owned the internet route`
+            : ', route not read for this measurement'}
+          .
         </p>
         <p className="prose-line">
           LAN address discovered from{' '}

@@ -154,6 +154,7 @@ the control routes cannot reach a real JVM and no real world can be touched.
 | F4 | Low | No security headers on API responses | **Fixed**, `5be2c48` |
 | F5 | Low | Session file trusted `role`, `username` and future timestamps | **Fixed**, `5be2c48` |
 | F6 | Medium | Backups page claimed a detection that never existed (found 2026-08-01, an honesty defect rather than a network one) | **Fixed**, `6b6dc9b` |
+| F7 | Medium | Addresses page presented a VPN's exit address as the home public address (found 2026-08-02, honesty defect) | **Fixed** |
 
 #### F1 (critical): the gate keyed on spelling, not on the route
 
@@ -306,6 +307,37 @@ says that nothing on the page means the worlds are backed up.
 
 The lesson, same as F1's spelling-versus-route: UI copy is a claim, and a
 claim either has code behind it or it does not ship.
+
+#### F7 (medium): the Addresses page presented a VPN exit as the home address
+
+Found 2026-08-02, live, during the public-access acceptance: the tunnel
+provider reported the claiming machine's address as an IPv6 geolocated to
+New York, which did not match this network. Measurement showed a VPN
+adapter (HotspotShield WinTun) owned the machine's entire default route,
+and the Addresses page had been fetching the public IP through it and
+presenting the VPN's exit as this house's address, confidently, in the
+"Outside / abroad" column players are given to join by.
+
+Not an information leak; the opposite failure: a **false-confident
+reading about reachability**. Anyone handed that column while the VPN was
+up got an address that would never work, and the sticky "public address
+changed" banner fired on VPN toggles as though the ISP had moved. The
+same incident showed the LAN column survived only by luck: the VPN's
+local 10.x address scored as an ordinary candidate and lost to Wi-Fi
+only because this network uses 192.168.
+
+Fixed: the default route is now read in the same refresh as every public
+address fetch (`queryEgressRoute` in server/network.ts, structural
+`Get-NetAdapter` Virtual flag, no vendor list), the reading travels as
+`PublicIpState.route`, and when a virtual adapter owns the route the
+Addresses page withholds the outside column and says why, the change
+banner names the VPN as the likely cause, and the footer states which
+adapter owned the route at measurement time. The parse is proven in
+scripts/prove-addresses.ts; the LAN scoring demotes known tunnel adapter
+names as a heuristic on top of the structural check.
+
+The lesson, F6's applied to numbers: a measurement without its
+provenance is a claim, and the provenance here is who owned the route.
 
 ### Not tested, and why
 

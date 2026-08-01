@@ -70,6 +70,25 @@ console.log(`  servers on ${DEFAULT_MC_PORT} (port omitted) : ${isDefault.map((s
 console.log(`  servers on other ports (included)  : ${nonDefault.map((s) => `${s.name}:${s.gamePort}`).join(', ')}`)
 console.log(`  LAN address hardcoded?             : no, read from ${snap.network.lanInterface}`)
 
-console.log(`\n${failures.length === 0 ? 'PASS' : 'FAIL'}, port rule applied correctly`)
+/**
+ * Route provenance (finding F7): a public address measured through a VPN is
+ * the VPN's exit, and the page must know WHO owned the route. The parse is
+ * proven against fixtures here; the live reading above already carried
+ * whatever this host's route is right now.
+ */
+console.log('\nroute provenance (F7):')
+const { parseEgressRoute } = await import('../server/network')
+const virtual = parseEgressRoute('{"adapter":"HotspotShield WinTun","description":"Wintun Tunnel","virtual":true}')
+if (virtual?.virtual !== true) failures.push('a virtual route must parse as virtual')
+const hardware = parseEgressRoute('{"adapter":"Wi-Fi","description":"Intel Wireless","virtual":false}')
+if (hardware?.virtual !== false) failures.push('a hardware route must parse as not virtual')
+const garbage = parseEgressRoute('not json at all')
+if (garbage !== null) failures.push('garbage must parse to null, never to a confident route')
+const partial = parseEgressRoute('{"virtual":true}')
+if (partial !== null) failures.push('a route without an adapter name must parse to null')
+console.log(`  live route this run                : ${ip.route ? `${ip.route.adapter} (virtual=${ip.route.virtual})` : 'not read'}`)
+console.log(`  virtual/hardware/garbage/partial   : ${virtual?.virtual}/${hardware?.virtual}/${garbage}/${partial}`)
+
+console.log(`\n${failures.length === 0 ? 'PASS' : 'FAIL'}, port rule and route provenance applied correctly`)
 for (const f of failures) console.log('   -', f)
 process.exit(failures.length ? 1 : 0)
