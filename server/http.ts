@@ -824,6 +824,11 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     // The RCON suggestion must also dodge the game port it rides next to.
     taken.set(suggestedGamePort, 'the suggested game port')
     const suggestedRconPort = await suggestPort(25575, taken)
+    // javaMajor comes from the static table: correct for both version
+    // schemes today, answers offline, and keeps this route free of publisher
+    // round-trips on an interactive page. Provisioning itself re-reads the
+    // major Mojang DECLARES for the exact version (requiredJavaMajorLive),
+    // so if the table ever drifts, the installed runtime is still right.
     const info = creationInfo(req.query.mcVersion ?? null)
     const { CONSEQUENCE_TEXT } = await import('./javaprovision')
     const out: CreationInfo = {

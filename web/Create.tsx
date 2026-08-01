@@ -39,8 +39,12 @@ function compareMcDesc(a: string, b: string): number {
   return 0
 }
 
-/** NeoForge starts at 1.20.2; offering older versions would only earn a refusal. */
+/**
+ * NeoForge starts at 1.20.2 and follows Mojang's date-based versions (26.1
+ * onward) verbatim; offering anything older would only earn a refusal.
+ */
 function neoForgeCovers(v: string): boolean {
+  if (/^\d{2,}\.\d+/.test(v)) return true
   const m = /^1\.(\d+)(?:\.(\d+))?$/.exec(v)
   if (!m) return false
   const minor = Number(m[1])

@@ -221,11 +221,16 @@ export async function resolveForge(mcVersion: string, forgeVersion: string | nul
 const NEOFORGE_HOSTS = ['maven.neoforged.net']
 
 /**
- * NeoForge version numbers track Minecraft's minor and patch: 21.4.x is for
- * 1.21.4. Versions for 1.20.1 lived under a different artifact with Forge
- * numbering, so anything below 1.20.2 is refused rather than guessed at.
+ * NeoForge version numbers track Minecraft's. Under the old 1.x scheme,
+ * 21.4.x is for 1.21.4. Under Mojang's date-based scheme (26.1, 26.2, ...)
+ * NeoForge adopted the version verbatim: 26.1.2.x is for MC 26.1.2 and
+ * 26.1.0.x for plain 26.1 (measured against their maven, 2026-08-01).
+ * Versions for 1.20.1 lived under a different artifact with Forge numbering,
+ * so anything below 1.20.2 is refused rather than guessed at.
  */
 export function neoPrefixFor(mcVersion: string): string {
+  const dated = /^(\d{2,})\.(\d+)(?:\.(\d+))?$/.exec(mcVersion)
+  if (dated) return `${dated[1]}.${dated[2]}.${dated[3] ?? 0}.`
   const m = /^1\.(\d+)(?:\.(\d+))?$/.exec(mcVersion)
   if (!m) throw new Error(`${mcVersion} is not a Minecraft version NeoForge covers.`)
   const minor = Number(m[1])
@@ -246,7 +251,10 @@ export async function resolveNeoForge(mcVersion: string, neoVersion: string | nu
       'https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge',
       NEOFORGE_HOSTS,
     )) as { versions?: string[] }
-    const matching = (m.versions ?? []).filter((v) => v.startsWith(prefix) && !v.includes('beta'))
+    // A stable NeoForge build is bare digits and dots; alphas, betas and
+    // release candidates all carry a dash suffix (21.4.11-beta,
+    // 26.1.0.0-alpha.2+snapshot-1). Prefer stable, fall back out loud.
+    const matching = (m.versions ?? []).filter((v) => v.startsWith(prefix) && !v.includes('-'))
     const any = (m.versions ?? []).filter((v) => v.startsWith(prefix))
     const pool = matching.length > 0 ? matching : any
     if (pool.length === 0) throw new Error(`NeoForge publishes no build for ${mcVersion}.`)
@@ -280,16 +288,46 @@ export function resolveFabric(): never {
 /**
  * The Java major each Minecraft generation needs. The mapping is Mojang's,
  * not ours: 1.17 raised the floor to 16 (17 satisfies it and is the LTS),
- * 1.18 to 17, 1.20.5 to 21. Everything older runs on 8.
+ * 1.18 to 17, 1.20.5 to 21, and the date-based releases (26.1 onward)
+ * declare 25 in their own metadata (measured 2026-08-01). This static table
+ * is the OFFLINE FALLBACK; requiredJavaMajorLive reads the number Mojang
+ * actually declares for the exact version, which is the answer the UI
+ * states and provisioning installs.
  */
 export function requiredJavaMajor(mcVersion: string): number {
   const m = /^1\.(\d+)(?:\.(\d+))?$/.exec(mcVersion)
-  if (!m) return 21
+  if (!m) return /^\d{2,}\./.test(mcVersion) ? 25 : 21
   const minor = Number(m[1])
   const patch = Number(m[2] ?? 0)
   if (minor < 17) return 8
   if (minor < 20 || (minor === 20 && patch < 5)) return 17
   return 21
+}
+
+/**
+ * The Java major Mojang DECLARES for one version, from the same piston
+ * metadata the server jar comes from. Getting this wrong is not cosmetic:
+ * provisioning would install a runtime the server refuses to start on (26.x
+ * class files demand Java 25; a provisioned Temurin 21 would fail). Falls
+ * back to the static table when the metadata is unreachable or silent.
+ */
+export async function requiredJavaMajorLive(mcVersion: string, f: Fetchers = live): Promise<number> {
+  try {
+    const m = (await f.json(MANIFEST_URL, PISTON_HOSTS)) as {
+      versions?: Array<{ id?: string; url?: string }>
+    }
+    const entry = (m.versions ?? []).find((v) => v.id === mcVersion)
+    if (entry?.url) {
+      const detail = (await f.json(entry.url, PISTON_HOSTS)) as {
+        javaVersion?: { majorVersion?: number }
+      }
+      const declared = detail.javaVersion?.majorVersion
+      if (typeof declared === 'number' && declared >= 8) return declared
+    }
+  } catch {
+    /* offline or a fixture without javaVersion: the static table answers */
+  }
+  return requiredJavaMajor(mcVersion)
 }
 
 /** Where the operator gets that Java themselves, the default path. */

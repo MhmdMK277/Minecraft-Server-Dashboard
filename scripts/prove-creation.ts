@@ -231,7 +231,7 @@ async function main() {
       },
     }
 
-    const { resolveVanilla, resolvePaper, resolveForge, resolveNeoForge, resolveFabric, flavorCatalog, parseSidecar, neoPrefixFor, requiredJavaMajor } =
+    const { resolveVanilla, resolvePaper, resolveForge, resolveNeoForge, resolveFabric, flavorCatalog, parseSidecar, neoPrefixFor, requiredJavaMajor, requiredJavaMajorLive } =
       await import('../server/mcsources')
 
     const v = await resolveVanilla('1.21.4', f)
@@ -304,6 +304,18 @@ async function main() {
     }
     const neo = await resolveNeoForge('1.21.4', null, neoF)
     check('neoforge maps 1.21.4 to 21.4.x, skipping betas', neo.url.includes('neoforge-21.4.12-installer.jar'))
+
+    // The date-based scheme: NeoForge adopted Mojang's versions verbatim, so
+    // MC 26.1.2 is 26.1.2.x and plain 26.1 is 26.1.0.x. Stable builds are
+    // bare digits; every pre-release carries a dash suffix and is skipped.
+    check('neoforge maps MC 26.1.2 to the 26.1.2.x family', neoPrefixFor('26.1.2') === '26.1.2.')
+    check('and plain 26.1 to 26.1.0.x', neoPrefixFor('26.1') === '26.1.0.')
+    const neoDated = {
+      json: async () => ({ versions: ['26.1.2.93', '26.1.2.94', '26.2.0.41-beta', '26.1.0.0-alpha.2+snapshot-1'] }),
+      text: async () => 'e'.repeat(128),
+    }
+    const neoNew = await resolveNeoForge('26.1.2', null, neoDated)
+    check('a dated-scheme resolve picks the newest stable, not an alpha or beta', neoNew.url.includes('neoforge-26.1.2.94-installer.jar'))
     let e5: unknown = null
     try {
       neoPrefixFor('1.20.1')
@@ -328,15 +340,36 @@ async function main() {
     check('the catalog carries the refusal for the UI', !!fabric && !fabric.available && 'reason' in fabric && fabric.reason.length > 50)
     check('four flavors are available', cat.filter((c) => c.available).length === 4)
 
-    // Java floor mapping, the number the UI must state.
+    // Java floor mapping, the number the UI must state. Getting this wrong
+    // is not cosmetic: provisioning installs it, and a 26.x server refuses
+    // to start on Java 21.
     check(
-      'java majors follow Mojang: 1.16=8, 1.17=17, 1.20.4=17, 1.20.5=21, 1.21.4=21',
+      'java majors follow Mojang: 1.16=8, 1.17=17, 1.20.4=17, 1.20.5=21, 1.21.4=21, 26.2=25',
       requiredJavaMajor('1.16.5') === 8 &&
         requiredJavaMajor('1.17') === 17 &&
         requiredJavaMajor('1.20.4') === 17 &&
         requiredJavaMajor('1.20.5') === 21 &&
-        requiredJavaMajor('1.21.4') === 21,
+        requiredJavaMajor('1.21.4') === 21 &&
+        requiredJavaMajor('26.2') === 25,
     )
+
+    // The live path reads what Mojang declares for the exact version, and
+    // falls back to the table when the metadata is silent or unreachable.
+    const javaF = {
+      json: async (url: string) =>
+        url.includes('version_manifest')
+          ? { versions: [{ id: '1.21.4', url: 'https://piston-meta.mojang.com/v1/packages/xyz/j.json' }] }
+          : { javaVersion: { majorVersion: 99 } },
+      text: f.text,
+    }
+    check('the live java lookup answers with the DECLARED major, not the table', (await requiredJavaMajorLive('1.21.4', javaF)) === 99)
+    const deadF = {
+      json: async () => {
+        throw new Error('offline')
+      },
+      text: f.text,
+    }
+    check('and falls back to the table when the publisher is unreachable', (await requiredJavaMajorLive('1.21.4', deadF)) === 21)
   }
 
   // =========================================================================

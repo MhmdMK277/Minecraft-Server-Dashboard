@@ -23,6 +23,7 @@ import {
   resolveNeoForge,
   flavorCatalog,
   requiredJavaMajor,
+  requiredJavaMajorLive,
   adoptiumLink,
   type Flavor,
   type ResolvedDownload,
@@ -388,7 +389,9 @@ async function runCreation(req: CreateRequest, deps: CreateDeps, job: CreationJo
   // fetched now because the operator asked, never in the background.
   if (req.java.mode === 'adoptium') {
     if (!deps.provision) throw new Error('Java provisioning is not wired up.')
-    const major = requiredJavaMajor(req.mcVersion)
+    // The declared requirement for the exact version, not the table's guess:
+    // provisioning the wrong major is a server that will not start.
+    const major = await requiredJavaMajorLive(req.mcVersion, deps.fetchers)
     job.state = 'provisioning-java'
     job.detail = `Downloading a Temurin ${major} runtime from Adoptium and verifying its checksum.`
     journal.state = 'provisioning-java'
