@@ -22,6 +22,7 @@ export type Route =
   | { name: 'server'; id: string; page: ServerPage }
   | { name: 'console' }
   | { name: 'addresses' }
+  | { name: 'attach' }
 
 function asPage(raw: string | undefined): ServerPage {
   return (SERVER_PAGES as readonly string[]).includes(raw ?? '') ? (raw as ServerPage) : 'overview'
@@ -42,6 +43,7 @@ export function parseRoute(hash: string): Route {
   }
   if (head === 'console') return { name: 'console' }
   if (head === 'addresses') return { name: 'addresses' }
+  if (head === 'attach') return { name: 'attach' }
   return { name: 'fleet' }
 }
 
@@ -55,6 +57,8 @@ export function href(route: Route): string {
       return '#/console'
     case 'addresses':
       return '#/addresses'
+    case 'attach':
+      return '#/attach'
     default:
       return '#/'
   }

@@ -20,6 +20,16 @@ export function age(sec: number | null): string {
   return `${Math.round(sec / 86400)}d`
 }
 
+/** A board section label: mono, uppercase, tracked, with its reason beneath. */
+export function SectionHead({ title, note }: { title: string; note: string }) {
+  return (
+    <header className="mb-2 border-b border-border/60 pb-2">
+      <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{title}</h2>
+      <p className="prose-line mt-1 text-[12px] leading-relaxed text-faint">{note}</p>
+    </header>
+  )
+}
+
 /** A bordered explanation. The prose is the product, so it gets room. */
 export function Note({ tone, children }: { tone: 'bad' | 'warn' | 'muted'; children: React.ReactNode }) {
   const cls =

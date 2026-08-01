@@ -1,7 +1,15 @@
 import { useState } from 'react'
-import type { AttachCandidate, ConfirmedLaunch, IdentityScan, ScanCandidate, ScanResult } from '@shared/api'
+import type {
+  AttachCandidate,
+  AttachmentStatus,
+  ConfirmedLaunch,
+  IdentityScan,
+  ScanCandidate,
+  ScanResult,
+} from '@shared/api'
 import { dashboard } from './client'
-import { Btn } from './controls'
+import { Btn, SectionHead } from './controls'
+import { href } from './router'
 import { Indicator } from './status'
 import { Input } from '@/components/ui/input'
 
@@ -329,20 +337,80 @@ export function ScanPanel({ onChanged, dense }: { onChanged: () => void; dense?:
   )
 }
 
-export function AttachPanel({
-  identity,
-  onChanged,
-}: {
-  identity: IdentityScan
-  onChanged: () => void
-}) {
+/**
+ * One folder the operator attached, and whether it is still there.
+ *
+ * The `missing` case is why this list exists as a surface rather than a
+ * banner. An attachment whose folder has been deleted, renamed, or lives on
+ * a drive that is not plugged in used to sit in the fleet as a server
+ * reporting UNKNOWN for ever, which is the dashboard withholding the one
+ * thing it does know. Here it says the folder is gone and offers the action
+ * that fixes it. Detaching sets aside; it never deletes anything.
+ */
+function Attached({ a, onChanged }: { a: AttachmentStatus; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const detach = () => {
+    setBusy(true)
+    setErr(null)
+    dashboard
+      .detach(a.dir)
+      .then(() => onChanged())
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'could not detach'))
+      .finally(() => setBusy(false))
+  }
+
+  const tone = a.state === 'missing' ? 'bad' : a.state === 'no-world' ? 'warn' : 'ok'
+  const toneText = tone === 'bad' ? 'text-bad' : tone === 'warn' ? 'text-warn' : 'text-ok'
+
+  return (
+    <li className="border-t border-border/60 py-3 first:border-t-0">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className={`flex size-4 items-center justify-center ${toneText}`}>
+          <Indicator tone={tone} confidence="measured" large={false} />
+        </span>
+        <span className="text-[13px] font-medium text-ink">{a.name}</span>
+        {a.state === 'missing' && (
+          <span className="text-[11px] font-medium text-bad">folder not found</span>
+        )}
+        {a.state === 'no-world' && (
+          <span className="text-[11px] font-medium text-warn">no world yet</span>
+        )}
+        <span className="ml-auto shrink-0">
+          <Btn
+            onClick={detach}
+            disabled={busy}
+            label={busy ? 'Detaching…' : 'Detach'}
+            title="Stops watching this folder. Nothing inside it is touched or deleted."
+          />
+        </span>
+      </div>
+      <p className="prose-line mt-1 break-all font-mono text-[11px] text-faint">{a.dir}</p>
+      <p
+        className={`prose-line mt-1 text-[12px] leading-relaxed ${a.state === 'ok' ? 'text-faint' : 'text-muted-foreground'}`}
+      >
+        {a.detail}
+      </p>
+      <p className="prose-line mt-1 text-[11px] leading-relaxed text-faint">
+        Attached {new Date(a.attachedAt).toLocaleString()}.{' '}
+        {a.confirmedLaunch === null
+          ? 'No launch method was confirmed, so the Start button stays unavailable for it.'
+          : a.confirmedLaunch.strategy === 'script'
+            ? `Starts by running ${a.confirmedLaunch.script}, which you confirmed.`
+            : `Starts through the scheduled task ${a.confirmedLaunch.task}, which you confirmed.`}
+      </p>
+      {err && <p className="prose-line mt-2 text-[12px] text-bad">{err}</p>}
+    </li>
+  )
+}
+
+/** Adding a folder by typing its path. The fallback when the search misses. */
+function ManualAdd({ onChanged }: { onChanged: () => void }) {
   const [path, setPath] = useState('')
   const [candidate, setCandidate] = useState<AttachCandidate | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [open, setOpen] = useState(false)
-
-  const unwatched = identity.unwatched ?? []
 
   const check = () => {
     setErr(null)
@@ -361,103 +429,206 @@ export function AttachPanel({
       .then(() => {
         setPath('')
         setCandidate(null)
-        setOpen(false)
         onChanged()
       })
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'could not attach'))
       .finally(() => setBusy(false))
   }
 
-  /**
-   * Collapse to a single quiet link ONLY when there is genuinely nothing to
-   * report. `unattributed > 0` is the canonical-start case: a server run as
-   * `java -jar server.jar nogui` has no directory in its command line, so it
-   * arrives with nothing in `unwatched` and would have hit this early return,
-   * leaving the operator the honest banner and no way to act on it. That was
-   * the whole gap the scan exists to close, and it was still open here.
-   */
-  if (unwatched.length === 0 && identity.unattributed === 0 && !open) {
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') check()
+          }}
+          placeholder="C:\Servers\My Server"
+          spellCheck={false}
+          autoComplete="off"
+          className="max-w-md flex-1 font-mono text-[12px]"
+        />
+        <Btn onClick={check} disabled={!path.trim()} label="Check this folder" />
+      </div>
+      <p className="prose-line mt-1.5 text-[11px] leading-relaxed text-faint">
+        The folder holding <code className="font-mono">server.properties</code>, not a jar.
+      </p>
+      {candidate && !candidate.ok && (
+        <p className="prose-line mt-2 text-[12px] text-bad">{candidate.reason}</p>
+      )}
+      {candidate && candidate.ok && <Preview c={candidate} onAttach={attach} busy={busy} />}
+      {err && <p className="prose-line mt-2 text-[12px] text-bad">{err}</p>}
+    </div>
+  )
+}
+
+/**
+ * The Attach surface: a permanent page, not a warning that appears when
+ * something is wrong.
+ *
+ * It used to be a banner on the fleet board, which meant the one control that
+ * undoes an attach only existed while the dashboard was unhappy about
+ * something else. Reading order here is the operator's: what is attached now
+ * and how to undo it, then what is running unwatched, then the two ways to
+ * add one.
+ */
+export function AttachPage({
+  attachments,
+  identity,
+  onChanged,
+}: {
+  attachments: AttachmentStatus[]
+  identity: IdentityScan
+  onChanged: () => void
+}) {
+  const unwatched = identity.unwatched ?? []
+  const missing = attachments.filter((a) => a.state === 'missing')
+
+  return (
+    <div className="mx-auto max-w-3xl">
+      <section className="pb-7">
+        <SectionHead
+          title="Attached folders"
+          note="Server folders outside the servers root that this dashboard watches because you asked it to. Detaching stops watching one; the folder and everything in it is left exactly as it is."
+        />
+        {attachments.length === 0 ? (
+          <p className="prose-line mt-3 text-[12px] leading-relaxed text-faint">
+            Nothing is attached. Servers found under the servers root are watched without being
+            attached, so an empty list here is the normal state.
+          </p>
+        ) : (
+          <ul className="mt-1">
+            {attachments.map((a) => (
+              <Attached key={a.dir} a={a} onChanged={onChanged} />
+            ))}
+          </ul>
+        )}
+        {missing.length > 0 && (
+          <p className="prose-line mt-3 text-[12px] leading-relaxed text-muted-foreground">
+            {missing.length === 1
+              ? 'One attached folder is'
+              : `${missing.length} attached folders are`}{' '}
+            not on disk any more. If the folder moved, detach it and attach it again at its new
+            path. If it is on a drive that is not connected, plugging that drive back in is enough,
+            and nothing needs detaching.
+          </p>
+        )}
+      </section>
+
+      {unwatched.length > 0 && (
+        <section className="pb-7">
+          <SectionHead
+            title="Running here, not watched"
+            note="Java processes matched to a folder that is neither under the servers root nor attached, so nothing on the board says anything about them."
+          />
+          <ul className="mt-1">
+            {unwatched.map((u) => (
+              <Unwatched key={u.pid} entry={u} onDone={onChanged} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/*
+        The canonical-start case. A server run as `java -jar server.jar nogui`
+        has no directory anywhere in its command line, so it arrives as an
+        anonymous java process with nothing to click. Searching the machine
+        for the folder is what turns that honest banner into an offer. See
+        docs/liveness-spec.md section 17.
+      */}
+      <section className="pb-7">
+        <SectionHead
+          title="Search this machine"
+          note="Looks in your profile, Documents and Desktop, and two levels down each drive, for folders holding a server.properties. Nothing is added for you."
+        />
+        {identity.unattributed > 0 && (
+          <p className="prose-line mt-3 text-[12px] leading-relaxed text-warn">
+            {identity.unattributed} running java process
+            {identity.unattributed === 1 ? '' : 'es'} could not be matched to a folder right now.
+            That is what a server started with{' '}
+            <code className="font-mono">java -jar server.jar</code> looks like from outside: the
+            command line names no directory. The search finds it by looking for which folder a
+            running process is holding open.
+          </p>
+        )}
+        <div className="mt-3">
+          <ScanPanel onChanged={onChanged} dense />
+        </div>
+      </section>
+
+      <section className="pb-7">
+        <SectionHead
+          title="Add a folder by path"
+          note="For a server the search does not reach: a second drive, a network path, or anywhere outside the default locations."
+        />
+        <div className="mt-3">
+          <ManualAdd onChanged={onChanged} />
+        </div>
+      </section>
+    </div>
+  )
+}
+
+/**
+ * The fleet board's pointer to this page.
+ *
+ * The board is a monitoring surface, so what appears here is a READING: how
+ * many folders are attached, and whether anything about them needs attention.
+ * Managing them happens on the Attach page (DESIGN.md).
+ */
+export function AttachPointer({
+  attachments,
+  identity,
+}: {
+  attachments: AttachmentStatus[]
+  identity: IdentityScan
+}) {
+  const missing = attachments.filter((a) => a.state === 'missing').length
+  const unwatched = (identity.unwatched ?? []).length
+  const unattributed = identity.unattributed
+
+  const alert =
+    missing > 0
+      ? `${missing} attached folder${missing === 1 ? ' is' : 's are'} no longer on disk`
+      : unwatched > 0
+        ? `${unwatched} running server${unwatched === 1 ? ' is' : 's are'} not being watched`
+        : unattributed > 0
+          ? `${unattributed} running java process${unattributed === 1 ? '' : 'es'} could not be matched to a folder`
+          : null
+
+  if (!alert) {
     return (
-      <div className="mt-3">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
+      <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <a
+          href={href({ name: 'attach' })}
           className="text-[12px] text-muted-foreground underline underline-offset-2 transition-colors duration-150 hover:text-ink"
         >
-          Add a server folder
-        </button>
+          Attach a server folder
+        </a>
+        {attachments.length > 0 && (
+          <span className="text-[12px] text-faint">
+            {attachments.length} attached, all present
+          </span>
+        )}
       </div>
     )
   }
 
   return (
     <section className="mt-4 rounded-lg border border-warn/40 bg-warn/5 p-3.5">
-      {unwatched.length > 0 && (
-        <>
-          <h3 className="text-[13px] font-semibold text-warn">
-            {unwatched.length} running server{unwatched.length === 1 ? '' : 's'} on this machine
-            {unwatched.length === 1 ? ' is' : ' are'} not being watched
-          </h3>
-          <p className="prose-line mt-1 text-[12px] leading-relaxed text-muted-foreground">
-            These java processes were matched to a folder, but the folder is not under the servers
-            root and has not been attached, so nothing above says anything about them. Attaching one
-            makes it a server like any other: health, console, controls and settings.
-          </p>
-          <ul className="mt-2.5">
-            {unwatched.map((u) => (
-              <Unwatched key={u.pid} entry={u} onDone={onChanged} />
-            ))}
-          </ul>
-        </>
-      )}
-
-      {/*
-        The canonical-start case. A server run as `java -jar server.jar nogui`
-        has no directory anywhere in its command line, so it arrives here as
-        an anonymous java process with nothing to click. Searching the
-        machine for the folder is what turns that honest banner into an
-        offer. See docs/liveness-spec.md section 17.
-      */}
-      {identity.unattributed > 0 && (
-        <div className={unwatched.length > 0 ? 'mt-4 border-t border-border/60 pt-3' : ''}>
-          <h3 className="text-[13px] font-semibold text-warn">
-            {identity.unattributed} running java process
-            {identity.unattributed === 1 ? '' : 'es'} could not be matched to a folder
-          </h3>
-          <p className="prose-line mt-1 text-[12px] leading-relaxed text-muted-foreground">
-            That is what a server started with <code className="font-mono">java -jar server.jar</code>{' '}
-            looks like from outside: the command line names no directory. Searching this machine
-            for server folders finds it, by looking for which folder a running process is holding
-            open.
-          </p>
-          <ScanPanel onChanged={onChanged} />
-        </div>
-      )}
-
-      <div className={unwatched.length > 0 ? 'mt-4 border-t border-border/60 pt-3' : ''}>
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') check()
-            }}
-            placeholder="C:\Servers\My Server"
-            spellCheck={false}
-            autoComplete="off"
-            className="max-w-md flex-1 font-mono text-[12px]"
-          />
-          <Btn onClick={check} disabled={!path.trim()} label="Check this folder" />
-        </div>
-        <p className="prose-line mt-1.5 text-[11px] leading-relaxed text-faint">
-          The folder holding <code className="font-mono">server.properties</code>, not a jar.
-        </p>
-        {candidate && !candidate.ok && (
-          <p className="prose-line mt-2 text-[12px] text-bad">{candidate.reason}</p>
-        )}
-        {candidate && candidate.ok && <Preview c={candidate} onAttach={attach} busy={busy} />}
-        {err && <p className="prose-line mt-2 text-[12px] text-bad">{err}</p>}
-      </div>
+      <h3 className="text-[13px] font-semibold text-warn">{alert}</h3>
+      <p className="prose-line mt-1 text-[12px] leading-relaxed text-muted-foreground">
+        {missing > 0
+          ? 'The folder may have been deleted or renamed, or it may be on a drive that is not connected. Nothing is being reported about it, because there is nothing to read.'
+          : 'Attaching a folder makes it a server like any other: health, console, controls and settings.'}
+      </p>
+      <a
+        href={href({ name: 'attach' })}
+        className="mt-2 inline-block text-[12px] text-muted-foreground underline underline-offset-2 transition-colors duration-150 hover:text-ink"
+      >
+        {missing > 0 ? 'Review attached folders' : 'Open the attach page'}
+      </a>
     </section>
   )
 }

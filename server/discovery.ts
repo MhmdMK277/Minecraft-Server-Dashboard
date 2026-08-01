@@ -1,5 +1,12 @@
 import { basename, join } from 'node:path'
-import type { Classification, ServerStatus, Snapshot, IgnoredDirectory, TpsInfo } from '@shared/api'
+import type {
+  Classification,
+  ServerStatus,
+  Snapshot,
+  IgnoredDirectory,
+  TpsInfo,
+  AttachmentStatus,
+} from '@shared/api'
 import {
   listDirectories,
   levelDatPath,
@@ -25,6 +32,7 @@ import { primeHistory, timingFor, observe as observeBoot, flush as flushBootTime
 import { dataDir } from './config'
 import { detectLauncher, indexTasks, type Launcher, type TaskIndex } from './launcher'
 import { loadAttached, type AttachedServer } from './attach'
+import { existsSync } from 'node:fs'
 import { isBusy, doubleSpawnAlerts } from './control'
 
 /**
@@ -87,18 +95,40 @@ export async function scan(
    * JVM already owns that world, and Start would launch a second one.
    */
   const attached = loadAttached(dataDir())
+
+  /**
+   * The state of every attachment, including the ones that have gone.
+   *
+   * A folder that has been deleted, renamed, or is on a drive that is not
+   * plugged in must SAY so. Left as a candidate it becomes a server that
+   * reports UNKNOWN for ever, which is the dashboard withholding the one
+   * thing it does know. `missing` is therefore a state, not an absence, and
+   * the UI offers detach next to it.
+   */
+  const attachments: AttachmentStatus[] = []
   for (const a of attached) {
+    const name = basename(a.dir)
+    const exists = existsSync(a.dir)
+    const hasWorld = exists && levelDatPath(a.dir) !== null
+
+    attachments.push({
+      dir: a.dir,
+      name,
+      attachedAt: a.attachedAt,
+      state: !exists ? 'missing' : hasWorld ? 'ok' : 'no-world',
+      detail: !exists
+        ? 'This folder is not on disk any more. It may have been deleted or renamed, or it may be on a drive that is not connected. Nothing is being reported about it, because there is nothing to read.'
+        : hasWorld
+          ? 'Watched because you attached it.'
+          : 'The folder is here, but it has no world with a level.dat in it, so there is nothing to watch yet. A server that has never been started once looks like this.',
+      confirmedLaunch: a.confirmedLaunch,
+    })
+
     if (candidates.some((c) => c.dir.toLowerCase() === a.dir.toLowerCase())) continue
-    if (!levelDatPath(a.dir)) {
-      ignored.push({
-        name: basename(a.dir),
-        dir: a.dir,
-        reason:
-          'Attached by hand, but there is no world with a level.dat here now. The folder may have been moved or renamed.',
-      })
-      continue
-    }
-    candidates.push({ name: basename(a.dir), dir: a.dir })
+    // Only a real, world-bearing folder joins the candidate list. A missing
+    // one must not become a server row that can never resolve.
+    if (!hasWorld) continue
+    candidates.push({ name, dir: a.dir })
   }
 
   // Port conflicts. Spec §1: two directories can legitimately declare the same
@@ -193,6 +223,7 @@ export async function scan(
   return {
     servers,
     ignored,
+    attachments,
     host,
     network: {
       lanAddress: lan?.address ?? null,

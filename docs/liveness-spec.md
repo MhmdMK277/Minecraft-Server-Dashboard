@@ -706,3 +706,21 @@ why it runs on demand and at first run and never inside the ten-second loop.
 never adopted automatically, for the reason §1 now spells out: three of the
 ten found on this machine are a backup tree, and adopting them would put a
 copy of a live world under a start button.
+
+**An attached folder that is no longer there says so.** An attachment is a
+path the operator gave us, and paths go stale: a folder gets deleted, renamed,
+or lives on a drive that is not plugged in. Left in the candidate list such a
+folder becomes a server row that no process can own and no world can be read
+for, so it reports `UNKNOWN` for ever, which is the dashboard withholding the
+one thing it actually knows. The rule: an attachment carries a **state**
+(`ok`, `missing`, `no-world`) alongside its path, a `missing` one never becomes
+a server row, and the reported reason names the folder being gone rather than a
+missing `level.dat`. `no-world` is kept separate from `missing` because they are
+different facts and only one of them is a loss: a server that has never been
+started once has a folder and no world.
+
+The entry itself survives. Discovery does not tidy up on the operator's behalf,
+because an unplugged drive must not silently cost someone their attachment, and
+because detaching is the operator's decision either way. Detaching a missing
+folder is allowed and works on a path that does not exist; as everywhere else,
+it sets the entry aside and deletes nothing.

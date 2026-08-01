@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ChevronsUpDown,
   Earth,
+  FolderPlus,
   Gauge,
   LayoutDashboard,
   LogOut,
@@ -38,10 +39,12 @@ import { Indicator, TONE_TEXT, verdict, verdictSentence } from './status'
 import { href, type Route, type ServerPage } from './router'
 import logo from '../docs/images/logo.png'
 
-const VIEWS = [
-  { route: { name: 'fleet' } as Route, label: 'Servers', icon: LayoutDashboard },
-  { route: { name: 'console' } as Route, label: 'Console', icon: Terminal },
-  { route: { name: 'addresses' } as Route, label: 'Addresses', icon: Network },
+const VIEWS: Array<{ route: Route; label: string; icon: LucideIcon; adminOnly?: boolean }> = [
+  { route: { name: 'fleet' }, label: 'Servers', icon: LayoutDashboard },
+  { route: { name: 'console' }, label: 'Console', icon: Terminal },
+  { route: { name: 'addresses' }, label: 'Addresses', icon: Network },
+  // Admin only: attaching a folder makes it eligible for start and settings.
+  { route: { name: 'attach' }, label: 'Attach', icon: FolderPlus, adminOnly: true },
 ]
 
 const SERVER_NAV: Array<{ page: ServerPage; label: string; icon: LucideIcon; adminOnly?: boolean }> = [
@@ -164,7 +167,7 @@ export function AppSidebar({
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
-                {VIEWS.map((v) => (
+                {VIEWS.filter((v) => !v.adminOnly || isAdmin).map((v) => (
                   <SidebarMenuItem key={v.label}>
                     {/* The active view carries the accent. Server entries
                         deliberately do NOT: their colour channel belongs to

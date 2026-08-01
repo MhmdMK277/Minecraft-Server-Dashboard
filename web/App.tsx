@@ -6,8 +6,9 @@ import Host from './Host'
 import Login from './Login'
 import ServerDetail from './ServerDetail'
 import { ServerRow } from './ServerRow'
-import { AttachPanel, ScanPanel } from './Attach'
+import { AttachPage, AttachPointer, ScanPanel } from './Attach'
 import { dashboard, type ConnectionState } from './client'
+import { SectionHead } from './controls'
 import { useRoute, navigate, href } from './router'
 import { AppSidebar } from './AppSidebar'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
@@ -134,16 +135,6 @@ function FirstRun({ canEdit, onChanged }: { canEdit: boolean; onChanged: () => v
   )
 }
 
-/** A board section label: mono, uppercase, tracked, with its reason beneath. */
-function SectionHead({ title, note }: { title: string; note: string }) {
-  return (
-    <header className="mb-2 border-b border-border/60 pb-2">
-      <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-faint">{title}</h2>
-      <p className="prose-line mt-1 text-[12px] leading-relaxed text-faint">{note}</p>
-    </header>
-  )
-}
-
 function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () => void }) {
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -256,7 +247,9 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
                     ? 'Console'
                     : route.name === 'addresses'
                       ? 'Addresses'
-                      : 'Servers'}
+                      : route.name === 'attach'
+                        ? 'Attach'
+                        : 'Servers'}
                 </BreadcrumbPage>
               </BreadcrumbItem>
             )}
@@ -364,6 +357,27 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
           <Addresses servers={snap.servers} network={snap.network} />
         )}
 
+        {/* Attaching makes a folder eligible for start and settings, so the
+            surface is admin-only. A viewer following a bookmark is told why
+            rather than shown a page of controls that would refuse them. */}
+        {snap && route.name === 'attach' && (
+          isAdmin ? (
+            <AttachPage
+              attachments={snap.attachments ?? []}
+              identity={snap.identity}
+              onChanged={() => void dashboard.refresh()}
+            />
+          ) : (
+            <div className="mx-auto max-w-lg py-16 text-center">
+              <h2 className="text-[15px] font-semibold text-ink">Admins only</h2>
+              <p className="prose-line mx-auto mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                Attaching a folder makes it eligible for start and for settings changes, so it is
+                an admin action. You can see everything already attached on the board.
+              </p>
+            </div>
+          )
+        )}
+
         {snap && route.name === 'server' && (
           selected ? (
             <ServerDetail
@@ -419,8 +433,12 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
             {/* The dashboard's most honest moment, made actionable: a running
                 server it can see and is not watching. Admin only, because
                 attaching makes a folder eligible for start and settings. */}
+            {/* `?? []` deliberately, and the same reason as identity.unwatched
+                above it: the browser holds a build that can be newer than the
+                service it is talking to for as long as it takes to restart,
+                and a white screen is a worse answer than an empty list. */}
             {isAdmin && (
-              <AttachPanel identity={snap.identity} onChanged={() => void dashboard.refresh()} />
+              <AttachPointer attachments={snap.attachments ?? []} identity={snap.identity} />
             )}
 
             {/* The board: one full-width row per live server, single column by

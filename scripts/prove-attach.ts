@@ -22,10 +22,14 @@
  *      discovered one, so the double-spawn pre-check can see a JVM that is
  *      already serving it.
  *   6. Nothing is ever deleted. Detaching sets an entry aside.
+ *   7. An attached folder that is no longer on disk SAYS so. It never becomes
+ *      a server row that reports UNKNOWN for ever, and the entry survives
+ *      until the operator detaches it, because an unplugged drive must not
+ *      cost someone their attachment.
  *
  * Run: npx tsx scripts/prove-attach.ts
  */
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -346,6 +350,102 @@ console.log('\n=== 8. the routes are admin-only and audited ===\n')
   check('attaching is audited', /action: 'attach\.add'/.test(src))
   check('detaching is audited', /action: 'attach\.remove'/.test(src))
   check('changing the launch method is audited', /action: 'attach\.launch'/.test(src))
+}
+
+// ===========================================================================
+console.log('\n=== 9. an attached folder that is no longer on disk ===\n')
+// ===========================================================================
+// This is a misreporting bug, not a cosmetic one, which is why it is proved.
+// An attachment pointing at a deleted, renamed, or unplugged folder used to
+// arrive on the board as a server that could never resolve: no process could
+// own it, no world could be read, so it sat at UNKNOWN for ever while the
+// dashboard was in a position to say plainly that the folder is gone. The
+// rule now: a missing folder is a STATE, reported as such, and it never
+// becomes a phantom server row.
+{
+  const GONE = makeServer(OUTSIDE, 'Vanishing Server', { rcon: true })
+  const NEVER_STARTED = join(OUTSIDE, 'Never Started Server')
+  mkdirSync(NEVER_STARTED, { recursive: true })
+  writeFileSync(join(NEVER_STARTED, 'server.properties'), 'server-port=25601\n', 'utf8')
+
+  attachDir(dataDir(), { dir: GONE, confirmedLaunch: null })
+  // Attached directly, bypassing validation: this folder has no world, so
+  // validation would refuse it. The case under test is a folder that WAS a
+  // server when it was attached and is not one now, and the only difference
+  // the reporting code can see is the same one.
+  attachDir(dataDir(), { dir: NEVER_STARTED, confirmedLaunch: null })
+
+  {
+    const s = await scan(ROOT, {})
+    const a = s.attachments.find((x) => x.dir === GONE)
+    check('while the folder is there, its attachment reads ok', a?.state === 'ok', a?.state)
+    check('and it is a server on the board', s.servers.some((x) => x.dir === GONE))
+  }
+
+  // The event this whole section exists for.
+  rmSync(GONE, { recursive: true, force: true })
+  check('the folder really is gone before the next scan', !existsSync(GONE))
+
+  const after = await scan(ROOT, {})
+  const gone = after.attachments.find((x) => x.dir === GONE)
+
+  check('a deleted folder is still reported as an attachment', !!gone)
+  check('and its state is missing, not unknown', gone?.state === 'missing', gone?.state)
+  check(
+    'and the wording names the folder being gone, not a missing level.dat',
+    typeof gone?.detail === 'string' &&
+      /not on disk|deleted|renamed|not connected/i.test(gone.detail) &&
+      !/level\.dat/i.test(gone.detail),
+    gone?.detail,
+  )
+
+  // The failure being fixed. A candidate with no readable world produces a
+  // server row that can never reach any health but UNKNOWN.
+  check(
+    'it does NOT appear as a server, so nothing reports UNKNOWN for ever',
+    !after.servers.some((x) => x.dir === GONE),
+    after.servers.filter((x) => x.dir === GONE).map((x) => x.health).join(','),
+  )
+  check(
+    'and it is not filed under ignored either, where the reason would misdescribe it',
+    !after.ignored.some((x) => x.dir === GONE),
+  )
+
+  // A folder that IS there but has no world is a different fact and must not
+  // be collapsed into the same one: nothing is lost, the server has simply
+  // never been started.
+  const empty = after.attachments.find((x) => x.dir === NEVER_STARTED)
+  check('a folder that is present but has no world reads no-world', empty?.state === 'no-world', empty?.state)
+  check(
+    'and its wording says a server that has never started looks like this',
+    typeof empty?.detail === 'string' && /level\.dat|never been started/i.test(empty.detail),
+    empty?.detail,
+  )
+
+  // Standing rule: the dashboard does not tidy up on the operator's behalf.
+  // An unplugged drive must not silently cost someone their attachment.
+  check(
+    'discovery does not drop the entry on its own; only the operator detaches',
+    loadAttached(dataDir()).some((a) => a.dir === GONE),
+  )
+
+  // And the offered action works on a path that does not exist.
+  const result = detachDir(dataDir(), GONE)
+  check('detaching a folder that is gone succeeds', result.ok === true)
+  check('and the entry is set aside, never deleted', readFileSync(join(dataDir(), 'attached.json'), 'utf8').includes('Vanishing Server'))
+  {
+    const file = JSON.parse(readFileSync(join(dataDir(), 'attached.json'), 'utf8')) as {
+      attached: Array<{ dir: string }>
+      detached: Array<{ dir: string }>
+    }
+    check('specifically, it moved to the detached list', file.detached.some((d) => d.dir === GONE))
+    check('and left the attached list', !file.attached.some((d) => d.dir === GONE))
+  }
+
+  const cleared = await scan(ROOT, {})
+  check('after detaching, it is gone from the reported attachments', !cleared.attachments.some((x) => x.dir === GONE))
+
+  detachDir(dataDir(), NEVER_STARTED)
 }
 
 // ===========================================================================

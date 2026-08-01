@@ -499,9 +499,46 @@ export const IdentityScan = z.object({
 })
 export type IdentityScan = z.infer<typeof IdentityScan>
 
+/** The launch method an operator confirms while looking at a folder. */
+export const ConfirmedLaunch = z.union([
+  z.object({ strategy: z.literal('script'), script: z.string().min(1).max(120) }),
+  z.object({ strategy: z.literal('windows-task'), task: z.string().min(1).max(260) }),
+])
+export type ConfirmedLaunch = z.infer<typeof ConfirmedLaunch>
+
+/**
+ * A folder the operator attached, and whether it is still there.
+ *
+ * `missing` is a first-class state rather than an absence. An attachment
+ * pointing at a folder that has been deleted, renamed, or is on a drive that
+ * is not plugged in would otherwise sit in the fleet reporting UNKNOWN for
+ * ever, which is the dashboard being unable to say the one thing it actually
+ * knows: the folder is not there. Detaching is offered as the obvious next
+ * action, and detaching sets aside; it never deletes anything.
+ */
+export const AttachmentState = z.enum([
+  'ok', // the folder is there and looks like a server
+  'missing', // the folder is not on disk at all
+  'no-world', // the folder is there, but has no world with a level.dat
+])
+export type AttachmentState = z.infer<typeof AttachmentState>
+
+export const AttachmentStatus = z.object({
+  dir: z.string(),
+  name: z.string(),
+  attachedAt: z.string(),
+  state: AttachmentState,
+  detail: z.string(),
+  /** Null means no launch method was confirmed, so Start stays unavailable. */
+  confirmedLaunch: ConfirmedLaunch.nullable(),
+})
+export type AttachmentStatus = z.infer<typeof AttachmentStatus>
+
 export const Snapshot = z.object({
   servers: z.array(ServerStatus),
   ignored: z.array(IgnoredDirectory),
+  /** Folders the operator attached, and whether each is still on disk. */
+  attachments: z.array(AttachmentStatus),
   /** Host health, alongside per-server health rather than folded into it. */
   host: HostStatus,
   network: NetworkInfo,
@@ -711,13 +748,6 @@ export const ScanResult = z.object({
   candidates: z.array(ScanCandidate),
 })
 export type ScanResult = z.infer<typeof ScanResult>
-
-/** The launch method an operator confirms while looking at a folder. */
-export const ConfirmedLaunch = z.union([
-  z.object({ strategy: z.literal('script'), script: z.string().min(1).max(120) }),
-  z.object({ strategy: z.literal('windows-task'), task: z.string().min(1).max(260) }),
-])
-export type ConfirmedLaunch = z.infer<typeof ConfirmedLaunch>
 
 /**
  * What the operator is shown before confirming an attach. Lives in the
