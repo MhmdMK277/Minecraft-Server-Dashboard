@@ -1,0 +1,142 @@
+# Build the double-click release artifact and publish it on a tag.
+#
+# The rule this workflow exists to enforce: nothing is published that has not
+# started on a machine with no toolchain. `accept-release` runs here, before
+# the release is created, so a zip that cannot start is a red build rather
+# than a download someone tries on a Friday night.
+#
+# Windows runner because the artifact is Windows-only. The bundled runtime is
+# whatever `setup-node` installed, which is the official nodejs.org build,
+# unmodified and still carrying the OpenJS Foundation signature. The workflow
+# checks that signature rather than assuming it: an unsigned runtime would
+# turn every download into a SmartScreen block, and that is worth failing the
+# build over.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (no leading v). Produces an artifact but no release.'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Work out the version
+        id: v
+        shell: pwsh
+        run: |
+          $v = if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $env:GITHUB_REF -replace '^refs/tags/v', ''
+          } else {
+            '${{ github.event.inputs.version }}'
+          }
+          if (-not $v) { throw 'no version' }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "building $v"
+
+      - name: Install
+        run: npm ci
+
+      # The proofs are the reason to trust the thing being packaged. Running
+      # them here means a release cannot be cut from a tree that fails them.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Proofs
+        shell: pwsh
+        run: |
+          $suites = @(
+            'prove-authgate', 'prove-auth', 'prove-attach', 'prove-scan',
+            'prove-portability', 'prove-settings', 'prove-control',
+            'prove-concurrent-start', 'prove-backup-policy', 'prove-backup-route'
+          )
+          $failed = @()
+          foreach ($s in $suites) {
+            Write-Host "--- $s"
+            npm run --silent $s
+            if ($LASTEXITCODE -ne 0) { $failed += $s }
+          }
+          if ($failed.Count -gt 0) { throw "failed: $($failed -join ', ')" }
+
+      - name: Check the runtime we are about to bundle is signed
+        shell: pwsh
+        run: |
+          $node = (Get-Command node).Source
+          $sig = Get-AuthenticodeSignature $node
+          "runtime: $node"
+          "version: $(& $node --version)"
+          "signature: $($sig.Status)"
+          "signer: $($sig.SignerCertificate.Subject)"
+          if ($sig.Status -ne 'Valid') {
+            throw "the runtime is not validly signed ($($sig.Status)). Refusing to bundle it."
+          }
+          "node=$node" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Package
+        run: npx tsx scripts/package-release.ts --version ${{ steps.v.outputs.version }} --node "${{ env.node }}"
+
+      # The acceptance criterion for this whole milestone: it runs where
+      # nothing is installed. The script strips PATH down to the Windows
+      # system directories and asserts node, npm, npx and git are all
+      # unreachable before it starts anything.
+      - name: Accept (no Node, no npm, no git)
+        run: npx tsx scripts/accept-release.ts
+
+      - name: Update the scoop manifest
+        shell: pwsh
+        run: |
+          npx tsx scripts/scoop-manifest.ts --version ${{ steps.v.outputs.version }}
+          Get-Content bucket/minecraft-server-dashboard.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: minecraft-server-dashboard-${{ steps.v.outputs.version }}-win-x64
+          path: |
+            release/*.zip
+            release/SHA256SUMS
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = @"
+          Download ``minecraft-server-dashboard-${{ steps.v.outputs.version }}-win-x64.zip``, unzip it, and double-click **Start Dashboard.bat**. Nothing else is needed: no Node, no npm, no git. The dashboard opens at http://127.0.0.1:8422 and the first start prints an admin password once.
+
+          Windows will warn you before running a file downloaded from the internet. What the warning says and why it appears is in [docs/install.md](https://github.com/MhmdMK277/Minecraft-Server-Dashboard/blob/main/docs/install.md).
+
+          Verify the download against ``SHA256SUMS`` below.
+          "@
+          gh release create "v${{ steps.v.outputs.version }}" `
+            (Get-ChildItem release/*.zip).FullName `
+            release/SHA256SUMS `
+            --title "v${{ steps.v.outputs.version }}" `
+            --notes $notes
+
+      # The bucket lives in this repository, so a published release has to
+      # leave the manifest pointing at itself or `scoop update` goes stale.
+      - name: Commit the manifest
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add bucket/minecraft-server-dashboard.json
+          if (git diff --cached --quiet) { "manifest unchanged"; exit 0 }
+          git commit -m "scoop: ${{ steps.v.outputs.version }}"
+          git push origin HEAD:main

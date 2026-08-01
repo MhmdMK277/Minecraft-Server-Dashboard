@@ -7,7 +7,7 @@
 **A self-hosted dashboard for Minecraft servers it did not start.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/Node-22%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Runtime](https://img.shields.io/badge/Node-bundled-339933?logo=node.js&logoColor=white)](docs/install.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows&logoColor=white)](docs/platform-support.md)
 
@@ -145,10 +145,39 @@ idle server's console is not the tool talking to itself.
 
 ## Quick start
 
-Requirements: **Windows 10/11**, **Node 22+**, Minecraft servers already
-installed, and `enable-rcon=true` on each server you want full health for
-(without RCON the main thread cannot be probed, and health honestly reads
-`UNKNOWN`).
+Windows 10 or 11, 64-bit. Nothing to install first: **no Node, no npm, no
+git.** The download carries its own copy of Node.js.
+
+1. Download `minecraft-server-dashboard-<version>-win-x64.zip` from
+   **[Releases](https://github.com/MhmdMK277/Minecraft-Server-Dashboard/releases)**.
+2. Right-click the zip → **Properties** → tick **Unblock** → **OK**.
+   *(Skipping this only means Windows warns you at step 3.)*
+3. Extract it anywhere, then double-click **Start Dashboard.bat**.
+4. Open **<http://127.0.0.1:8422>**. The first start prints an `admin`
+   password once, in the black window. Copy it before closing anything.
+
+Servers in `Documents\MC Servers` appear on their own. If yours live
+elsewhere, the **Attach** page searches your profile, Documents, Desktop and
+two levels down each drive, and offers what it finds; nothing is added
+without you saying so.
+
+To uninstall, delete the folder. To reach the dashboard from another machine
+on your network, use **Start Dashboard (whole network).bat** and read what it
+says first.
+
+That is the whole of it. Everything below is detail you can come back for.
+
+### With Scoop
+
+```
+scoop bucket add mcdash https://github.com/MhmdMK277/Minecraft-Server-Dashboard
+scoop install minecraft-server-dashboard
+```
+
+Checksum verified for you, start-menu shortcut, `scoop update` for new
+versions. This repository is its own bucket.
+
+### From source
 
 ```bash
 git clone https://github.com/MhmdMK277/Minecraft-Server-Dashboard.git
@@ -158,17 +187,12 @@ npm run build
 npm start
 ```
 
-Open <http://127.0.0.1:8422>. On first start an `admin` password is printed to
-the terminal once (only its hash reaches disk); you change it before the
-dashboard loads.
+Needs Node 22+. `npx tsx scripts/package-release.ts` builds the same zip the
+releases are cut from, into `release/`.
 
-To reach it from other machines on your network, the normal setup for a
-headless host:
+### Settings
 
-```bash
-set MCDASH_HOST=0.0.0.0
-npm start
-```
+All optional. The dashboard runs with none of them set.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -177,6 +201,13 @@ npm start
 | `MCDASH_PORT` | `8422` | HTTP and WebSocket, one port |
 | `MCDASH_DATA_DIR` | OS app-data directory | Config, sessions, audit log |
 | `MCDASH_TRUST_PROXY` | off | Set to `1` behind a reverse proxy or tunnel |
+
+For full health a server needs `enable-rcon=true` in its `server.properties`,
+because only an RCON round trip can probe the main game thread. Without it
+health honestly reads `UNKNOWN` rather than being guessed from the port.
+
+More on installing, on what Windows says about an unsigned download, and on
+how to verify the artifact yourself: [docs/install.md](docs/install.md).
 
 ### How discovery works
 

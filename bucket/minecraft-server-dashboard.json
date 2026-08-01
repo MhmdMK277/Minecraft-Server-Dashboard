@@ -1,0 +1,41 @@
+{
+    "version": "0.1.0",
+    "description": "Attach-model dashboard for Minecraft servers started outside the app",
+    "homepage": "https://github.com/MhmdMK277/Minecraft-Server-Dashboard",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/MhmdMK277/Minecraft-Server-Dashboard/releases/download/v0.1.0/minecraft-server-dashboard-0.1.0-win-x64.zip",
+            "hash": "e46f04f9a3835552ee639b602a7872d8d8118c4821aaf7f23a2e46423b922d0f",
+            "extract_dir": "minecraft-server-dashboard-0.1.0-win-x64"
+        }
+    },
+    "shortcuts": [
+        [
+            "Start Dashboard.bat",
+            "Minecraft Server Dashboard"
+        ]
+    ],
+    "notes": [
+        "Run \"Minecraft Server Dashboard\" from the start menu, or Start Dashboard.bat",
+        "in the install folder, then open http://127.0.0.1:8422",
+        "",
+        "The first start prints an admin password once. Copy it before closing",
+        "the window. Settings and sign-in live in %APPDATA%\\minecraft-server-dashboard",
+        "and survive an update; scoop uninstall does not remove them."
+    ],
+    "checkver": {
+        "github": "https://github.com/MhmdMK277/Minecraft-Server-Dashboard"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/MhmdMK277/Minecraft-Server-Dashboard/releases/download/v$version/minecraft-server-dashboard-$version-win-x64.zip",
+                "extract_dir": "minecraft-server-dashboard-$version-win-x64"
+            }
+        },
+        "hash": {
+            "url": "https://github.com/MhmdMK277/Minecraft-Server-Dashboard/releases/download/v$version/SHA256SUMS"
+        }
+    }
+}
