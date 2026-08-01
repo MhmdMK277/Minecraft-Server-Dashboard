@@ -186,15 +186,24 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
     })
   }, [])
 
-  // Prime every live tab once discovery knows about it.
+  // Prime every live tab once discovery knows about it. never-started is
+  // included: its first boot writes a console worth watching from line one.
   useEffect(() => {
     for (const s of snap?.servers ?? []) {
-      if (s.classification === 'live') ensureBacklog(s.id)
+      if (s.classification === 'live' || s.classification === 'never-started') ensureBacklog(s.id)
     }
   }, [snap, ensureBacklog])
 
-  const live = snap?.servers.filter((s) => s.classification === 'live') ?? []
-  const other = snap?.servers.filter((s) => s.classification !== 'live') ?? []
+  // The board carries live servers plus never-started ones: a fresh creation
+  // is the row the operator is about to act on, not a directory in storage.
+  const board =
+    snap?.servers.filter(
+      (s) => s.classification === 'live' || s.classification === 'never-started',
+    ) ?? []
+  const other =
+    snap?.servers.filter(
+      (s) => s.classification !== 'live' && s.classification !== 'never-started',
+    ) ?? []
   const selected = route.name === 'server' ? snap?.servers.find((s) => s.id === route.id) : undefined
   const isAdmin = user.role === 'admin'
 
@@ -463,11 +472,11 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
 
             {/* The board: one full-width row per live server, single column by
                 design. A departure board is read down, not tiled. */}
-            {live.length === 0 && other.length === 0 ? (
+            {board.length === 0 && other.length === 0 ? (
               <FirstRun canEdit={isAdmin} onChanged={() => void dashboard.refresh()} />
             ) : (
               <div className="border-t border-border/60">
-                {live.map((s) => (
+                {board.map((s) => (
                   <ServerRow key={s.id} s={s} onOpen={(id) => navigate({ name: 'server', id, page: 'overview' })} />
                 ))}
               </div>

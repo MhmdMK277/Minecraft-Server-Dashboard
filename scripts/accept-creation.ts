@@ -187,10 +187,21 @@ check('and nowhere in the audit log', !auditRaw.includes(password))
 console.log('\n=== 4. before its first start, discovery calls it what it is ===\n')
 // ---------------------------------------------------------------------------
 
+// Spec section 9, amended 2026-08-01: a folder with server.properties and no
+// world is a SERVER that has never started, not junk, and it must arrive as
+// a row carrying the ordinary start path. A server we can create but cannot
+// start from the dashboard would be broken.
 const snap1 = await scan(ROOT)
-const ignored = snap1.ignored.find((d) => d.name === NAME)
-check('the never-started folder is not yet reported as a server', !snap1.servers.some((s) => s.name === NAME))
-check('it is listed with the no-world-yet reason, not called junk', !!ignored && /No world yet/.test(ignored.reason), ignored?.reason)
+const row = snap1.servers.find((s) => s.name === NAME)
+check('the never-started folder appears as a server row', !!row)
+check('classified never-started, not live and not junk', row?.classification === 'never-started', row?.classification)
+check('and not in the ignored list', !snap1.ignored.some((d) => d.name === NAME))
+check('its health detail says what it is and what fixes it', /Never started/.test(row?.healthDetail ?? ''), row?.healthDetail)
+check(
+  'the row carries the NORMAL start path: the created start.bat was detected',
+  row?.launchStrategy === 'script',
+  row?.launchStrategy,
+)
 
 // ---------------------------------------------------------------------------
 console.log('\n=== 5. started exactly once, through the dashboard start path ===\n')
@@ -231,6 +242,7 @@ console.log('\n=== 6. it is a normal server now, and stops the normal way ===\n'
 const snap2 = await scan(ROOT)
 const asServer = snap2.servers.find((s) => s.name === NAME)
 check('discovery now reports it as a server like any other', !!asServer)
+check('the world exists, so the classification flipped to live', asServer?.classification === 'live', asServer?.classification)
 check('with a live process attributed to it', !!asServer?.proc, asServer?.proc ? `pid ${asServer.proc.pid}` : 'none')
 
 // Stop through the real path: RCON with the generated password, never a kill.

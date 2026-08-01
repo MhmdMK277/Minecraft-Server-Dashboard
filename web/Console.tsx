@@ -85,7 +85,10 @@ export default function ConsoleView({
   canEdit?: boolean
 }) {
   useFrameProbe('console')
-  const live = servers.filter((s) => s.classification === 'live')
+  // never-started included: its first boot is exactly the console to watch.
+  const live = servers.filter(
+    (s) => s.classification === 'live' || s.classification === 'never-started',
+  )
   const [active, setActive] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   // Off by default. An idle server logs nothing BUT our own ten-second poll, so

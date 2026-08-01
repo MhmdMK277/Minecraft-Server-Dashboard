@@ -70,21 +70,25 @@ export async function scan(
   primeHistory(dataDir())
 
   const ignored: IgnoredDirectory[] = []
-  const candidates: Array<{ name: string; dir: string }> = []
+  const candidates: Array<{ name: string; dir: string; neverStarted?: boolean }> = []
 
   for (const name of names) {
     const dir = join(root, name)
     if (!levelDatPath(dir)) {
-      // A server.properties with no world is what a never-started server looks
-      // like: a fresh creation, or a folder someone set up by hand. Calling
-      // that "not a Minecraft server" would be false, so the reason says what
-      // is actually missing and what fixes it.
+      // A server.properties with no world is what a NEVER-STARTED server
+      // looks like: a fresh creation, or a folder someone set up by hand.
+      // It becomes a row (spec section 9, amended 2026-08-01), because a
+      // server you can create but not start is broken: the row carries the
+      // normal launcher detection, so its Start button is the ordinary start
+      // path, and its first start generates the world that makes it live.
+      if (existsSync(join(dir, 'server.properties'))) {
+        candidates.push({ name, dir, neverStarted: true })
+        continue
+      }
       ignored.push({
         name,
         dir,
-        reason: existsSync(join(dir, 'server.properties'))
-          ? 'No world yet: there is a server.properties but no level.dat. A server that has never been started looks like this; its first start generates the world, and it appears on the board after that.'
-          : 'No level.dat found. This is not a Minecraft server directory.',
+        reason: 'No level.dat found. This is not a Minecraft server directory.',
       })
       continue
     }
@@ -178,17 +182,20 @@ export async function scan(
       inspect(c.name, c.dir, jvms, byPort, overrides, policy, tasks, {
         fleetDoubt,
         occupied: scan.occupiedDirs,
+        neverStarted: c.neverStarted === true,
       }),
     ),
   )
 
-  // Live first, then retired/stale, each alphabetical. Retired and stale stay
-  // visible -- hiding them means forgetting they need cleaning up.
+  // Live first, then never-started (the row the operator is most likely
+  // about to act on), then retired/stale, each alphabetical. Retired and
+  // stale stay visible -- hiding them means forgetting they need cleaning up.
   const order: Record<Classification, number> = {
     live: 0,
-    retired: 1,
-    stale: 2,
-    'not-a-server': 3,
+    'never-started': 1,
+    retired: 2,
+    stale: 3,
+    'not-a-server': 4,
   }
   servers.sort(
     (a, b) => order[a.classification] - order[b.classification] || a.name.localeCompare(b.name),
@@ -347,7 +354,7 @@ async function inspect(
   overrides: Record<string, Classification>,
   policy: BackupPolicy,
   tasks: TaskIndex,
-  identity: { fleetDoubt: string | null; occupied: string[] },
+  identity: { fleetDoubt: string | null; occupied: string[]; neverStarted: boolean },
 ): Promise<ServerStatus> {
   // ALL synchronous filesystem work happens here, before the first await.
   //
@@ -405,8 +412,13 @@ async function inspect(
       const otherDir = join(dir, '..', other)
       return jvmForDir(jvms, otherDir) !== null
     })
+  // never-started is structural (no world exists), so it beats the stale
+  // inference; an operator override still beats both. During the first start
+  // the classification stays never-started for the seconds until level.dat
+  // appears, which is honest: the world does not exist yet.
   let classification: Classification =
-    overrides[name] ?? (shadowedByRunningTwin ? 'stale' : 'live')
+    overrides[name] ??
+    (identity.neverStarted ? 'never-started' : shadowedByRunningTwin ? 'stale' : 'live')
 
   // Only probe the network if a process actually owns THIS directory. Probing
   // by port would read the neighbour that shares it -- when the fixtures were
@@ -512,7 +524,9 @@ async function inspect(
     verdict.detail =
       classification === 'retired'
         ? 'Retired: archived and not expected to start. Safe to delete once you are happy with the archive.'
-        : 'Stale duplicate: never started. Shares its port with a live server, which is why port cannot be used to decide what is running.'
+        : classification === 'never-started'
+          ? 'Never started: server.properties exists but no world has been generated. Starting it creates the world, and it is a live server from then on.'
+          : 'Stale duplicate: never started. Shares its port with a live server, which is why port cannot be used to decide what is running.'
   }
 
   return {

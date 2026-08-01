@@ -85,7 +85,10 @@ export function AppSidebar({
   user: SessionUser
   onSignOut: () => void
 }) {
-  const live = servers.filter((s) => s.classification === 'live')
+  // never-started rides along: a fresh creation must be navigable to be started.
+  const live = servers.filter(
+    (s) => s.classification === 'live' || s.classification === 'never-started',
+  )
   const isAdmin = user.role === 'admin'
   const current = route.name === 'server' ? servers.find((s) => s.id === route.id) : undefined
 

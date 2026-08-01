@@ -451,7 +451,7 @@ async function runCreation(req: CreateRequest, deps: CreateDeps, job: CreationJo
 function complete(job: CreationJob, journal: Journal, deps: CreateDeps): void {
   job.state = 'complete'
   job.detail =
-    'Created. The folder is now just another server: discovery will pick it up on the next scan, and its first start will generate the world.'
+    'Created. The folder is now just another server: discovery picks it up on the next scan as a never-started row with the normal Start button, and its first start generates the world.'
   journal.state = 'complete'
   writeJournal(job.dir, journal)
   audit({

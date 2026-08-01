@@ -20,9 +20,10 @@ export type ServerKind = z.infer<typeof ServerKind>
 
 export const Classification = z.enum([
   'live', // has a world and a process, or is expected to run
+  'never-started', // server.properties but no world yet; the first start creates it
   'retired', // a real server directory that is not meant to start again
   'stale', // duplicate of another server directory
-  'not-a-server', // no level.dat
+  'not-a-server', // no level.dat and no server.properties
 ])
 export type Classification = z.infer<typeof Classification>
 

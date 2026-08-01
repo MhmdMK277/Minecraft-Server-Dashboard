@@ -218,10 +218,23 @@ so tight that its normal 220 ms reads as stalled.
 | MC 1.21.4 - Copy | server, **stale duplicate**, never starts |
 | MC 26.1 | **not a server**, empty directory |
 | clientpacks | **not a server**. No `level.dat` |
+| (a fresh creation) | server, **never-started**: `server.properties` but no `level.dat` |
 
 **Rule.** Classify; never crash; never list a non-server as a server; never
 silently hide retired or stale directories, surface them separately so they can
 be cleaned up.
+
+**Amended 2026-08-01: never-started is a server, not junk.** A directory
+with a `server.properties` but no world is what a server looks like before
+its first start, and creation (M-create) produces exactly this. It becomes
+a row classified `never-started`, with the ordinary launcher detection, so
+its Start button is the same start path every server uses; the first start
+generates the world and the classification flips to `live` on the next
+scan. A directory with neither `level.dat` nor `server.properties` remains
+not-a-server. The predicate crossvalidate section 5 pins (`level.dat`
+means world-bearing server) is unchanged; this amendment adds a second,
+narrower gate for the world-less case. Proven end to end by
+`scripts/accept-creation.ts` sections 4 to 6 against a real server.
 
 ## 10. Secrets
 

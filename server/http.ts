@@ -520,10 +520,15 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     try {
       const snap = await doScan()
       latest = snap
-      // Console tabs exist only for live servers. Retired and stale directories
-      // get no tailer -- carried forward from M1's classification rules.
+      // Console tabs exist for live and never-started servers; retired and
+      // stale directories get no tailer (M1's classification rules).
+      // never-started is included so the operator watching a first boot sees
+      // its console lines from the first scan that notices the process,
+      // rather than only after level.dat appears and the class flips to live.
       await syncConsoles(
-        snap.servers.filter((s) => s.classification === 'live').map((s) => ({ id: s.id, dir: s.dir })),
+        snap.servers
+          .filter((s) => s.classification === 'live' || s.classification === 'never-started')
+          .map((s) => ({ id: s.id, dir: s.dir })),
       )
       broadcast({ type: 'snapshot', data: snap })
     } catch (e) {
