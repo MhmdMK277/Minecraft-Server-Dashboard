@@ -153,6 +153,7 @@ the control routes cannot reach a real JVM and no real world can be touched.
 | F3 | Low | `POST /api/servers/refresh` had no role gate | **Fixed**, `5be2c48` |
 | F4 | Low | No security headers on API responses | **Fixed**, `5be2c48` |
 | F5 | Low | Session file trusted `role`, `username` and future timestamps | **Fixed**, `5be2c48` |
+| F6 | Medium | Backups page claimed a detection that never existed (found 2026-08-01, an honesty defect rather than a network one) | **Fixed**, `6b6dc9b` |
 
 #### F1 (critical): the gate keyed on spelling, not on the route
 
@@ -280,6 +281,31 @@ Verified by attempted exploit, not by inspection:
 | WebSocket | No cookie and invalid cookie both close `4401` with zero frames; the server registers no inbound message handler |
 | Login throttling | Locks out after 5 failures with `429` and `retry-after`, keyed on IP **and** username |
 | XSS | Log text reaches the browser as React children with no `dangerouslySetInnerHTML`; colours come from a fixed hex map, so server-controlled text cannot inject markup or CSS |
+
+#### F6 (medium): the Backups page claimed a detection that never ran
+
+Found 2026-08-01, during a review of the Backups surface. Not a network
+vulnerability: nothing leaked and nothing could be exploited. It is recorded
+here because it is a **false-healthy claim about data protection**, which
+this project treats as the same class of failure.
+
+The page said backups are made by "the external backup system this dashboard
+detected, on its own schedule", and the switch was labelled "In the nightly
+backup". No detection code exists anywhere in the repository; decision
+0001's detection signals were specified and never implemented. "Detected"
+was therefore false on every machine, and "nightly" was an assumption
+imported from the machine the copy was written on, whose backup script runs
+from Task Scheduler at 05:00. An operator with a different backup tool, or
+none, was shown a switch implying their worlds were in a rotation that may
+not exist.
+
+Fixed in `6b6dc9b`: the page now states only the verifiable mechanism (the
+switch records intent in `backup-policy.json`; a script that reads that file
+acts on it; if nothing reads it, the switch changes nothing) and explicitly
+says that nothing on the page means the worlds are backed up.
+
+The lesson, same as F1's spelling-versus-route: UI copy is a claim, and a
+claim either has code behind it or it does not ship.
 
 ### Not tested, and why
 
