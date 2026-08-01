@@ -14,6 +14,10 @@ import type {
   ConfirmedLaunch,
   AttachCandidate,
   ScanResult,
+  CreateServerRequest,
+  CreationInfo,
+  CreationJobStatus,
+  RemoveFailedResult,
 } from '@shared/api'
 import { API, WS_PATH } from '@shared/api'
 
@@ -248,6 +252,24 @@ export const dashboard = {
   control: (id: string, action: 'start' | 'stop' | 'restart') =>
     sendControl(API.control(id, action)),
   runCommand: (id: string, command: string) => sendCommand(API.runCommand(id), command),
+
+  /**
+   * Server creation. The refusal sentences these routes answer with are the
+   * product, so every one of them travels through check() unreplaced. The
+   * generated RCON password never appears in any of these responses; it
+   * exists only inside the new folder's server.properties.
+   */
+  getCreateInfo: (mcVersion?: string) => get<CreationInfo>(API.createInfo(mcVersion)),
+  getCreateVersions: (flavor: 'vanilla' | 'paper') =>
+    get<{ versions: string[] }>(API.createVersions(flavor)),
+  getForgePromos: () => get<{ promos: Record<string, string> }>(API.createVersions('forge')),
+  createServer: (body: CreateServerRequest) =>
+    post<{ opId: string; dir: string }>(API.create, body),
+  getCreateJobs: () => get<{ jobs: CreationJobStatus[] }>(API.createJobs),
+  runInstaller: (opId: string, confirmRunDownloadedProgram: boolean) =>
+    post<{ ok: boolean }>(API.createRunInstaller, { opId, confirmRunDownloadedProgram }),
+  removeFailedCreation: (dir: string, folderName: string) =>
+    post<RemoveFailedResult>(API.createRemoveFailed, { dir, folderName }),
 
   getAuthState: () => get<AuthState>(API.authState),
   login: (username: string, password: string) =>

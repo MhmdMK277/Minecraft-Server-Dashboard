@@ -907,6 +907,13 @@ export type CreationInfo = {
   parentDirExists: boolean
 }
 
+/**
+ * What removing a failed creation reports: exactly what was deleted, all of
+ * it journaled, and anything found in the folder that the journal did not
+ * name, which is kept and listed rather than deleted.
+ */
+export type RemoveFailedResult = { ok: true; removed: string[]; kept: string[] }
+
 /** HTTP routes. Was `CH`, the Electron IPC channel list. */
 export const API = {
   appInfo: '/api/info',

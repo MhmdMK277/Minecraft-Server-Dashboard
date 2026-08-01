@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   LogOut,
   Network,
+  PackagePlus,
   Settings2,
   Terminal,
   Users,
@@ -45,6 +46,8 @@ const VIEWS: Array<{ route: Route; label: string; icon: LucideIcon; adminOnly?: 
   { route: { name: 'addresses' }, label: 'Addresses', icon: Network },
   // Admin only: attaching a folder makes it eligible for start and settings.
   { route: { name: 'attach' }, label: 'Attach', icon: FolderPlus, adminOnly: true },
+  // Admin only: creation downloads executable code and writes a folder.
+  { route: { name: 'create' }, label: 'Create', icon: PackagePlus, adminOnly: true },
 ]
 
 const SERVER_NAV: Array<{ page: ServerPage; label: string; icon: LucideIcon; adminOnly?: boolean }> = [

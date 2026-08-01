@@ -75,10 +75,16 @@ export async function scan(
   for (const name of names) {
     const dir = join(root, name)
     if (!levelDatPath(dir)) {
+      // A server.properties with no world is what a never-started server looks
+      // like: a fresh creation, or a folder someone set up by hand. Calling
+      // that "not a Minecraft server" would be false, so the reason says what
+      // is actually missing and what fixes it.
       ignored.push({
         name,
         dir,
-        reason: 'No level.dat found. This is not a Minecraft server directory.',
+        reason: existsSync(join(dir, 'server.properties'))
+          ? 'No world yet: there is a server.properties but no level.dat. A server that has never been started looks like this; its first start generates the world, and it appears on the board after that.'
+          : 'No level.dat found. This is not a Minecraft server directory.',
       })
       continue
     }
