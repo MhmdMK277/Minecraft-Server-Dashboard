@@ -59,6 +59,7 @@ import { setBackupEnabled, isBackupEnabled } from './backuppolicy'
 import { writeSetting } from './serversettings'
 import { startServer, stopServer, restartServer, runCommand } from './control'
 import { detectLauncher, indexTasks } from './launcher'
+import { loadPrefs, setPlayerAvatars, AVATAR_ORIGIN, type Prefs } from './prefs'
 
 /**
  * The HTTP + WebSocket surface.
@@ -115,6 +116,14 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
   // ---------------------------------------------------------------- auth
 
   const dir = dataDir()
+
+  /**
+   * Preferences held in memory, because the CSP on every response depends on
+   * them and a synchronous file read per response is not a thing to do on a
+   * hot path. We are the only writer, so the copy cannot drift.
+   */
+  let prefs: Prefs = loadPrefs(dir)
+
   const store = new SessionStore(dir)
   const throttle = new LoginThrottle()
   initAudit(dir)
@@ -222,11 +231,21 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
      */
     const routed = req.routeOptions?.url
     const isApi = (routed ?? req.url).startsWith('/api')
+    /**
+     * The avatar host appears in `img-src` ONLY while the operator has
+     * player avatars switched on, and this header is the enforcement point.
+     *
+     * A preference that merely hides a feature is one bug away from being
+     * meaningless: any stray <img> would still reach the third party and
+     * hand it a player list. Withholding the permission means the browser
+     * refuses the request whatever the UI does.
+     */
+    const imgSrc = prefs.playerAvatars ? `'self' data: ${AVATAR_ORIGIN}` : "'self' data:"
     reply.header(
       'Content-Security-Policy',
       isApi
         ? "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
-        : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+        : `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src ${imgSrc}; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
     )
     return payload
   })
@@ -749,6 +768,37 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     if (!result.ok) return reply.code(404).send({ error: 'that folder is not attached' })
     await pushSnapshot()
     return { ok: true }
+  })
+
+  /**
+   * Turning player avatars on or off.
+   *
+   * Admin-only and audited like any other change of what leaves this
+   * machine. Turning it ON is the consequential direction: from then on
+   * every browser looking at a Players page tells a third party which names
+   * are on your server. The audit line records who decided that.
+   */
+  app.post(API.prefs, async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'prefs.set')
+    if (!session) return
+    const body = req.body as { playerAvatars?: unknown } | undefined
+    if (typeof body?.playerAvatars !== 'boolean') {
+      return reply.code(400).send({ error: 'playerAvatars must be true or false' })
+    }
+    prefs = setPlayerAvatars(dir, body.playerAvatars, session.username)
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'prefs.set',
+      target: 'playerAvatars',
+      outcome: 'ok',
+      ip: clientIp(req),
+      detail: prefs.playerAvatars
+        ? `on: browsers may now send player names to ${AVATAR_ORIGIN}`
+        : 'off: the avatar host is no longer permitted by the policy',
+    })
+    await pushSnapshot()
+    return { ok: true, playerAvatars: prefs.playerAvatars }
   })
 
   // Admin-only, and the first route to be so. Acknowledging an IP change writes

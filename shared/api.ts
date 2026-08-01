@@ -539,6 +539,21 @@ export const Snapshot = z.object({
   ignored: z.array(IgnoredDirectory),
   /** Folders the operator attached, and whether each is still on disk. */
   attachments: z.array(AttachmentStatus),
+  /**
+   * Dashboard-wide preferences. Only what the UI must know to render
+   * honestly; the server remains the authority on what is permitted.
+   */
+  prefs: z.object({
+    /**
+     * Off by default. When on, the BROWSER fetches player avatars from a
+     * third party, which learns your player names and the viewer's IP. The
+     * Content-Security Policy only names that host while this is on, so the
+     * switch removes the permission rather than merely hiding the feature.
+     */
+    playerAvatars: z.boolean(),
+    /** The one avatar host, so the UI can name it before you agree to it. */
+    avatarOrigin: z.string(),
+  }),
   /** Host health, alongside per-server health rather than folded into it. */
   host: HostStatus,
   network: NetworkInfo,
@@ -791,6 +806,7 @@ export const API = {
   attach: '/api/attach',
   attachLaunch: '/api/attach/launch',
   attachDetach: '/api/attach/detach',
+  prefs: '/api/prefs',
   worldIcon: (id: string, dir: string) =>
     `/api/servers/${encodeURIComponent(id)}/worlds/${encodeURIComponent(dir)}/icon`,
   ackIpChange: '/api/network/ack-ip-change',

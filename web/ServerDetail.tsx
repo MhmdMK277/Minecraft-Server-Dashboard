@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
-import type { ServerStatus, LogLine } from '@shared/api'
+import type { ServerStatus, LogLine, Snapshot } from '@shared/api'
 import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT, fmtMemPair } from './status'
 import type { DimensionInfo, WorldsReading } from '@shared/api'
 import { WorldIcon } from './WorldIcon'
@@ -135,12 +135,14 @@ export default function ServerPages({
   s,
   page,
   canEdit,
+  prefs,
   lines,
   ensureBacklog,
 }: {
   s: ServerStatus
   page: ServerPage
   canEdit: boolean
+  prefs: Snapshot['prefs']
   lines: LogLine[]
   ensureBacklog: (id: string) => void
 }) {
@@ -153,7 +155,7 @@ export default function ServerPages({
       <Masthead s={s} full={page === 'overview'} />
       <div className="mt-4">
         {page === 'overview' && <Overview s={s} canEdit={canEdit} />}
-        {page === 'players' && <Players s={s} canEdit={canEdit} />}
+        {page === 'players' && <Players s={s} canEdit={canEdit} prefs={prefs} />}
         {page === 'worlds' && <Worlds s={s} />}
         {page === 'console' && <ConsolePage s={s} canEdit={canEdit} lines={lines} />}
         {page === 'backups' && <Backups s={s} canEdit={canEdit} />}
@@ -386,7 +388,111 @@ function parseWhitelist(raw: string): string[] {
 const NAME_RE = /^[A-Za-z0-9_]{1,16}$/
 
 /** Management surface: who is on, and who is allowed on. */
-function Players({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
+
+/**
+ * A player's face, if and only if the operator asked for it.
+ *
+ * The image is fetched by the BROWSER, not by the service, and that is the
+ * point of the disclosure next to the switch: the third party learns the
+ * names on this server and the IP of whoever is looking. We do not proxy it,
+ * because proxying would hide exactly the fact the operator is agreeing to.
+ *
+ * The placeholder is ours. The avatar host answers 404 for a name that does
+ * not resolve to a Mojang account (measured, not assumed), which is the
+ * right behaviour for an offline-mode server full of invented names: rather
+ * than a stranger's face standing in for a player, the row says plainly that
+ * the account did not resolve.
+ */
+function Avatar({ name, origin, on }: { name: string; origin: string; on: boolean }) {
+  const [failed, setFailed] = useState(false)
+  if (!on) return null
+  const size = 16
+  if (failed) {
+    return (
+      <span
+        title={`No Minecraft account resolved for "${name}". On an offline-mode server that is normal and says nothing about the player.`}
+        className="inline-flex size-4 shrink-0 items-center justify-center rounded-[2px] border border-border text-[8px] text-faint"
+        aria-hidden="true"
+      >
+        ?
+      </span>
+    )
+  }
+  return (
+    <img
+      src={`${origin}/avatar/${encodeURIComponent(name)}/${size * 2}.png`}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="size-4 shrink-0 rounded-[2px]"
+    />
+  )
+}
+
+/**
+ * The switch, with what it costs written next to it rather than in a doc.
+ *
+ * Off is the default and stays the default. While it is off the service does
+ * not name the avatar host in its Content-Security-Policy at all, so the
+ * browser refuses the request even if some future bug in this file tries to
+ * make it; the switch removes a permission rather than hiding a feature.
+ */
+function AvatarSwitch({ prefs, canEdit }: { prefs: Snapshot['prefs']; canEdit: boolean }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const host = prefs.avatarOrigin.replace(/^https?:\/\//, '')
+
+  if (!canEdit) return null
+
+  const set = (on: boolean) => {
+    setBusy(true)
+    setErr(null)
+    dashboard
+      .setPlayerAvatars(on)
+      .then(() => void dashboard.refresh())
+      .catch((e: unknown) => setErr(e instanceof Error ? e.message : 'could not change that'))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <div className="mt-3 border-t border-border/60 pt-2.5">
+      <label className="flex cursor-pointer items-start gap-2 text-[12px] text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={prefs.playerAvatars}
+          disabled={busy}
+          onChange={(e) => set(e.target.checked)}
+          className="mt-0.5 size-3.5 accent-primary"
+        />
+        <span className="prose-line">
+          Show player faces. Your browser fetches each one from{' '}
+          <code className="font-mono text-ink">{host}</code>, which means that service is told
+          the names on this server and sees the address of whoever has the dashboard open. It is
+          off until you turn it on, and while it is off the dashboard does not permit the request
+          at all, rather than merely not making it.
+        </span>
+      </label>
+      <p className="prose-line mt-1.5 pl-6 text-[11px] leading-relaxed text-faint">
+        Names that do not resolve to a Minecraft account get a plain placeholder, not a stand-in
+        face. On an offline-mode server most of them will not resolve, and that says nothing
+        about the player.
+      </p>
+      {err && <p className="prose-line mt-1.5 pl-6 text-[12px] text-bad">{err}</p>}
+    </div>
+  )
+}
+
+function Players({
+  s,
+  canEdit,
+  prefs,
+}: {
+  s: ServerStatus
+  canEdit: boolean
+  prefs: Snapshot['prefs']
+}) {
   const online = s.players ?? []
   const slpCount = s.slp?.playersOnline ?? null
   const runnable = s.health !== 'DOWN' || !!s.proc
@@ -451,8 +557,9 @@ function Players({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
             {online.map((p) => (
               <li
                 key={p}
-                className="rounded-md border border-border bg-secondary px-2 py-0.5 font-mono text-[11px] text-ink"
+                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-2 py-0.5 font-mono text-[11px] text-ink"
               >
+                <Avatar name={p} origin={prefs.avatarOrigin} on={prefs.playerAvatars} />
                 {p}
               </li>
             ))}
@@ -463,6 +570,7 @@ function Players({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
             {slpCount != null && slpCount > 0 ? `, though the ping reports ${slpCount}` : ''}.
           </p>
         )}
+        <AvatarSwitch prefs={prefs} canEdit={canEdit} />
       </Section>
 
       {canEdit && (
@@ -516,7 +624,8 @@ function Players({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
                         </button>
                       </li>
                     ) : (
-                      <li key={n}>
+                      <li key={n} className="flex items-center gap-1.5">
+                        <Avatar name={n} origin={prefs.avatarOrigin} on={prefs.playerAvatars} />
                         <button
                           type="button"
                           disabled={busy}

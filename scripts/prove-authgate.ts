@@ -24,7 +24,7 @@
  *
  * Run: npx tsx scripts/prove-authgate.ts
  */
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { API, SESSION_COOKIE, CSRF_HEADER } from '../shared/api'
@@ -297,6 +297,75 @@ console.log('\n=== 7. redaction covers free-text secrets, not just assignments =
     check(`left readable: ${line}`, redactLine(line) === line, redactLine(line))
   }
   console.log('   free-text secrets hidden, ordinary prose left readable')
+}
+
+// ===========================================================================
+console.log('\n=== player avatars: the switch removes a permission ===\n')
+// ===========================================================================
+/**
+ * The claim under test is not "the UI hides the faces". It is that while the
+ * operator has player avatars off, the browser is not PERMITTED to reach the
+ * avatar host at all, so a stray <img> in some future version cannot hand a
+ * third party the list of names on this server. A preference enforced only
+ * by the component that reads it is one bug away from meaning nothing.
+ */
+{
+  const { AVATAR_ORIGIN, setPlayerAvatars, loadPrefs } = await import('../server/prefs')
+
+  const cspOf = async (instance: typeof app) => {
+    const r = await instance.inject({ method: 'GET', url: '/' })
+    return String(r.headers['content-security-policy'] ?? '')
+  }
+
+  check('with no prefs file at all, avatars are off', loadPrefs(DATA).playerAvatars === false)
+
+  const off = await cspOf(app)
+  check(
+    'and the policy does not name the avatar host',
+    off.includes('img-src') && !off.includes(AVATAR_ORIGIN),
+    off,
+  )
+  check('while still allowing the app its own images', /img-src 'self' data:/.test(off), off)
+
+  // Turned on by an admin, the host appears, and only that host.
+  setPlayerAvatars(DATA, true, 'prove-authgate')
+  const onServer = await buildServer({ cfg, version: 'prove-authgate-avatars-on' })
+  const on = await cspOf(onServer)
+  check('once switched on, the policy names the avatar host', on.includes(AVATAR_ORIGIN), on)
+  check(
+    'and names exactly one host, not a wildcard',
+    !on.includes('img-src *') && !on.includes('https:;') && !/img-src[^;]*\*/.test(on),
+    on,
+  )
+  check(
+    'the rest of the policy is unchanged by the switch',
+    on.replace(` ${AVATAR_ORIGIN}`, '') === off,
+    `${on} | ${off}`,
+  )
+  // An API response must never gain the host: only the page loads images.
+  const apiCsp = String(
+    (await onServer.inject({ method: 'GET', url: API.snapshot })).headers['content-security-policy'] ?? '',
+  )
+  check(
+    'an API response still allows nothing, switch or no switch',
+    apiCsp.startsWith("default-src 'none'") && !apiCsp.includes(AVATAR_ORIGIN),
+    apiCsp,
+  )
+  await onServer.close()
+
+  // And back off again, because the setting has to be reversible in the
+  // direction that matters.
+  setPlayerAvatars(DATA, false, 'prove-authgate')
+  const again = await buildServer({ cfg, version: 'prove-authgate-avatars-off' })
+  check('switching it back off withdraws the permission', !(await cspOf(again)).includes(AVATAR_ORIGIN))
+  await again.close()
+
+  check(
+    'the route that changes it is admin-only and audited',
+    /require_\(req, reply, 'admin', 'prefs\.set'\)/.test(
+      readFileSync(join(import.meta.dirname, '..', 'server', 'http.ts'), 'utf8'),
+    ),
+  )
 }
 
 await app.close()

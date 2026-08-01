@@ -32,6 +32,7 @@ import { primeHistory, timingFor, observe as observeBoot, flush as flushBootTime
 import { dataDir } from './config'
 import { detectLauncher, indexTasks, type Launcher, type TaskIndex } from './launcher'
 import { loadAttached, type AttachedServer } from './attach'
+import { loadPrefs, AVATAR_ORIGIN } from './prefs'
 import { existsSync } from 'node:fs'
 import { isBusy, doubleSpawnAlerts } from './control'
 
@@ -224,6 +225,9 @@ export async function scan(
     servers,
     ignored,
     attachments,
+    // Read per scan like the backup policy, for the same reason: one file,
+    // one authority, no in-memory copy here to drift from it.
+    prefs: { playerAvatars: loadPrefs(dataDir()).playerAvatars, avatarOrigin: AVATAR_ORIGIN },
     host,
     network: {
       lanAddress: lan?.address ?? null,

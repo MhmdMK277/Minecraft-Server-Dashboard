@@ -13,9 +13,16 @@
       exactly the case the pivot exists for. CSP3 'self' matches a same-origin
       ws:// connection.
     -->
+    <!--
+      The avatar host is named below but NOT permitted by this tag alone.
+      Browsers intersect every policy they are given, and in production the
+      service sends its own header which omits that host unless the operator
+      has turned player avatars on. This tag is the dev-server policy, where
+      our header is not in play; the header is the gate.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://minotar.net; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
     />
     <title>Minecraft Server Dashboard</title>
   </head>

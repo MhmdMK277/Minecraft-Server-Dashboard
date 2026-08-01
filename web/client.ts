@@ -225,6 +225,8 @@ export const dashboard = {
   setAttachLaunch: (dir: string, confirmedLaunch: ConfirmedLaunch | null) =>
     send<unknown>(API.attachLaunch, 'POST', { dir, confirmedLaunch }),
   detach: (dir: string) => send<{ ok: boolean }>(API.attachDetach, 'POST', { dir }),
+  setPlayerAvatars: (playerAvatars: boolean) =>
+    send<{ ok: boolean }>(API.prefs, 'POST', { playerAvatars }),
   refresh: () => post<{ ok: boolean }>(API.refresh),
   acknowledgeIpChange: () => post<{ ok: boolean }>(API.ackIpChange),
   setBackupEnabled: (id: string, enabled: boolean) =>

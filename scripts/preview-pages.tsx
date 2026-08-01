@@ -105,7 +105,17 @@ const page = (p: 'overview' | 'console') =>
   renderToStaticMarkup(
     <div className="p-6">
       <h2 className="mb-3 font-mono text-[11px] uppercase tracking-widest text-warn">{p} page, worst case</h2>
-      <ServerPages s={gtnh} page={p} canEdit lines={lines} ensureBacklog={() => {}} />
+      <ServerPages
+        s={gtnh}
+        page={p}
+        canEdit
+        // Off, which is the product default and therefore the state worth
+        // rendering: a preview that quietly turned on a third-party fetch
+        // would be a preview of a product we do not ship.
+        prefs={{ playerAvatars: false, avatarOrigin: 'https://minotar.net' }}
+        lines={lines}
+        ensureBacklog={() => {}}
+      />
     </div>,
   )
 

@@ -384,6 +384,7 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
               s={selected}
               page={route.page}
               canEdit={isAdmin}
+              prefs={snap.prefs ?? { playerAvatars: false, avatarOrigin: '' }}
               lines={buffers[selected.id] ?? []}
               ensureBacklog={ensureBacklog}
             />
