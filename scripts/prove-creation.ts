@@ -50,10 +50,15 @@ const sha512 = (b: Buffer) => createHash('sha512').update(b).digest('hex')
 const JAR = Buffer.from('PK pretend this is a server jar, it only has to hash')
 let fixture: Server
 let base = ''
+const extraRoutes = new Map<string, Buffer>()
 
 async function main() {
   fixture = createServer((req, res) => {
-    if (req.url === '/good.jar') {
+    const extra = extraRoutes.get(req.url ?? '')
+    if (extra) {
+      res.writeHead(200, { 'content-type': 'application/octet-stream' })
+      res.end(extra)
+    } else if (req.url === '/good.jar') {
       res.writeHead(200, { 'content-type': 'application/java-archive' })
       res.end(JAR)
     } else if (req.url === '/redirect-good') {
@@ -553,6 +558,73 @@ async function main() {
       const wrongState = await runInstaller('no-such-op', true, DEPS)
       check('an unknown operation is refused', !wrongState.ok)
     }
+  }
+
+  // =========================================================================
+  console.log('\n=== 12. Adoptium: on demand, one version, verified, consequence stated ===\n')
+  // =========================================================================
+  {
+    const { provisionJava, findProvisioned, CONSEQUENCE_TEXT } = await import('../server/javaprovision')
+    const { execFile } = await import('node:child_process')
+    const { promisify } = await import('node:util')
+    const pexec = promisify(execFile)
+
+    // A real zip with the Temurin layout, built locally: jdk-21.0.0-jre/bin/java.exe
+    const tree = join(ROOT, 'zip-src', 'jdk-21.0.0-jre', 'bin')
+    mkdirSync(tree, { recursive: true })
+    writeFileSync(join(tree, 'java.exe'), 'not really java, only the layout matters', 'utf8')
+    const zipPath = join(ROOT, 'jre.zip')
+    await pexec('powershell.exe', [
+      '-NoProfile', '-NonInteractive', '-Command',
+      `Compress-Archive -Path '${join(ROOT, 'zip-src', 'jdk-21.0.0-jre')}' -DestinationPath '${zipPath}' -Force`,
+    ], { windowsHide: true })
+    const zipBytes = readFileSync(zipPath)
+    extraRoutes.set('/jre.zip', zipBytes)
+
+    const APPDATA = join(ROOT, 'appdata')
+    let jsonCalls = 0
+    const deps = {
+      base: APPDATA,
+      json: async () => {
+        jsonCalls++
+        return [{ binary: { package: { name: 'temurin-21-jre.zip', link: `${base}/jre.zip`, checksum: createHash('sha256').update(zipBytes).digest('hex') } } }]
+      },
+      download: (url: string, dest: string, expected: string) =>
+        fetchVerified({ url, dest, algo: 'sha256', expected, allowHosts: ['127.0.0.1'] }),
+    }
+
+    const p1 = await provisionJava(21, deps)
+    check('the runtime is provisioned and its home found', !p1.reused && existsSync(join(p1.javaHome, 'bin', 'java.exe')))
+    check('the home is inside the dashboard data dir, the stated consequence', p1.javaHome.startsWith(join(APPDATA, 'java')))
+    check('the staged zip did not accumulate', !existsSync(join(APPDATA, 'java', 'staging', 'temurin-21-jre.zip')))
+
+    const p2 = await provisionJava(21, deps)
+    check('a second creation REUSES the runtime', p2.reused && p2.javaHome === p1.javaHome)
+    check('reuse fetched nothing', jsonCalls === 1)
+    check('findProvisioned sees exactly the one major', findProvisioned(21, APPDATA) === p1.javaHome && findProvisioned(17, APPDATA) === null)
+
+    // Metadata without a checksum is a refusal, same rule as every source.
+    const noHash = { ...deps, base: join(ROOT, 'appdata2'), json: async () => [{ binary: { package: { name: 'x.zip', link: `${base}/jre.zip` } } }] }
+    let e1: unknown = null
+    try {
+      await provisionJava(17, noHash)
+    } catch (e) {
+      e1 = e
+    }
+    check('adoptium metadata without a checksum is refused', e1 instanceof Error && e1.message.includes('no checksum'))
+
+    // A wrong checksum leaves no zip behind.
+    const badHash = { ...deps, base: join(ROOT, 'appdata3'), json: async () => [{ binary: { package: { name: 'bad.zip', link: `${base}/jre.zip`, checksum: 'f'.repeat(64) } } }] }
+    let e2: unknown = null
+    try {
+      await provisionJava(17, badHash)
+    } catch (e) {
+      e2 = e
+    }
+    check('a wrong checksum fails the provisioning', e2 instanceof VerifyError && e2.kind === 'checksum')
+    check('and leaves no archive staged', !existsSync(join(ROOT, 'appdata3', 'java', 'staging', 'bad.zip')))
+
+    check('the consequence text names the absolute path problem', CONSEQUENCE_TEXT.includes('absolute path') && CONSEQUENCE_TEXT.includes('breaks'))
   }
 
   await new Promise<void>((r) => fixture.close(() => r()))
