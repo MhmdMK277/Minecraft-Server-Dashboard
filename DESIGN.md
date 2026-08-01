@@ -149,6 +149,23 @@ for as a missing feature.
   operator's and the ordinary never-write rules resume: nothing is written
   into it again except through an audited setting the operator changed.
 
+## The claim rule (standing finish discipline, 2026-08-01)
+
+Part of finishing every milestone, permanent, prompted by audit finding F6
+(a Backups page that said "detected" when no detection code existed) and by
+the sweep that followed it, which found two more sentences the code had
+outgrown.
+
+- **UI copy is a claim.** Any new or changed sentence the interface shows
+  must name the code that makes it true, in the review that ships it.
+- **Six words carry the burden of proof:** a claim that something is
+  *detected, measured, verified, protected, scheduled* or *applied* with no
+  code behind it does not ship. State the mechanism instead, or say
+  nothing.
+- **The failure mode this exists to catch:** a sentence written when a
+  feature was planned, left standing after the feature changed shape. The
+  sweep is re-run over touched surfaces at every milestone finish, not once.
+
 ## Deferred indefinitely, with the reason (2026-08-01)
 
 - **Plugin and mod management.** It means downloading third-party code into
