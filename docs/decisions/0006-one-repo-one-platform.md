@@ -31,5 +31,8 @@ README matrix or organisation layout implying work that does not exist.
 - Requests for other platforms are answered by this document: out of scope
   until someone actually builds it, and building it means its own repo with
   its own proofs, not a stub here.
+- Stated as a rule so it stops being re-asked (2026-08-02): **a second
+  repository is created only when it holds shipping code, never as a
+  placeholder for planned platforms.**
 - Docker is separately out of scope for identification reasons; see
   decision 0004.
