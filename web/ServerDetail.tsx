@@ -943,9 +943,11 @@ const DETECT_STATUS_LABEL: Record<BackupDetection['systems'][number]['status'], 
   stale: 'stale',
 }
 
+// No '~' here: every call site already says "roughly every", and
+// "roughly every ~0.5 h" hedged the same number twice (seen live on GTNH).
 function fmtCadence(hours: number): string {
-  if (hours >= 36) return `~${Math.round((hours / 24) * 10) / 10} days`
-  return `~${Math.round(hours * 10) / 10} h`
+  if (hours >= 36) return `${Math.round((hours / 24) * 10) / 10} days`
+  return `${Math.round(hours * 10) / 10} h`
 }
 
 /**
