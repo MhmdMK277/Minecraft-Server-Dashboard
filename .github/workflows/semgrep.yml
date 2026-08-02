@@ -4,6 +4,17 @@ name: Semgrep
 # macOS tool: a Windows-only contributor cannot necessarily reproduce a local
 # run, and a check nobody can rerun is not evidence. The rulesets match the
 # ones recorded in docs/security-audit.md.
+#
+# The version is PINNED, deliberately. Tracking `latest` meant the ruleset
+# changed under us and the build sat red for months on findings that were
+# already dispositioned, which teaches a reader to ignore the check. Pinned,
+# the finding set is deterministic: `--error` fails the build ONLY when a NEW
+# finding appears, which is the signal worth having. The current findings are
+# dispositioned in place with `nosemgrep:` annotations, each carrying the rule
+# id and a one-line reason (grep `nosemgrep` across the tree to read them all).
+# When a version bump or a registry-rule change surfaces a new finding, that is
+# a disposition task, not noise: triage it, then either fix it or annotate it
+# with its reason, and bump the pin here in the same commit.
 on:
   push:
     branches: [main]
@@ -21,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
-      image: semgrep/semgrep
+      image: semgrep/semgrep:1.172.0
     steps:
       - uses: actions/checkout@v4
 

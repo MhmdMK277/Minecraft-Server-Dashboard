@@ -62,8 +62,9 @@ def resume(tid):
 
 def dashboard_scan(tag):
     print(f"\n----- dashboard scan: {tag} -----", flush=True)
+    # proof tooling, hardcoded argv, no untrusted input; shell=True is how npx resolves on Windows.
     r = subprocess.run(["npx", "tsx", "scripts/probe-once.ts"], cwd=REPO,
-                       capture_output=True, text=True, timeout=180, shell=True)
+                       capture_output=True, text=True, timeout=180, shell=True)  # nosemgrep: python.lang.security.audit.subprocess-shell-true.subprocess-shell-true
     print(r.stdout.strip())
     if r.returncode != 0:
         print(r.stderr[-800:])

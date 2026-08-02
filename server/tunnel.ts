@@ -458,6 +458,7 @@ export function runAgent(
   const args = ['--secret-path', secretPath(base)]
   const child = deps.spawnAgent
     ? deps.spawnAgent(agentExePath(base), args)
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- args array (no shell); the exe and secret paths are join(dataDir, 'tunnel', ...), never request data. Runs only past the confirm gate.
     : spawn(agentExePath(base), args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
 
   runtime.proc = child

@@ -173,6 +173,7 @@ const FORGE_HOSTS = ['files.minecraftforge.net', 'maven.minecraftforge.net']
 export function parseSidecar(text: string, algo: HashAlgo): string {
   const first = text.trim().split(/[\s*]+/)[0] ?? ''
   const len = { sha1: 40, sha256: 64, sha512: 128 }[algo]
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- `len` is a fixed number (40/64/128) chosen by the hash algorithm, not user input.
   if (!new RegExp(`^[0-9a-fA-F]{${len}}$`).test(first)) {
     throw new Error(`the checksum sidecar does not contain a ${algo} digest`)
   }

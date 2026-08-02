@@ -232,6 +232,7 @@ export async function invokeLauncher(dir: string, l: Launcher): Promise<void> {
   const script = join(dir, l.script)
 
   if (process.platform !== 'win32') {
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- args array (no shell); `dir` and the script name come from the dashboard's own discovery of the servers root, never from a request. See spec §1.
     const child = spawn(script, [], {
       cwd: dir,
       detached: true,

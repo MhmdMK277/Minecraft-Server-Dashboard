@@ -98,6 +98,7 @@ export function parseTps(kind: string, raw: string): TpsParsed | null {
     if (!m) return null
     const windows = (m[1] ?? '')
       .split(',')
+      // nosemgrep: javascript.lang.security.audit.incomplete-sanitization.incomplete-sanitization -- strips Paper's estimated-value marker before Number(); a second '*' yields NaN, filtered out. Not escaping.
       .map((x) => Number(x.replace('*', '').trim()))
       .filter((x) => Number.isFinite(x))
     const first = windows[0]

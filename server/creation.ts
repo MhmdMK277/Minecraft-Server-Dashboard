@@ -552,6 +552,7 @@ export async function runInstaller(
   // chose "download Java for me" has no other java on PATH.
   const javaBin = journal.javaHome ? join(journal.javaHome, 'bin', 'java.exe') : 'java'
   const code = await new Promise<number>((done) => {
+    // nosemgrep: javascript.lang.security.detect-child-process.detect-child-process -- args array (no shell); javaBin is a provisioned path or 'java', installerJar is a journal-recorded '-installer.jar' name, neither from a request. Runs only past the confirm gate.
     const child = spawn(javaBin, ['-jar', installerJar, '--installServer'], {
       cwd: job.dir,
       windowsHide: true,

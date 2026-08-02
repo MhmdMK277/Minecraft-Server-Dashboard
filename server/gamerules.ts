@@ -100,8 +100,10 @@ export function parseQueryReply(name: string, raw: string): ParsedQuery {
   // Anchored on the rule name: a reply may carry glued fragments of an
   // earlier answer (measured on vanilla RCON), so the whole string is never
   // trusted, only the sentence about the rule that was asked for.
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- `name` is a game-rule catalog constant (CATALOG), never request text; not attacker-influenced.
   const modern = new RegExp(`Gamerule ${name} is currently set to: (\\S+)`).exec(raw)
   if (modern) return { kind: 'value', value: modern[1]! }
+  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- same: `name` is a catalog constant.
   const legacy = new RegExp(`(?:^|[\\s:])${name} = (\\S+)`).exec(raw)
   if (legacy) return { kind: 'value', value: legacy[1]!.trim() }
   if (raw.includes(`No game rule called '${name}'`)) return { kind: 'absent' }

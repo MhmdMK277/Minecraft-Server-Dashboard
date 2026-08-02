@@ -533,9 +533,28 @@ The parts of this pass a stranger can trust without trusting an AI. Run
 **`npm audit`: 0 vulnerabilities**, 595 dependencies.
 
 **CodeQL** (`security-extended`, GitHub-hosted, published to the Security tab):
-the workflow is green, which means it RAN, not that it is silent. It carries 37
-open informational alerts. Eight are in M4+ shipped modules, and every one is
-an excluded category or a pre-existing pattern:
+the workflow is green, which means it RAN, not that it is silent. It had
+carried 37 informational alerts; **all 37 are now dismissed on the Security
+tab, each with a categorized reason** (`false positive`, `won't fix`, or `used
+in tests`) so a stranger reading the tab sees they were reviewed rather than
+ignored. The categories and why:
+
+| Rule | n | Reason recorded on the tab |
+| --- | --- | --- |
+| `js/insecure-temporary-file` | 7 | won't fix: staging files live in the job's own directory or a test's throwaway dir, not a shared temp |
+| `js/file-system-race` | 5 | won't fix: reads/writes on files the app owns; no integrity boundary |
+| `js/http-to-file-access` | 5 | won't fix: the checksum-verified downloads, intended flow |
+| `js/incomplete-url-substring-sanitization` | 5 | used in tests: host-string assertions in creation proofs |
+| `js/missing-rate-limiting` | 4 | won't fix: login is throttled; general rate limiting is DoS, out of scope |
+| `js/log-injection` | 3 | used in tests: prove-websocket tooling; log injection not in the threat model |
+| `js/file-access-to-http` | 2 | won't fix: verify-then-fetch and the scoop builder, hardcoded hosts |
+| `js/biased-cryptographic-random` | 2 | won't fix: modulo bias on a ~139-bit RCON password, server-side only |
+| `js/command-line-injection` | 2 | won't fix: launcher `cmd.exe`, discovery-derived paths, never request data |
+| `js/indirect-command-line-injection` | 1 | won't fix: same launcher path |
+| `js/incomplete-sanitization` | 1 | false positive: `parse.ts` marker strip, not escaping |
+
+Eight of the 37 were in M4+ shipped modules; the rest are pre-M4 code or test
+scripts. None is a new exploitable defect. The specific M4+ lines:
 
 | Alert | Location | Disposition |
 | --- | --- | --- |
@@ -548,15 +567,30 @@ The `js/command-line-injection` (critical) alerts are in `launcher.ts`, pre-M4
 and already dispositioned (the `cmd.exe` launcher takes a discovery-derived
 directory, never request data; a directory name cannot contain a quote).
 
-**Semgrep** (`p/nodejs`, `p/owasp-top-ten`, external ruleset): 7 blocking
-findings, the same recurring set the CI has carried for months, none in new
-exploitable code. Two touch M4+ modules and both are excluded categories:
-`detect-non-literal-regexp` at `gamerules.ts:103,105` (the rule name in the
-query regex is a catalog constant, not user input; ReDoS/regex-injection
-excluded) and at `mcsources.ts:176` (the length in a hex-check regex is a
-number). The rest (`prove-stall.py` subprocess, a FAKE hex secret in
-`prove-tunnel.ts`, `parse.ts` marker-strip, `index.html` `ws://`) were
-dispositioned in workstream 1.
+**Semgrep**: the build had been RED on every push for months, which teaches a
+reader to ignore it. That is fixed, not reinterpreted. Two things were wrong:
+the workflow tracked `semgrep/semgrep:latest`, so the ruleset changed under us,
+and every finding failed the build via `--error`. Now:
+
+- **The version is pinned** (`semgrep/semgrep:1.172.0`), so the finding set is
+  deterministic run to run. A version bump is a deliberate commit, and its new
+  findings are dispositioned in the same change.
+- **Every current finding is dispositioned in place** with a `nosemgrep:`
+  annotation carrying the rule id and a one-line reason (grep `nosemgrep`
+  across the tree). Under the pinned version these are: `subprocess-shell-true`
+  in `prove-stall.py` (proof tooling, hardcoded argv), and
+  `detect-child-process` in `launcher.ts`, `creation.ts` and `tunnel.ts` (all
+  args-array spawns whose paths are discovery-derived or catalog constants,
+  never request data). Annotations for the rules an older registry ruleset
+  raised (`detect-non-literal-regexp`, `incomplete-sanitization`,
+  `detect-insecure-websocket`, `detected-generic-secret`) are also in place, so
+  a registry shift does not re-red the build on already-answered findings.
+- **`--error` stays**, so the build now fails ONLY when a NEW finding appears,
+  which is the signal worth keeping. Verified locally: the pinned scan exits 0.
+
+When a future run surfaces a new finding, that is a disposition task: triage
+it, then fix it or annotate it with its reason. A red Semgrep build now means
+something.
 
 ### Workstream 3b: exploits fired, with their output
 

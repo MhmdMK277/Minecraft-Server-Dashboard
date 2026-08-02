@@ -65,6 +65,7 @@ const auditFile = join(DATA, 'audit.jsonl')
 const auditText = () => (existsSync(auditFile) ? readFileSync(auditFile, 'utf8') : '')
 
 const IDENT = { actor: 'proof-admin', role: 'admin', ip: '127.0.0.1' }
+// nosemgrep: generic.secrets.security.detected-generic-secret.detected-generic-secret -- a fabricated fixture value for the proof, not a real credential.
 const SECRET = 'a1b2c3d4e5f60718293a4b5c6d7e8f90'
 
 const ok = (data: unknown) => ({ status: 200, body: { status: 'success', data } })

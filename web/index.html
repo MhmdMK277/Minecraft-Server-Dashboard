@@ -11,6 +11,7 @@
       dashboard from another machine, so the WebSocket origin is whatever host
       the page was served from -- pinning it to localhost would have blocked
       exactly the case the pivot exists for. CSP3 'self' matches a same-origin
+      nosemgrep: javascript.lang.security.detect-insecure-websocket.detect-insecure-websocket -- documentation text, not code; ws:// follows from the plain-HTTP LAN deployment decision (docs/security-audit.md).
       ws:// connection.
     -->
     <!--
