@@ -323,7 +323,10 @@ export function observeFleet(
   servers: ServerStatus[],
   lag: LoopLag,
   now: number = Date.now(),
-): HostStatus {
+  // The paging reading is sampled on its own timer (server/hostpaging.ts)
+  // and attached by discovery, so this module stays about attribution and
+  // never spawns anything.
+): Omit<HostStatus, 'paging'> {
   const host = assessHost(lag)
   const inferred = inferFault(servers, host, lag)
 

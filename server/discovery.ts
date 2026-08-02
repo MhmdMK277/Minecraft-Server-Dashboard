@@ -27,10 +27,12 @@ import { lanAddress, publicIp, dynmapPort, portResponds } from './network'
 import { observerBlockedMs, loopLag } from './loopguard'
 import { gcSummary } from './gclog'
 import { observeFleet } from './hostwatch'
+import { pagingReading } from './hostpaging'
 import { loadPolicy, isBackupEnabled, type BackupPolicy } from './backuppolicy'
 import { primeHistory, timingFor, observe as observeBoot, flush as flushBootTimes } from './boottime'
 import { dataDir } from './config'
-import { detectLauncher, indexTasks, type Launcher, type TaskIndex } from './launcher'
+import { detectLauncher, indexTasks, taskPriorityFor, type Launcher, type TaskIndex } from './launcher'
+import { residencyReading } from './residency'
 import { loadAttached, type AttachedServer } from './attach'
 import { loadPrefs, AVATAR_ORIGIN } from './prefs'
 import { observe as observeHistory, forgetAllExcept } from './history'
@@ -257,8 +259,10 @@ export async function scan(
   // what our own event-loop lag is. See server/hostwatch.ts.
   //
   // Read the lag before anything else touches the loop, so the figure describes
-  // the window the probes above actually ran in.
-  const host = observeFleet(servers, loopLag())
+  // the window the probes above actually ran in. The paging reading rides
+  // along so the two numbers the stall investigation had to correlate by hand
+  // (our lag, the host's hard-fault rate) travel in the same snapshot.
+  const host = { ...observeFleet(servers, loopLag()), paging: pagingReading() }
 
   // Below the lag reading deliberately: this is a disk write, and a disk write
   // above it would appear in the very measurement it precedes. It runs only when
@@ -374,9 +378,6 @@ async function inspect(
   const rc = rconConfig(dir) // credentials stay in this scope
   const worlds = worldDirs(dir)
   const dport = dynmapPort(dir)
-  // Reading the tail of gc.log is synchronous file I/O, so it belongs up here
-  // with everything else that blocks -- above the first await. Spec §11.
-  const gc = gcSummary(dir)
   /**
    * An ATTACHED folder gets the launch method the operator confirmed while
    * looking at it, and nothing else.
@@ -395,6 +396,17 @@ async function inspect(
     ? launcherFromAttachment(attachedRecord, dir)
     : detectLauncher(dir, tasks)
   const jvm = jvmForDir(jvms, dir)
+  // Reading the tail of gc.log is synchronous file I/O, so it belongs up here
+  // with everything else that blocks -- above the first await (spec §11). It
+  // sits AFTER jvm resolution because the summary needs the process start
+  // time to split pauses at the restart boundary: without it, a pause from a
+  // replaced JVM reads as the current server dying (audit finding F9).
+  const nowMs = Date.now()
+  const gc = gcSummary(
+    dir,
+    nowMs,
+    jvm?.uptimeSeconds != null ? nowMs - jvm.uptimeSeconds * 1000 : null,
+  )
   // Synchronous stat + read, so it belongs above the first await with the rest
   // of the blocking filesystem work. Spec §11 -- see the note at the top of
   // inspect(): anything sync that runs after an await bills its cost to whichever
@@ -562,6 +574,7 @@ async function inspect(
     slp,
     rcon: rconProbe,
     gc: hasProcess ? gc : null,
+    memory: hasProcess ? residencyReading(jvm, taskPriorityFor(dir, tasks)) : null,
     boot,
     backupEnabled: isBackupEnabled(policy, name),
     launchStrategy: launcher.strategy,

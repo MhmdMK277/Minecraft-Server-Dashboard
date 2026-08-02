@@ -285,11 +285,32 @@ export function gcLogPath(dir: string): string | null {
 }
 
 /**
+ * Slack around the process boundary. Uptime is read in whole seconds and the
+ * two clocks (log timestamps, process creation) are not the same clock, so a
+ * pause within this margin of the start is credited to the CURRENT process:
+ * mis-crediting a fresh JVM's first young pause to the dead one understates
+ * the living process, which is the safer direction, and a fresh JVM cannot
+ * have produced a multi-second pause in its first two seconds anyway.
+ */
+export const PROCESS_BOUNDARY_SLACK_MS = 2_000
+
+/**
  * Summarise a server's recent pauses. Returns null when the server was not
  * started with GC logging -- which is a normal state, not a fault, and must not
  * render as a problem.
+ *
+ * `processStartMs` is when the CURRENT process began, when the caller knows
+ * it. With it, pauses older than the process are split into
+ * `previousProcess` and every headline figure (count, worst, severity)
+ * describes only the process that is actually running. Without it (server
+ * down, uptime unreadable) the window is summarised whole, as before --
+ * there is no current process to misattribute to.
  */
-export function gcSummary(dir: string, now = Date.now()): GcSummary | null {
+export function gcSummary(
+  dir: string,
+  now = Date.now(),
+  processStartMs: number | null = null,
+): GcSummary | null {
   const path = gcLogPath(dir)
   if (!path) return null
   const cutoff = now - GC_WINDOW_MINUTES * 60_000
@@ -336,15 +357,36 @@ export function gcSummary(dir: string, now = Date.now()): GcSummary | null {
     ? Math.max(0, Math.round(((now - from) / 60_000) * 10) / 10)
     : GC_WINDOW_MINUTES
 
-  return summarise(w.pauses, now, { coveredMinutes, truncated: w.truncated })
+  // Split at the process boundary, when we know where it is.
+  let current = w.pauses
+  let previous: PreviousProcess | null = null
+  if (processStartMs !== null) {
+    const boundary = processStartMs - PROCESS_BOUNDARY_SLACK_MS
+    const before = w.pauses.filter((p) => p.at < boundary)
+    if (before.length > 0) {
+      current = w.pauses.filter((p) => p.at >= boundary)
+      const worst = before.reduce((a, b) => (b.ms > a.ms ? b : a))
+      previous = {
+        count: before.length,
+        maxMs: Math.round(worst.ms),
+        worstKind: worst.kind,
+        replacedAt: new Date(processStartMs).toISOString(),
+      }
+    }
+  }
+
+  return summarise(current, now, { coveredMinutes, truncated: w.truncated }, previous, processStartMs)
 }
 
 export type Coverage = { coveredMinutes: number; truncated: boolean }
+export type PreviousProcess = NonNullable<GcSummary['previousProcess']>
 
 export function summarise(
   pauses: GcPause[],
   now = Date.now(),
   coverage: Coverage = { coveredMinutes: GC_WINDOW_MINUTES, truncated: false },
+  previous: PreviousProcess | null = null,
+  processStartMs: number | null = null,
 ): GcSummary {
   const ms = pauses.map((p) => p.ms).sort((a, b) => a - b)
   const worstPause = pauses.reduce<GcPause | null>((w, p) => (!w || p.ms > w.ms ? p : w), null)
@@ -386,7 +428,18 @@ export function summarise(
     detail += ` The log is being written faster than ${Math.round(MAX_READ_BYTES / 1024 / 1024)} MB per ${GC_WINDOW_MINUTES} minutes, so this counts only the most recent ${coverage.coveredMinutes} minutes. The real ${GC_WINDOW_MINUTES}-minute figures are higher.`
   }
 
-  const spanMs = Math.max(1, coverage.coveredMinutes * 60_000)
+  if (previous) {
+    // The window spans a restart. Say so plainly, name the moment, and keep
+    // the dead process's record separate from the living one's.
+    detail += ` This window spans a restart: the process serving this server was replaced at ${new Date(previous.replacedAt).toLocaleTimeString('en-GB')}. ${previous.count} earlier pause${previous.count === 1 ? '' : 's'} (worst ${fmt(previous.maxMs)}${previous.worstKind ? `, ${previous.worstKind}` : ''}) belong to the replaced process and are not counted above.`
+  }
+
+  // The denominator for "percent stopped" is the time the CURRENT process has
+  // actually existed inside the window, when that is shorter than the window:
+  // dividing a 30-minute-old process's pauses by a full hour would understate
+  // exactly the number this summary exists to state.
+  let spanMs = Math.max(1, coverage.coveredMinutes * 60_000)
+  if (processStartMs !== null) spanMs = Math.max(1, Math.min(spanMs, now - processStartMs))
 
   return {
     windowMinutes: GC_WINDOW_MINUTES,
@@ -404,6 +457,7 @@ export function summarise(
     stoppedPercent: Math.round((total / spanMs) * 10000) / 100,
     severity,
     detail,
+    previousProcess: previous,
   }
 }
 

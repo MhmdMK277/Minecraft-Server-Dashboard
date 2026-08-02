@@ -217,6 +217,78 @@ if (liveDir) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The process boundary (audit finding F9). A window that spans a restart must
+// not present a dead process's pause as the living server's crisis: on
+// 2026-08-02 a 946 ms pause from a JVM replaced at 05:00 rode in the same
+// figures as the new process's warmup churn and read as a live emergency.
+{
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const dir = mkdtempSync(join(tmpdir(), 'mcdash-gclog-boundary-'))
+  mkdirSync(join(dir, 'logs'))
+
+  const now = Date.parse('2026-08-02T06:00:00.000+0200')
+  const startedAt = now - 33 * 60_000 // the current process is 33 minutes old
+  const iso = (t: number) => new Date(t).toISOString().replace('Z', '+0000')
+  const sp = (t: number, ns: number, kind = 'G1CollectForAllocation') =>
+    `[${iso(t)}][10.000s][info][safepoint    ] Safepoint "${kind}", Time since last: 1 ns, Reaching safepoint: 100 ns, At safepoint: ${ns} ns, Total: ${ns + 100} ns`
+  writeFileSync(
+    join(dir, 'logs', 'gc.log'),
+    [
+      sp(now - 50 * 60_000, 946_000_000), // the old JVM's stall
+      sp(now - 45 * 60_000, 300_000_000), // and another
+      sp(startedAt - 1_000, 5_000_000), // inside the slack: credited to current
+      sp(now - 30 * 60_000, 36_000_000), // the new JVM's warmup
+      sp(now - 10 * 60_000, 20_000_000),
+      '',
+    ].join('\n'),
+  )
+
+  resetGcCache()
+  const withStart = gcSummary(dir, now, startedAt)
+  check('F9: the summary exists for the synthetic log', withStart !== null)
+  if (withStart) {
+    check('F9: headline figures are the current process only', withStart.count === 3)
+    check(
+      'F9: the dead process cannot set the worst pause',
+      withStart.maxMs === 36,
+      `maxMs ${withStart.maxMs}`,
+    )
+    check('F9: a healthy current process reads ok, not severe', withStart.severity === 'ok')
+    check(
+      'F9: the replaced process is reported separately, worst preserved',
+      withStart.previousProcess?.count === 2 && withStart.previousProcess.maxMs === 946,
+    )
+    check(
+      'F9: the boundary sentence names the restart',
+      withStart.detail.includes('spans a restart') && withStart.detail.includes('replaced at'),
+    )
+    check(
+      'F9: replacedAt is the process start moment',
+      withStart.previousProcess?.replacedAt === new Date(startedAt).toISOString(),
+    )
+    check(
+      'F9: stopped-percent divides by the process age, not the window',
+      // 61 ms over 33 minutes, not over 60: the shorter denominator is honest.
+      Math.abs(withStart.stoppedPercent - (61 / (33 * 60_000)) * 100) < 0.01,
+      `${withStart.stoppedPercent}%`,
+    )
+  }
+
+  resetGcCache()
+  const withoutStart = gcSummary(dir, now, null)
+  check(
+    'F9: with no known process start the window is summarised whole, as before',
+    withoutStart !== null && withoutStart.count === 5 && withoutStart.maxMs === 946,
+    `count ${withoutStart?.count}, maxMs ${withoutStart?.maxMs}`,
+  )
+  check(
+    'F9: whole-window mode reports no boundary, because none is known',
+    withoutStart !== null && withoutStart.previousProcess === null,
+  )
+}
+
 console.log('')
 let failed = 0
 for (const [l, ok, d] of checks) {

@@ -67,6 +67,7 @@ import {
 import { audit, initAudit } from './audit'
 import { setBackupEnabled, isBackupEnabled } from './backuppolicy'
 import { readBackupDetection, resetDetectionCache } from './backupdetect'
+import { startPagingSampler, stopPagingSampler } from './hostpaging'
 import { runColdBackup, restoreColdBackup, listColdBackups } from './coldbackup'
 import { writeSetting } from './serversettings'
 import { startServer, stopServer, restartServer, runCommand } from './control'
@@ -1568,9 +1569,13 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     // process open on its own.
     setInterval(() => store.sweep(), 5 * 60_000).unref(),
   ]
+  // Hard-fault sampling runs on its own timer, never inside the scan: it
+  // spawns a PowerShell, and spec §11 forbids the scan path carrying that.
+  startPagingSampler()
 
   app.addHook('onClose', async () => {
     for (const t of timers) clearInterval(t)
+    stopPagingSampler()
     consoleBus.off('batch', onBatch)
     stopObserverMonitor()
     stopAllConsoles()

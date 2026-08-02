@@ -44,8 +44,15 @@ const SCRIPTS = ['start.bat', 'start.cmd', 'start.sh']
  * One enumeration for the whole fleet rather than one query per server: this is
  * the same N+1 mistake the identity provider already made once, and control
  * routes are allowed to be slower than the scan but not gratuitously so.
+ *
+ * `priority` is the task's Settings.Priority (0-10; Task Scheduler's default
+ * is 7, which runs the process BelowNormal with LOW MEMORY PRIORITY, making
+ * its pages Windows' first eviction choice). It rides along here because the
+ * same enumeration already holds the task object, and reading it separately
+ * would be a second 870 ms sweep for one integer.
  */
-export type TaskIndex = Map<string, string>
+export type TaskEntry = { task: string; priority: number | null }
+export type TaskIndex = Map<string, TaskEntry>
 
 const norm = (p: string) => p.replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase()
 
@@ -63,6 +70,7 @@ foreach ($t in Get-ScheduledTask) {
         wd   = [string]$wd
         args = [string]$args
         exec = [string]$a.Execute
+        prio = $t.Settings.Priority
       }
     }
   }
@@ -144,21 +152,29 @@ export async function indexTasks(maxAgeMs = TASK_CACHE_MS): Promise<TaskIndex> {
     const name = String(r.name ?? '')
     if (!name) continue
     const full = path.endsWith('\\') ? `${path}${name}` : `${path}\\${name}`
+    const prio = Number(r.prio)
     // First match wins, so a duplicate task cannot silently replace the one the
     // operator has been using.
-    if (!index.has(norm(dir))) index.set(norm(dir), full)
+    if (!index.has(norm(dir))) {
+      index.set(norm(dir), { task: full, priority: Number.isInteger(prio) ? prio : null })
+    }
   }
   cached = { at: Date.now(), index }
   return index
 }
 
+/** The task's Settings.Priority for a directory, when a task names it. */
+export function taskPriorityFor(dir: string, tasks: TaskIndex): number | null {
+  return tasks.get(norm(dir))?.priority ?? null
+}
+
 export function detectLauncher(dir: string, tasks: TaskIndex): Launcher {
-  const task = tasks.get(norm(dir))
-  if (task) {
+  const entry = tasks.get(norm(dir))
+  if (entry) {
     return {
       strategy: 'windows-task',
-      taskName: task,
-      detail: `Started by the scheduled task "${task}". The dashboard will run that task rather than launching the jar itself, so the server comes up in the same session and context it does at boot.`,
+      taskName: entry.task,
+      detail: `Started by the scheduled task "${entry.task}". The dashboard will run that task rather than launching the jar itself, so the server comes up in the same session and context it does at boot.`,
     }
   }
   for (const s of SCRIPTS) {

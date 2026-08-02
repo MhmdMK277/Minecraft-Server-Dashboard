@@ -150,8 +150,53 @@ export const GcSummary = z.object({
   stoppedPercent: z.number(),
   severity: GcSeverity,
   detail: z.string(),
+  /**
+   * Pauses inside the window that belong to a PROCESS THAT NO LONGER EXISTS,
+   * split out so a restart cannot make a healthy server look like a dying
+   * one. On 2026-08-02 a 946 ms pause from a JVM replaced at 05:00 was
+   * presented in the same figures as the fresh process's warmup churn, and
+   * the combination read as a live crisis (audit finding F9). Every number
+   * above this field describes the CURRENT process only whenever the
+   * process's start time is known; what the replaced process did is here,
+   * named as such, or null when the window spans no restart.
+   */
+  previousProcess: z
+    .object({
+      count: z.number(),
+      maxMs: z.number(),
+      worstKind: z.string().nullable(),
+      /** When the current process started, i.e. when the old one was gone. */
+      replacedAt: z.string(),
+    })
+    .nullable(),
 })
 export type GcSummary = z.infer<typeof GcSummary>
+
+/**
+ * How exposed a running server's memory is to eviction (server/residency.ts).
+ *
+ * Two facts, read not inferred: the scheduled task's Priority (Task
+ * Scheduler's default 7 runs the process BelowNormal with LOW memory
+ * priority, so Windows trims its pages first under any bulk file I/O) and
+ * how much of the process's private memory is actually resident right now.
+ * The combination is what makes multi-second GC pauses possible on a machine
+ * with free RAM: a collection walking a mostly-nonresident heap reads it
+ * back from disk. The dashboard reports the condition; changing a task's
+ * priority is the operator's act, never the dashboard's.
+ */
+export const MemoryReading = z.object({
+  workingSetMb: z.number(),
+  privateMb: z.number(),
+  /** workingSet / private. Low is normal for an idle JVM; low PLUS low priority is the trap. */
+  residencyPercent: z.number(),
+  /** The launching task's Settings.Priority; null when no task or unreadable. */
+  taskPriority: z.number().nullable(),
+  /** Priority 7-10: BelowNormal or lower, which includes low MEMORY priority. */
+  lowPriority: z.boolean(),
+  vulnerable: z.boolean(),
+  detail: z.string(),
+})
+export type MemoryReading = z.infer<typeof MemoryReading>
 
 /**
  * How a server can be started, if the dashboard could work it out.
@@ -296,6 +341,8 @@ export const ServerStatus = z.object({
   rcon: RconProbe.nullable(),
   /** Null when this server was not started with GC logging. Normal, not a fault. */
   gc: GcSummary.nullable(),
+  /** Null when the server is not running or its memory counters were unreadable. */
+  memory: MemoryReading.nullable(),
   /** The start window and what it was derived from. Never null: there is always a window. */
   boot: BootTiming,
   /**
@@ -444,11 +491,33 @@ export const FleetInference = z.object({
 })
 export type FleetInference = z.infer<typeof FleetInference>
 
+/**
+ * The host's hard-fault rate (server/hostpaging.ts), sampled alongside loop
+ * lag so the dashboard can make the correlation the stall investigation had
+ * to make by hand: bulk file I/O -> resident memory evicted -> the next
+ * full-heap GC on a low-priority JVM stalls for seconds. `baselinePerSec`
+ * is the median of the retained recent samples, shipped next to the current
+ * number so "elevated" is checkable, not asserted.
+ */
+export const PagingReading = z.object({
+  pagesInputPerSec: z.number(),
+  sampledAt: z.string(),
+  baselinePerSec: z.number(),
+  worstRecentPerSec: z.number(),
+  /** How much history the baseline and worst were computed over. */
+  windowMinutes: z.number(),
+  elevated: z.boolean(),
+  detail: z.string(),
+})
+export type PagingReading = z.infer<typeof PagingReading>
+
 export const HostStatus = z.object({
   state: HostState,
   detail: z.string(),
   lag: LoopLag,
   fleet: FleetInference,
+  /** Null until the first sample lands, and always null off Windows. */
+  paging: PagingReading.nullable(),
 })
 export type HostStatus = z.infer<typeof HostStatus>
 

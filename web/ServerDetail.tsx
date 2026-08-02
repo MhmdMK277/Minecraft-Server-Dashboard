@@ -318,6 +318,34 @@ function Overview({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
             </Section>
           )}
 
+          {s.memory && (
+            <Section
+              label="Memory eviction exposure"
+              note="Two facts read, never inferred (server/residency.ts): the scheduled task's priority, and how much of the process is resident in RAM right now. Their combination is what turns someone else's bulk file I/O into this server's multi-second pause."
+            >
+              <div className="grid grid-cols-2 gap-x-5 gap-y-3 sm:grid-cols-4">
+                <Metric
+                  label="Resident"
+                  value={`${s.memory.residencyPercent}%`}
+                  tone={s.memory.vulnerable ? 'warn' : undefined}
+                />
+                <Metric label="Working set" value={`${s.memory.workingSetMb} MB`} />
+                <Metric label="Committed" value={`${s.memory.privateMb} MB`} />
+                <Metric
+                  label="Task priority"
+                  value={s.memory.taskPriority != null ? String(s.memory.taskPriority) : '–'}
+                  tone={s.memory.lowPriority ? 'warn' : undefined}
+                  title="Settings.Priority of the scheduled task that launches this server. 7, the Task Scheduler default, runs the process at low memory priority."
+                />
+              </div>
+              <p
+                className={`prose-line mt-2.5 text-[12px] leading-relaxed ${s.memory.vulnerable ? 'text-warn' : 'text-muted-foreground'}`}
+              >
+                {s.memory.detail}
+              </p>
+            </Section>
+          )}
+
           <Section
             label="Start window"
             note="The window that decides STARTING from HUNG, measured from this server's own boots where possible."

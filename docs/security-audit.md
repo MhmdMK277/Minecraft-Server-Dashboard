@@ -156,6 +156,27 @@ the control routes cannot reach a real JVM and no real world can be touched.
 | F6 | Medium | Backups page claimed a detection that never existed (found 2026-08-01, an honesty defect rather than a network one) | **Fixed**, `6b6dc9b` |
 | F7 | Medium | Addresses page presented a VPN's exit address as the home public address (found 2026-08-02, honesty defect) | **Fixed** |
 | F8 | Low | The pre-push guard's one-pattern-list design made per-file whole-exemption the only available fix, so a legitimate reference forced dropping every check for that file (found 2026-08-02, guard-design defect) | **Fix written**, applied by the operator's hand (the hook is local and untracked) |
+| F9 | Medium | A GC pause window spanning a restart presented a replaced process's pause as the live server's: "304 pauses, worst 946 ms" combined a dead JVM's stall with a fresh JVM's harmless warmup churn and read as a current crisis (found 2026-08-02, honesty defect, same class as F6/F7) | **Fixed**, `server/gclog.ts` splits at the process boundary; prove-gclog pins it |
+
+#### F9 (medium): two processes presented as one sick one
+
+At 05:33 on 2026-08-02 the fleet showed a server with "304 stop-the-world
+pauses in the last 60 minutes, worst 946 ms". Both numbers were true of the
+window and the picture was wrong: the 946 ms pause happened at 04:57 in a
+JVM that was stopped at 05:00 by the nightly backup rotation, and the pause
+count was the replacement JVM's normal warmup churn (its real worst: 36 ms).
+The reading walked rotated logs across the restart, which is correct
+behaviour, and then attributed everything it found to "this server" as if a
+server were one continuous process, which is not. The operator read it as a
+healthy server dying, which is the F6/F7 failure class inverted: honest
+numbers, dishonest aggregation.
+
+Fixed in `server/gclog.ts`: when the current process's start time is known,
+every headline figure (count, worst, severity, stopped-percent, whose
+denominator is now the process's own age) describes the current process
+only, and pauses older than it are reported in a separate
+`previousProcess` block whose sentence names the moment of replacement.
+With no known process start, the window is summarised whole, unchanged.
 
 #### F8 (low): a guard whose only exception is total exemption
 

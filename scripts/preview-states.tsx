@@ -96,6 +96,7 @@ function srv(o: Partial<ServerStatus> & { name: string }): ServerStatus {
     },
     rcon: { ok: true, latencyMs: 1, note: '' },
     gc: null,
+    memory: null,
     boot: {
       graceSeconds: 180,
       source: 'default',
@@ -243,8 +244,11 @@ function render(s: Scenario): { host: HostStatus; servers: ServerStatus[] } {
   const now = Date.parse('2026-07-28T03:15:00.000Z')
   let host!: HostStatus
   // Replay the scan history so the "held N scans" figures are produced by the
-  // real code path rather than written into the fixture by hand.
-  for (let i = 0; i < s.scans; i++) host = observeFleet(s.servers, s.lag, now + i * 10_000)
+  // real code path rather than written into the fixture by hand. Paging is
+  // null here as it is on any machine before the first sample lands.
+  for (let i = 0; i < s.scans; i++) {
+    host = { ...observeFleet(s.servers, s.lag, now + i * 10_000), paging: null }
+  }
   return { host, servers: s.servers }
 }
 

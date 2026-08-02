@@ -49,6 +49,7 @@ const gtnh: ServerStatus = {
     latencyMs: 9,
   },
   rcon: { ok: true, latencyMs: 24, note: '' },
+  memory: null,
   gc: {
     maxMs: 253,
     p99Ms: 240,
@@ -60,6 +61,7 @@ const gtnh: ServerStatus = {
     coveredMinutes: 60,
     windowMinutes: 60,
     truncated: false,
+    previousProcess: null,
     worstKind: 'G1PauseRemark',
     worstAt: new Date('2026-07-31T04:39:05Z').toISOString(),
     detail: 'Worst stop-the-world pause 253 ms (G1PauseRemark). 84 pauses in the window, 1% of wall clock stopped.',

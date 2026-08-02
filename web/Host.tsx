@@ -59,7 +59,7 @@ export default function Host({
   identity: IdentityScan
 }) {
   const st = STATE_STYLE[host.state]
-  const { lag, fleet } = host
+  const { lag, fleet, paging } = host
   const loud = fleet.fault !== 'none' && fleet.fault !== 'server'
   // An identity failure is fleet-wide by nature, so it belongs here rather than
   // repeated on every card. It is also the failure that looks most like an
@@ -115,11 +115,17 @@ export default function Host({
         </p>
       )}
 
+      {paging?.elevated && (
+        <p className="prose-line mt-2.5 rounded-md border border-warn/40 bg-warn/10 px-2.5 py-1.5 text-[12px] leading-relaxed text-warn">
+          {paging.detail}
+        </p>
+      )}
+
       <div className="mt-4 flex flex-wrap items-end gap-x-10 gap-y-4 pl-1.5">
         {/* Not flex-1: stretching four figures across a 1500px panel puts 300px
             between each, and a row you have to saccade across is not a row you
             read at a glance. They stay grouped; the sparkline takes the slack. */}
-        <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-5">
           <Metric
             label="Loop lag p95"
             value={`${lag.p95Ms} ms`}
@@ -154,6 +160,19 @@ export default function Host({
             title="Live servers with RCON that are STALLED, HUNG or unreadable. A server without RCON is excluded. It is unreadable in every scan, and a constant cannot correlate with anything."
           >
             <div className="mt-0.5 text-[10px] text-faint">servers probed</div>
+          </Metric>
+          <Metric
+            label="Hard faults"
+            value={paging ? `${Math.round(paging.pagesInputPerSec)}/s` : '–'}
+            tier="lead"
+            tone={paging?.elevated ? 'warn' : undefined}
+            title="Pages read back from disk per second (server/hostpaging.ts, sampled every 30 s). Bulk file I/O evicts resident memory; a low-priority JVM caught in it can stall for seconds at its next full-heap collection. Next to loop lag deliberately: these two numbers together are the correlation the stall investigation had to make by hand."
+          >
+            {paging && (
+              <div className="mt-0.5 text-[10px] text-faint">
+                baseline ~{Math.round(paging.baselinePerSec)}/s over {paging.windowMinutes}m
+              </div>
+            )}
           </Metric>
         </div>
 

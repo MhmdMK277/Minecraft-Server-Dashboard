@@ -222,6 +222,7 @@ function srv(name: string, health: ServerStatus['health']): ServerStatus {
     slp: null,
     rcon: null,
     gc: null,
+    memory: null,
     boot: {
       graceSeconds: 180,
       source: 'default',
@@ -377,6 +378,48 @@ check(
 )
 
 // ===========================================================================
+// The paging reading (stall investigation, 2026-08-02): the number that had
+// to come from an external monitor's CSV now rides in the snapshot. What
+// must not happen: a quiet machine reading as elevated (10x a tiny idle
+// baseline is still tiny) or a null-before-first-sample reading as a zero.
+{
+  const { pushPagingSample, pagingReading, resetPaging, MIN_ELEVATED_PPS, ELEVATED_FACTOR } =
+    await import('../server/hostpaging')
+
+  resetPaging()
+  check('before any sample the paging reading is null, not zero', pagingReading() === null)
+
+  const now = Date.now()
+  for (let i = 0; i < 20; i++) pushPagingSample(16, now - (20 - i) * 30_000)
+  pushPagingSample(150, now)
+  let r = pagingReading(now)
+  check(
+    'ten times a tiny idle baseline is still not elevated',
+    r !== null && !r.elevated && r.baselinePerSec === 16,
+  )
+
+  pushPagingSample(7800, now)
+  r = pagingReading(now)
+  check(
+    `a fault storm (${7800}/s on a ~16/s baseline) is elevated`,
+    r !== null && r.elevated === true,
+  )
+  check(
+    'the elevated sentence carries both numbers, so it is checkable',
+    r !== null && r.detail.includes('7800') && r.detail.includes('16'),
+  )
+
+  resetPaging()
+  const busy = 3 * MIN_ELEVATED_PPS
+  for (let i = 0; i < 20; i++) pushPagingSample(busy, now - (20 - i) * 30_000)
+  pushPagingSample(busy * 2, now)
+  r = pagingReading(now)
+  check(
+    'a machine with an already-high baseline is not elevated for being itself',
+    r !== null && !r.elevated && busy * 2 < ELEVATED_FACTOR * busy,
+  )
+}
+
 console.log('')
 let failed = 0
 for (const [label, ok] of checks) {
