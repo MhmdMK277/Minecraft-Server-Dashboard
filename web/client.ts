@@ -2,6 +2,7 @@ import type {
   AppInfo,
   AuthState,
   BackupDetection,
+  ColdBackupEntry,
   CommandResponse,
   ControlResult,
   LogBatch,
@@ -228,6 +229,12 @@ export const dashboard = {
   getWorlds: (id: string, fresh = false) => get<WorldsReading>(API.worlds(id, fresh)),
   getBackupDetection: (id: string, fresh = false) =>
     get<BackupDetection>(API.backupDetection(id, fresh)),
+  getColdBackups: (id: string) => get<{ entries: ColdBackupEntry[] }>(API.coldBackups(id)),
+  /** A 409 carries the module's refusal sentence; it surfaces via the thrown Error. */
+  runColdBackup: (id: string, destDir: string) =>
+    post<{ ok: boolean; entry: ColdBackupEntry }>(API.runColdBackup(id), { destDir }),
+  restoreColdBackup: (id: string, archiveId: string) =>
+    post<{ ok: boolean; restoredDir: string }>(API.restoreColdBackup(id), { archiveId }),
   discover: (fresh = false) => get<ScanResult>(API.discover(fresh)),
   validateAttach: (dir: string) => send<AttachCandidate>(API.attachValidate, 'POST', { dir }),
   attach: (path: string, confirmedLaunch: ConfirmedLaunch | null) =>

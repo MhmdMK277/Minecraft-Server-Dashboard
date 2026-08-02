@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { ServerStatus, LogLine, Snapshot } from '@shared/api'
 import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT, fmtMemPair } from './status'
-import type { BackupDetection, DimensionInfo, WorldsReading } from '@shared/api'
+import type { BackupDetection, ColdBackupEntry, DimensionInfo, WorldsReading } from '@shared/api'
 import { WorldIcon } from './WorldIcon'
 import { HistoryPanel } from './History'
 import { API } from '@shared/api'
@@ -952,32 +952,20 @@ function fmtCadence(hours: number): string {
  * The detection reading (decision 0001, server/backupdetect.ts). Every
  * sentence here reports what that module read from disk; the statuses and
  * their thresholds are its exported constants, not this page's opinion.
+ * State lives in Backups, because the cold-backup offer below is gated on
+ * this same reading (decision 0005).
  */
-function BackupDetectionPanel({ s }: { s: ServerStatus }) {
-  const [reading, setReading] = useState<BackupDetection | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const load = useCallback(
-    (fresh: boolean) => {
-      setBusy(true)
-      setErr(null)
-      dashboard
-        .getBackupDetection(s.id, fresh)
-        .then(setReading)
-        .catch((e: unknown) =>
-          setErr(e instanceof Error ? e.message : 'could not read backup signals'),
-        )
-        .finally(() => setBusy(false))
-    },
-    [s.id],
-  )
-
-  useEffect(() => {
-    setReading(null)
-    load(false)
-  }, [s.id, load])
-
+function BackupDetectionPanel({
+  reading,
+  err,
+  busy,
+  load,
+}: {
+  reading: BackupDetection | null
+  err: string | null
+  busy: boolean
+  load: (fresh: boolean) => void
+}) {
   if (err) return <p className="prose-line text-[12px] text-bad">{err}</p>
   if (reading === null) {
     return (
@@ -1073,25 +1061,236 @@ function BackupDetectionPanel({ s }: { s: ServerStatus }) {
 }
 
 /**
+ * Decision 0005: the dashboard's own cold backup, offered only where the
+ * detection reading found nothing active. The gate is enforced again
+ * server-side on a FRESH reading (server/coldbackup.ts), so this panel
+ * withholding the form is presentation, not the protection.
+ */
+function ColdBackupPanel({ s, detection }: { s: ServerStatus; detection: BackupDetection | null }) {
+  const [entries, setEntries] = useState<ColdBackupEntry[] | null>(null)
+  const [destDir, setDestDir] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null)
+  const [armedRun, setArmedRun] = useState(false)
+  const [armedRestore, setArmedRestore] = useState<string | null>(null)
+
+  const loadEntries = useCallback(() => {
+    dashboard
+      .getColdBackups(s.id)
+      .then((r) => {
+        setEntries(r.entries)
+        // The newest journaled destination is the likely next one; a blank
+        // field stays blank until the operator names a place.
+        setDestDir((cur) => {
+          if (cur) return cur
+          const last = r.entries[r.entries.length - 1]
+          if (!last) return cur
+          const cut = Math.max(last.archivePath.lastIndexOf('\\'), last.archivePath.lastIndexOf('/'))
+          return cut > 0 ? last.archivePath.slice(0, cut) : cur
+        })
+      })
+      .catch(() => setEntries([]))
+  }, [s.id])
+
+  useEffect(() => {
+    setEntries(null)
+    setMessage(null)
+    setArmedRun(false)
+    setArmedRestore(null)
+    loadEntries()
+  }, [s.id, loadEntries])
+
+  const run = () => {
+    setBusy(true)
+    setMessage(null)
+    dashboard
+      .runColdBackup(s.id, destDir.trim())
+      .then((r) =>
+        setMessage({
+          tone: 'ok',
+          text: `Archive written: ${r.entry.archivePath} (${fmtBytes(r.entry.bytes)}, sha256 ${r.entry.sha256.slice(0, 12)}…), journaled in the manifest.`,
+        }),
+      )
+      .catch((e: unknown) =>
+        setMessage({ tone: 'bad', text: e instanceof Error ? e.message : 'the backup failed' }),
+      )
+      .finally(() => {
+        setBusy(false)
+        setArmedRun(false)
+        loadEntries()
+      })
+  }
+
+  const restore = (id: string) => {
+    setBusy(true)
+    setMessage(null)
+    dashboard
+      .restoreColdBackup(s.id, id)
+      .then((r) =>
+        setMessage({
+          tone: 'ok',
+          text: `Restored into ${r.restoredDir}. The original folder was not touched; swapping the two is your move, made outside this dashboard.`,
+        }),
+      )
+      .catch((e: unknown) =>
+        setMessage({ tone: 'bad', text: e instanceof Error ? e.message : 'the restore failed' }),
+      )
+      .finally(() => {
+        setBusy(false)
+        setArmedRestore(null)
+      })
+  }
+
+  const offerWithheld = detection !== null && detection.activeCount > 0
+
+  return (
+    <>
+      {detection === null && (
+        <p className="prose-line text-[12px] text-faint">
+          Waiting for the detection reading above; the offer depends on it.
+        </p>
+      )}
+
+      {offerWithheld && (
+        <p className="prose-line text-[12px] leading-relaxed text-faint">
+          Not offered for this server: a backup system is already active (see above), and a second
+          system copying the same world would double disk and I/O. The dashboard backs up only
+          servers that have nothing (decision 0005); the same rule is enforced when the request
+          arrives, on a fresh reading, not just here.
+        </p>
+      )}
+
+      {detection !== null && !offerWithheld && (
+        <div className="max-w-xl">
+          <label className="font-mono text-[9px] uppercase tracking-[0.1em] text-faint">
+            Destination folder, outside the server directory
+          </label>
+          <div className="mt-1 flex items-center gap-2">
+            <Input
+              value={destDir}
+              onChange={(e) => setDestDir(e.target.value)}
+              placeholder="D:\my-backups"
+              disabled={busy}
+              className="font-mono text-[12px]"
+            />
+            {!armedRun ? (
+              <Btn label="Back up now" onClick={() => setArmedRun(true)} disabled={busy || !destDir.trim()} />
+            ) : (
+              <>
+                <Btn label="Write the archive" tone="primary" onClick={run} disabled={busy} />
+                <Btn label="Cancel" onClick={() => setArmedRun(false)} disabled={busy} />
+              </>
+            )}
+          </div>
+          {armedRun && (
+            <p className="prose-line mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              One zip of the whole server folder will be written there, now, once. It is refused
+              out loud if the server is running or its state cannot be established; nothing stops
+              a server for a backup, and nothing is scheduled.
+            </p>
+          )}
+        </div>
+      )}
+
+      {message && (
+        <p
+          className={`prose-line mt-3 text-[12px] leading-relaxed ${message.tone === 'ok' ? 'text-muted-foreground' : 'text-bad'}`}
+        >
+          {message.text}
+        </p>
+      )}
+
+      {entries !== null && entries.length > 0 && (
+        <div className="mt-4">
+          <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-faint">
+            Journaled archives
+          </div>
+          {entries.map((e) => (
+            <div key={e.id} className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="font-mono text-[12px] text-ink">
+                {new Date(e.createdAt).toLocaleString()}
+              </span>
+              <span className="font-mono text-[11px] text-muted-foreground">{fmtBytes(e.bytes)}</span>
+              <span
+                className="max-w-[24rem] overflow-x-auto whitespace-nowrap font-mono text-[11px] text-faint"
+                title={`sha256 ${e.sha256}`}
+              >
+                {e.archivePath}
+              </span>
+              {armedRestore !== e.id ? (
+                <Btn label="Restore…" onClick={() => setArmedRestore(e.id)} disabled={busy} />
+              ) : (
+                <>
+                  <Btn label="Extract to a new folder" tone="primary" onClick={() => restore(e.id)} disabled={busy} />
+                  <Btn label="Cancel" onClick={() => setArmedRestore(null)} disabled={busy} />
+                </>
+              )}
+            </div>
+          ))}
+          <p className="prose-line mt-3 text-[11px] leading-relaxed text-faint">
+            Restore verifies the archive against the sha256 recorded at write, refuses if the
+            server is running, and extracts into a new sibling folder. It never extracts over
+            anything, so swapping folders afterwards is yours to do, deliberately.
+          </p>
+        </div>
+      )}
+    </>
+  )
+}
+
+/**
  * Management surface: detection first (decision 0001, backupdetect.ts reads
- * the four signals), then the policy-file opt-in. The page claims exactly
- * what the reading supports: "active" needs archives inside the module's
- * recency window, a config flag alone reads as configured. The pre-detection
- * copy here once said "detected" with no detection code behind it; that was
- * audit finding F6, and this panel is what finally makes the word honest.
+ * the four signals), then the 0005 cold-backup offer gated on that reading,
+ * then the policy-file opt-in. The page claims exactly what the reading
+ * supports: "active" needs archives inside the module's recency window, a
+ * config flag alone reads as configured. The pre-detection copy here once
+ * said "detected" with no detection code behind it; that was audit finding
+ * F6, and the detection panel is what finally makes the word honest.
  */
 function Backups({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
+  const [reading, setReading] = useState<BackupDetection | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(
+    (fresh: boolean) => {
+      setBusy(true)
+      setErr(null)
+      dashboard
+        .getBackupDetection(s.id, fresh)
+        .then(setReading)
+        .catch((e: unknown) =>
+          setErr(e instanceof Error ? e.message : 'could not read backup signals'),
+        )
+        .finally(() => setBusy(false))
+    },
+    [s.id],
+  )
+
+  useEffect(() => {
+    setReading(null)
+    load(false)
+  }, [s.id, load])
+
   return (
     <>
       <Section
         label="Detected backup systems"
         note="Four read-only signals (decision 0001): archive directories in the server folder, a ServerUtilities config, backup-named plugin and mod jars, and any external path named in the dashboard's config.json. The dashboard reads these; it never writes them."
       >
-        <BackupDetectionPanel s={s} />
+        <BackupDetectionPanel reading={reading} err={err} busy={busy} load={load} />
       </Section>
+      {canEdit && (
+        <Section
+          label="A cold backup, by hand"
+          note="For servers where nothing was detected: one archive per click, written cold (only while no process owns the directory), sha256 journaled in coldbackup-manifest.jsonl in the dashboard's data folder. Manual only; this dashboard will never schedule a backup."
+        >
+          <ColdBackupPanel s={s} detection={reading} />
+        </Section>
+      )}
       <Section
         label="External rotation opt-in"
-        note="The dashboard owns no backups. This switch records intent in a policy file (backup-policy.json in the dashboard's data folder) that an external backup script can read. If your backup system does not read that file, or you have none, this switch changes nothing, and nothing on this page means your worlds are backed up."
+        note="The dashboard owns no backups beyond the cold archives it journals explicitly. This switch records intent in a policy file (backup-policy.json in the dashboard's data folder) that an external backup script can read. If your backup system does not read that file, or you have none, this switch changes nothing, and nothing on this page means your worlds are backed up."
       >
         <BackupToggle s={s} canEdit={canEdit} />
         <p className="prose-line mt-3 text-[12px] leading-relaxed text-faint">

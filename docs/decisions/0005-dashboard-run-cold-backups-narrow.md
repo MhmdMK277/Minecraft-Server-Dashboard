@@ -1,6 +1,11 @@
 # 0005. Dashboard-run backups: approved, narrow, manual, cold
 
-**Status:** accepted (not yet built; sequenced below)
+**Status:** accepted; built 2026-08-02 (`server/coldbackup.ts`,
+`prove-cold-backup`), after 0001's detection signals
+(`server/backupdetect.ts`, `prove-backup-detect`). The one piece not built:
+the `.bat` + Task Scheduler XML generator for operator-registered
+scheduling, deferred until someone asks for it; the no-scheduler rule it
+exists to protect is enforced regardless.
 **Date:** 2026-08-01
 
 ## Decision

@@ -17,6 +17,8 @@ import {
   LoginRequest,
   ChangePasswordRequest,
   SetBackupRequest,
+  RunColdBackupRequest,
+  RestoreColdBackupRequest,
   SetServerSettingRequest,
   RunCommandRequest,
   AttachRequest,
@@ -64,7 +66,8 @@ import {
 } from './auth'
 import { audit, initAudit } from './audit'
 import { setBackupEnabled, isBackupEnabled } from './backuppolicy'
-import { readBackupDetection } from './backupdetect'
+import { readBackupDetection, resetDetectionCache } from './backupdetect'
+import { runColdBackup, restoreColdBackup, listColdBackups } from './coldbackup'
 import { writeSetting } from './serversettings'
 import { startServer, stopServer, restartServer, runCommand } from './control'
 import { detectLauncher, indexTasks } from './launcher'
@@ -1222,6 +1225,102 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     // takes ten seconds to appear reads as a tick that did not work.
     await pushSnapshot()
     return { ok: true, backupEnabled: isBackupEnabled(policy, server.name) }
+  })
+
+  /**
+   * Decision 0005: the dashboard's own cold backup. Every constraint lives in
+   * server/coldbackup.ts (the fresh-detection gate, the occupancy check, the
+   * outside-the-directory rule, the append-only manifest, restore-to-a-new-
+   * sibling); these handlers do auth, validation and audit, and return the
+   * module's refusal sentences verbatim as 409s, control-route style.
+   */
+  app.get<{ Params: { id: string } }>('/api/servers/:id/coldbackups', async (req, reply) => {
+    if (!require_(req, reply, 'admin', 'coldbackup.list')) return
+    const snap = latest ?? (await doScan())
+    const s = snap.servers.find((x) => x.id === req.params.id)
+    if (!s) return reply.code(404).send({ error: 'no server with that id' })
+    return { entries: await listColdBackups(dataDir(), s.dir) }
+  })
+
+  app.post<{ Params: { id: string } }>('/api/servers/:id/coldbackup', async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'coldbackup.run')
+    if (!session) return
+    const parsed = RunColdBackupRequest.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'expected { destDir: string }' })
+    const snapshot = latest ?? (await doScan())
+    const server = snapshot.servers.find((s) => s.id === req.params.id)
+    if (!server) {
+      audit({
+        actor: session.username,
+        role: session.role,
+        action: 'coldbackup.run',
+        target: req.params.id,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: 'no such server directory in the current scan',
+      })
+      return reply.code(404).send({ error: 'no such server directory' })
+    }
+    // Requested before anything happens: a backup in flight when the process
+    // dies must not be invisible in the log.
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'coldbackup.run.requested',
+      target: server.name,
+      outcome: 'ok',
+      ip: clientIp(req),
+      detail: `destination ${parsed.data.destDir}`,
+    })
+    const result = await runColdBackup({
+      serverDir: server.dir,
+      serverName: server.name,
+      destDir: parsed.data.destDir,
+      dataDir: dataDir(),
+      actor: session.username,
+      externalBackupPaths: cfg.externalBackupPaths,
+    })
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'coldbackup.run',
+      target: server.name,
+      outcome: result.ok ? 'ok' : 'denied',
+      ip: clientIp(req),
+      detail: result.ok ? `${result.entry.archivePath} sha256 ${result.entry.sha256}` : result.reason,
+    })
+    if (!result.ok) return reply.code(409).send({ error: result.reason })
+    // A new archive changes what detection would say; drop the cached reading
+    // so the page's next look reflects the world as it now is.
+    resetDetectionCache()
+    return result
+  })
+
+  app.post<{ Params: { id: string } }>('/api/servers/:id/coldbackup/restore', async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'coldbackup.restore')
+    if (!session) return
+    const parsed = RestoreColdBackupRequest.safeParse(req.body)
+    if (!parsed.success) return reply.code(400).send({ error: 'expected { archiveId: string }' })
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'coldbackup.restore.requested',
+      target: parsed.data.archiveId,
+      outcome: 'ok',
+      ip: clientIp(req),
+    })
+    const result = await restoreColdBackup({ archiveId: parsed.data.archiveId, dataDir: dataDir() })
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'coldbackup.restore',
+      target: parsed.data.archiveId,
+      outcome: result.ok ? 'ok' : 'denied',
+      ip: clientIp(req),
+      detail: result.ok ? `extracted to ${result.restoredDir}` : result.reason,
+    })
+    if (!result.ok) return reply.code(409).send({ error: result.reason })
+    return result
   })
 
   /**

@@ -108,6 +108,8 @@ Legend for **World**:
 | `prove-auth` | no | n/a | |
 | `prove-backup-policy` | no | n/a | Cross-language, against the real `mcbackup.py`. |
 | `prove-backup-route` | no | n/a | |
+| `prove-backup-detect` | no, reads directories and small text files, no process | n/a | Throwaway directories with mtimes set by `utimesSync`, so every recency threshold is exercised deliberately rather than by the host's clock. |
+| `prove-cold-backup` | no, occupancy is injected through the module's test seam | n/a | Deliberate, same reasoning as `prove-concurrent-start`: risking a live world to test the guard protecting worlds would be self-defeating. The real `occupancyOf` is covered by the suites that own it. |
 
 ## The rule going forward
 

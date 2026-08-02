@@ -776,6 +776,36 @@ export const BackupDetection = z.object({
 })
 export type BackupDetection = z.infer<typeof BackupDetection>
 
+/**
+ * Decision 0005: the dashboard's own cold backup, offered only where
+ * detection found nothing active. One journaled archive; the manifest is
+ * append-only and owned by server/coldbackup.ts. `sha256` is recorded at
+ * write time and re-verified before any restore, so a restore can never
+ * quietly extract bytes other than the ones journaled.
+ */
+export const ColdBackupEntry = z.object({
+  id: z.string(),
+  serverName: z.string(),
+  serverDir: z.string(),
+  archivePath: z.string(),
+  sha256: z.string(),
+  bytes: z.number(),
+  createdAt: z.string(),
+  actor: z.string(),
+})
+export type ColdBackupEntry = z.infer<typeof ColdBackupEntry>
+
+/** "Back up now": an operator's click naming where the archive goes. */
+export const RunColdBackupRequest = z.object({
+  destDir: z.string().min(1).max(500),
+})
+export type RunColdBackupRequest = z.infer<typeof RunColdBackupRequest>
+
+export const RestoreColdBackupRequest = z.object({
+  archiveId: z.string().min(1).max(128),
+})
+export type RestoreColdBackupRequest = z.infer<typeof RestoreColdBackupRequest>
+
 /** One active session, for the "where am I logged in" list. */
 export const SessionSummary = z.object({
   sessionId: z.string(),
@@ -1125,6 +1155,9 @@ export const API = {
   setBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/backup`,
   backupDetection: (id: string, fresh = false) =>
     `/api/servers/${encodeURIComponent(id)}/backup/detection${fresh ? '?fresh=1' : ''}`,
+  coldBackups: (id: string) => `/api/servers/${encodeURIComponent(id)}/coldbackups`,
+  runColdBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/coldbackup`,
+  restoreColdBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/coldbackup/restore`,
   setSetting: (id: string) => `/api/servers/${encodeURIComponent(id)}/settings`,
   control: (id: string, action: 'start' | 'stop' | 'restart') =>
     `/api/servers/${encodeURIComponent(id)}/${action}`,
