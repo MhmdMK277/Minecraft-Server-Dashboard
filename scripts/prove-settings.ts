@@ -30,7 +30,7 @@
 import { mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readSettings, writeSetting, EDITABLE, isSettingKey } from '../server/serversettings'
+import { readSettings, writeSetting, writeMotd, EDITABLE, isSettingKey } from '../server/serversettings'
 import { serverProps, rconConfig } from '../server/properties'
 
 const checks: Array<[string, boolean, string?]> = []
@@ -67,9 +67,14 @@ const read = (dir: string) => readFileSync(join(dir, 'server.properties'), 'utf8
 
 // --------------------------------------------------------------------- reach
 
-check('the allowlist is exactly two keys', EDITABLE.length === 2)
+check('the boolean allowlist is exactly two keys', EDITABLE.length === 2)
 check('white-list is editable', isSettingKey('white-list'))
 check('online-mode is editable', isSettingKey('online-mode'))
+check(
+  'motd is NOT a boolean key; it goes through its own validated writer only',
+  !isSettingKey('motd'),
+  'free text must never loosen the boolean pair',
+)
 check(
   'rcon.password is NOT editable',
   !isSettingKey('rcon.password'),
@@ -271,6 +276,103 @@ check('level-name is NOT editable', !isSettingKey('level-name'))
   const r = writeSetting(dir, 'white-list', true, TODAY)
   check('a directory with no server.properties is refused', !r.ok)
   check('and no file is created by the refusal', !existsSync(join(dir, 'server.properties')))
+}
+
+// ----------------------------------------------------------------------- motd
+//
+// The MOTD is the allowlist's one free-text value, and free text in a
+// line-oriented file that also holds rcon.password is where a property
+// injection would live. The writer ENCODES rather than trusts: a newline
+// becomes the \n escape, a backslash doubles, anything non-ASCII becomes a
+// \uXXXX escape (vanilla's own encoding), so the file cannot gain a line.
+
+{
+  const dir = fresh()
+  const r = writeMotd(dir, '§6Golden words§r here', TODAY)
+  check('a formatted MOTD writes ok', r.ok, r.detail)
+  const raw = read(dir).split(/\r?\n/).find((l) => l.startsWith('motd='))!
+  check('the section sign is written as the \\u00A7 escape vanilla uses', raw.includes('\\u00A7'), raw)
+  check('nothing outside printable ASCII reaches the file', [...raw].every((c) => c.charCodeAt(0) >= 0x20 && c.charCodeAt(0) <= 0x7e), raw)
+  check('and the decoded read round-trips exactly', readSettings(dir, null).motd === '§6Golden words§r here')
+}
+
+{
+  const dir = fresh()
+  const before = read(dir).split(/\r?\n/).length
+  const r = writeMotd(dir, 'line one\nline two', TODAY)
+  check('a two-line MOTD writes ok', r.ok, r.detail)
+  const after = read(dir)
+  check(
+    'the file gained NO line: the newline is carried as the \\n escape',
+    after.split(/\r?\n/).length === before,
+    `${before} lines before, ${after.split(/\r?\n/).length} after`,
+  )
+  check('and round-trips as a real newline', readSettings(dir, null).motd === 'line one\nline two')
+}
+
+{
+  // The injection this encoding exists to make unconstructible: a value shaped
+  // like a second property line. The newline is encoded, so the payload stays
+  // INSIDE the motd value and the credential line is untouched.
+  const dir = fresh()
+  const r = writeMotd(dir, 'hello\nrcon.password=evil', TODAY)
+  check('a value shaped like an injection still writes; it is only text', r.ok, r.detail)
+  const after = read(dir)
+  check(
+    'the real credential line is byte-identical',
+    after.includes('rcon.password=hunter2-not-a-real-password'),
+  )
+  check(
+    'and there is still exactly one rcon.password line',
+    after.split(/\r?\n/).filter((l) => l.startsWith('rcon.password=')).length === 1,
+  )
+  check(
+    'the payload stayed inside the motd value',
+    after.split(/\r?\n/).some((l) => l.startsWith('motd=') && l.includes('rcon.password=evil')),
+  )
+  check('and reads back as harmless text', readSettings(dir, null).motd === 'hello\nrcon.password=evil')
+}
+
+{
+  const dir = fresh()
+  const before = read(dir)
+  const three = writeMotd(dir, 'a\nb\nc', TODAY)
+  check('a third line is refused', !three.ok && /at most 2 lines/.test(three.detail), three.detail)
+  const long = writeMotd(dir, 'x'.repeat(129), TODAY)
+  check('an over-long line is refused', !long.ok && /capped at 128/.test(long.detail), long.detail)
+  const ctrl = writeMotd(dir, 'ding\u0007dong', TODAY)
+  check('a control character is refused', !ctrl.ok && /control character/.test(ctrl.detail), ctrl.detail)
+  check('and no refusal touched the file', read(dir) === before)
+}
+
+{
+  const dir = fresh()
+  writeMotd(dir, 'CRLF\r\ninput', TODAY)
+  check(
+    'CRLF input (a Windows textarea) is normalised, not refused or doubled',
+    readSettings(dir, null).motd === 'CRLF\ninput',
+    JSON.stringify(readSettings(dir, null).motd),
+  )
+}
+
+{
+  const dir = fresh()
+  const back = writeMotd(dir, 'a backslash \\ survives', TODAY)
+  check('a backslash round-trips through the escaping', back.ok && readSettings(dir, null).motd === 'a backslash \\ survives')
+}
+
+{
+  const dir = fresh()
+  const r = writeMotd(dir, 'A Minecraft Server', TODAY)
+  check('setting the MOTD to what it already is says so', r.ok && /already/.test(r.detail), r.detail)
+  check('and writes no backup, because nothing changed', !existsSync(join(dir, `server.properties.bak-${TODAY}`)))
+}
+
+{
+  const dir = fresh('server-port=25565\n')
+  check('an absent motd reads null, never invented', readSettings(dir, null).motd === null)
+  const r = writeMotd(dir, 'fresh words', TODAY)
+  check('and can be set by appending the line', r.ok && serverProps(dir)['motd'] === 'fresh words')
 }
 
 console.log('')

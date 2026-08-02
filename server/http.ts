@@ -69,7 +69,7 @@ import { setBackupEnabled, isBackupEnabled } from './backuppolicy'
 import { readBackupDetection, resetDetectionCache } from './backupdetect'
 import { startPagingSampler, stopPagingSampler } from './hostpaging'
 import { runColdBackup, restoreColdBackup, listColdBackups } from './coldbackup'
-import { writeSetting } from './serversettings'
+import { writeSetting, writeMotd } from './serversettings'
 import { startServer, stopServer, restartServer, runCommand } from './control'
 import { detectLauncher, indexTasks } from './launcher'
 import { loadPrefs, setPlayerAvatars, AVATAR_ORIGIN, type Prefs } from './prefs'
@@ -1485,7 +1485,7 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     if (!parsed.success) {
       return reply
         .code(400)
-        .send({ error: "expected { key: 'white-list' | 'online-mode', value: boolean }" })
+        .send({ error: "expected { key: 'white-list' | 'online-mode', value: boolean } or { key: 'motd', value: string }" })
     }
 
     const snapshot = latest ?? (await doScan())
@@ -1504,7 +1504,12 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     }
 
     const today = new Date().toISOString().slice(0, 10)
-    const result = writeSetting(server.dir, parsed.data.key, parsed.data.value, today)
+    // The union discriminates on `key`: the boolean pair goes through the
+    // enum-checked writer, the MOTD through its own validate-and-encode path.
+    const result =
+      parsed.data.key === 'motd'
+        ? writeMotd(server.dir, parsed.data.value, today)
+        : writeSetting(server.dir, parsed.data.key, parsed.data.value, today)
 
     audit({
       actor: session.username,

@@ -251,7 +251,7 @@ export const dashboard = {
     post<{ ok: boolean; backupEnabled: boolean }>(API.setBackup(id), { enabled }),
 
   /** Write one allowlisted server.properties value. Admin only, audited. */
-  setServerSetting: (id: string, key: ServerSettingKey, value: boolean) =>
+  setServerSetting: (id: string, key: ServerSettingKey | 'motd', value: boolean | string) =>
     post<{ ok: boolean; detail: string }>(API.setSetting(id), { key, value }),
 
   /**

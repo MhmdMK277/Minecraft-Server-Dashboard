@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, renameSync, existsSync, statSync, copyFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { MOTD_MAX_LINES, MOTD_MAX_LINE_LENGTH } from '@shared/api'
 import { serverProps } from './properties'
 
 /**
@@ -40,6 +41,12 @@ export function isSettingKey(k: string): k is SettingKey {
 export interface ServerSettingsRead {
   onlineMode: boolean
   whitelist: boolean
+  /**
+   * The MOTD as the player would read it: Java .properties escapes decoded,
+   * `\n` a real newline, `§` the section sign the formatting codes use.
+   * Null when the key is absent (the server then shows Minecraft's default).
+   */
+  motd: string | null
   /** server.properties mtime, ISO. Null when the file is missing. */
   fileModifiedAt: string | null
   /**
@@ -66,9 +73,63 @@ function asBool(v: string | undefined, fallback: boolean): boolean {
   return v.trim().toLowerCase() === 'true'
 }
 
+/**
+ * The raw right-hand side of one key's line, before any unescaping.
+ *
+ * `serverProps()` half-decodes (`\:` and `\=` only), which is enough for ports
+ * and level names but corrupts anything with real escapes in it. The MOTD is
+ * the first value here that legitimately contains them: vanilla writes the
+ * section sign as `\u00A7` and a two-line MOTD as `\n`.
+ */
+function rawPropertyValue(path: string, key: string): string | null {
+  let text: string
+  try {
+    text = readFileSync(path, 'utf8')
+  } catch {
+    return null
+  }
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^(\s*)([A-Za-z0-9._-]+)(\s*)=(.*)$/.exec(line)
+    if (m && m[2] === key) return m[4]!
+  }
+  return null
+}
+
+/**
+ * Decode the Java .properties escapes a Minecraft server writes.
+ *
+ * The subset java.util.Properties emits: `\uXXXX`, `\n`, `\t`, `\r`, `\f`,
+ * `\\`, and a backslash before `:`, `=`, `#`, `!` or space. An unknown escaped
+ * character decodes to itself, which is Properties.load's own rule.
+ */
+export function decodeJavaProps(v: string): string {
+  let out = ''
+  for (let i = 0; i < v.length; i++) {
+    const c = v[i]!
+    if (c !== '\\' || i === v.length - 1) {
+      out += c
+      continue
+    }
+    const e = v[++i]!
+    if (e === 'u') {
+      const hex = v.slice(i + 1, i + 5)
+      if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+        out += String.fromCharCode(parseInt(hex, 16))
+        i += 4
+      } else out += 'u'
+    } else if (e === 'n') out += '\n'
+    else if (e === 't') out += '\t'
+    else if (e === 'r') out += '\r'
+    else if (e === 'f') out += '\f'
+    else out += e
+  }
+  return out
+}
+
 export function readSettings(dir: string, uptimeSeconds: number | null): ServerSettingsRead {
   const path = join(dir, 'server.properties')
   const p = serverProps(dir)
+  const rawMotd = rawPropertyValue(path, 'motd')
 
   let modified: Date | null = null
   try {
@@ -89,6 +150,7 @@ export function readSettings(dir: string, uptimeSeconds: number | null): ServerS
     // server as open.
     onlineMode: asBool(p['online-mode'], true),
     whitelist: asBool(p['white-list'], false),
+    motd: rawMotd === null ? null : decodeJavaProps(rawMotd.trim()),
     fileModifiedAt: modified ? modified.toISOString() : null,
     changedSinceStart,
   }
@@ -108,23 +170,24 @@ export interface WriteResult {
  * refusal from the guard is displayed verbatim because it is the only useful
  * part of the answer.
  */
-export function writeSetting(
-  dir: string,
-  key: SettingKey,
-  value: boolean,
-  today: string,
-): WriteResult {
-  if (!isSettingKey(key)) {
-    return { ok: false, detail: `${key} is not an editable setting`, backupPath: null }
-  }
+/**
+ * The line editor both public writers share. MODULE-PRIVATE on purpose: an
+ * exported "write any key" function would BE the general property editor this
+ * file's first rule forbids. The only ways in are `writeSetting` (two boolean
+ * keys, enum-checked) and `writeMotd` (one string key, validated and encoded
+ * before it gets here). prove-settings asserts that reach.
+ */
+type LineEdit =
+  | { ok: true; changed: boolean; previous: string | null; backupPath: string | null }
+  | { ok: false; detail: string; backupPath: string | null }
 
+function editPropertyLine(dir: string, key: string, desired: string, today: string): LineEdit {
   const path = join(dir, 'server.properties')
   if (!existsSync(path)) {
     return { ok: false, detail: 'this directory has no server.properties', backupPath: null }
   }
 
   const original = readFileSync(path, 'utf8')
-  const desired = value ? 'true' : 'false'
 
   // Match the key at the start of a line, allowing surrounding whitespace, and
   // leave a commented-out line alone -- `#online-mode=true` is documentation,
@@ -153,7 +216,7 @@ export function writeSetting(
   }
 
   if (previous === desired) {
-    return { ok: true, detail: `${key} was already ${desired}`, backupPath: null }
+    return { ok: true, changed: false, previous, backupPath: null }
   }
 
   // Keep the file we are about to replace, dated, beside the original.
@@ -181,12 +244,102 @@ export function writeSetting(
     }
   }
 
+  return { ok: true, changed: true, previous, backupPath }
+}
+
+export function writeSetting(
+  dir: string,
+  key: SettingKey,
+  value: boolean,
+  today: string,
+): WriteResult {
+  if (!isSettingKey(key)) {
+    return { ok: false, detail: `${key} is not an editable setting`, backupPath: null }
+  }
+
+  const desired = value ? 'true' : 'false'
+  const r = editPropertyLine(dir, key, desired, today)
+  if (!r.ok) return { ok: false, detail: r.detail, backupPath: r.backupPath }
+  if (!r.changed) {
+    return { ok: true, detail: `${key} was already ${desired}`, backupPath: null }
+  }
   return {
     ok: true,
     detail:
-      previous === null
+      r.previous === null
         ? `${key} was not set, and is now ${desired}`
-        : `${key} changed from ${previous} to ${desired}`,
-    backupPath,
+        : `${key} changed from ${r.previous} to ${desired}`,
+    backupPath: r.backupPath,
+  }
+}
+
+// ------------------------------------------------------------------- MOTD
+
+/**
+ * Why the MOTD is validated and ENCODED rather than written as typed: the
+ * value lands in a line-oriented file next to `rcon.password`. A raw newline
+ * in the value would become a second property line -- a property injection
+ * through the one field that takes free text. So line breaks the operator
+ * wants are carried as the `\n` escape Minecraft itself uses, every backslash
+ * is escaped, and everything outside printable ASCII becomes a `\uXXXX`
+ * escape, exactly the encoding vanilla's own writer produces (the section
+ * sign becomes `\u00A7`). By construction the written value cannot contain
+ * a newline.
+ */
+export function validateMotd(text: string): string | null {
+  const lines = text.split('\n')
+  if (lines.length > MOTD_MAX_LINES) {
+    return `An MOTD is at most ${MOTD_MAX_LINES} lines; this has ${lines.length}.`
+  }
+  const long = lines.find((l) => l.length > MOTD_MAX_LINE_LENGTH)
+  if (long !== undefined) {
+    return `An MOTD line is capped at ${MOTD_MAX_LINE_LENGTH} characters here (the client shows fewer); one line has ${long.length}.`
+  }
+  for (const ch of text) {
+    const code = ch.charCodeAt(0)
+    if (ch !== '\n' && (code < 0x20 || code === 0x7f)) {
+      return 'The MOTD contains a control character, which server.properties cannot carry.'
+    }
+  }
+  return null
+}
+
+function encodeMotd(text: string): string {
+  let out = ''
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!
+    const code = text.charCodeAt(i)
+    if (ch === '\\') out += '\\\\'
+    else if (ch === '\n') out += '\\n'
+    else if (code >= 0x20 && code <= 0x7e) out += ch
+    else out += `\\u${code.toString(16).toUpperCase().padStart(4, '0')}`
+  }
+  return out
+}
+
+/** For the result sentence and the audit line: short, one visual line. */
+function motdForSentence(text: string): string {
+  const flat = text.replace(/\n/g, ' \\n ')
+  return flat.length > 60 ? `${flat.slice(0, 57)}...` : flat
+}
+
+export function writeMotd(dir: string, text: string, today: string): WriteResult {
+  // Textarea input arrives with CRLF on Windows; the semantic value is LF.
+  const motd = text.replace(/\r\n?/g, '\n')
+  const why = validateMotd(motd)
+  if (why) return { ok: false, detail: why, backupPath: null }
+
+  const r = editPropertyLine(dir, 'motd', encodeMotd(motd), today)
+  if (!r.ok) return { ok: false, detail: r.detail, backupPath: r.backupPath }
+  if (!r.changed) {
+    return { ok: true, detail: 'the MOTD is already exactly that', backupPath: null }
+  }
+  return {
+    ok: true,
+    detail:
+      motd === ''
+        ? 'the MOTD is now empty (the server list shows a blank line)'
+        : `the MOTD is now "${motdForSentence(motd)}"`,
+    backupPath: r.backupPath,
   }
 }

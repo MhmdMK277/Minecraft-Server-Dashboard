@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import type { ServerStatus, ServerSettingKey } from '@shared/api'
+import { MOTD_MAX_LINES, MOTD_MAX_LINE_LENGTH } from '@shared/api'
 import { dashboard } from './client'
 import { Btn } from './controls'
+import { formatMc } from './mcformat'
 
 /**
- * The two editable server.properties values.
+ * The editable server.properties values: the MOTD and two booleans.
  *
  * `white-list` is a toggle. `online-mode` is not, and that asymmetry is the
  * whole point of this component.
@@ -22,11 +24,13 @@ import { Btn } from './controls'
  * a restart is required -- shown BEFORE the change, not as a toast afterwards.
  */
 
+type EditableKey = ServerSettingKey | 'motd'
+
 function useSetter(s: ServerStatus) {
-  const [pending, setPending] = useState<ServerSettingKey | null>(null)
+  const [pending, setPending] = useState<EditableKey | null>(null)
   const [result, setResult] = useState<{ ok: boolean; detail: string } | null>(null)
 
-  const apply = (key: ServerSettingKey, value: boolean) => {
+  const apply = (key: EditableKey, value: boolean | string) => {
     setPending(key)
     setResult(null)
     dashboard
@@ -39,6 +43,124 @@ function useSetter(s: ServerStatus) {
   }
 
   return { pending, result, apply }
+}
+
+/**
+ * The MOTD: the one free-text value the settings allowlist carries.
+ *
+ * The value shown is decoded from server.properties by the service
+ * (server/serversettings.ts readSettings); the write goes through writeMotd,
+ * which validates and re-encodes it, so a newline typed here becomes the \n
+ * escape in the file and can never become a second property line. The
+ * preview renders the § formatting codes with the same renderer the console
+ * uses (web/mcformat.tsx); the in-game font and per-line truncation differ,
+ * and the caption says so rather than promising pixel fidelity.
+ */
+function MotdEditor({
+  motd,
+  pending,
+  apply,
+}: {
+  motd: string | null
+  pending: EditableKey | null
+  apply: (key: EditableKey, value: boolean | string) => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const editing = draft !== null
+  const value = draft ?? motd ?? ''
+  const lines = value.split('\n')
+  const tooManyLines = lines.length > MOTD_MAX_LINES
+  const tooLong = lines.some((l) => l.length > MOTD_MAX_LINE_LENGTH)
+
+  return (
+    <div>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-medium text-ink">MOTD</div>
+          <p className="prose-line mt-0.5 text-[11px] leading-relaxed text-faint">
+            The line players see under this server in their multiplayer list. Read from{' '}
+            <code className="font-mono">server.properties</code>; the running server keeps showing
+            the value it started with until it restarts.
+          </p>
+        </div>
+        {!editing && (
+          <Btn
+            onClick={() => setDraft(motd ?? '')}
+            disabled={pending !== null}
+            label={motd === null ? 'Set…' : 'Edit…'}
+          />
+        )}
+      </div>
+
+      {!editing && (
+        <div className="mt-2 rounded-md border border-border bg-panel2 px-2.5 py-1.5">
+          {motd === null ? (
+            <p className="text-[12px] leading-relaxed text-faint">
+              Not set. The server shows Minecraft's default, "A Minecraft Server".
+            </p>
+          ) : (
+            motd.split('\n').map((l, i) => (
+              <div key={i} className="font-mono text-[12px] leading-relaxed text-ink">
+                {formatMc(l)}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {editing && (
+        <div className="mt-2 space-y-2">
+          <textarea
+            value={value}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={2}
+            spellCheck={false}
+            className="w-full resize-none rounded-md border border-border bg-panel2 px-2.5 py-1.5 font-mono text-[12px] leading-relaxed text-ink outline-none focus:border-ring"
+            aria-label="MOTD"
+          />
+          <p className="prose-line text-[11px] leading-relaxed text-faint">
+            Up to {MOTD_MAX_LINES} lines of {MOTD_MAX_LINE_LENGTH} characters (the game client
+            truncates long lines on its own). Formatting codes work: §6 gold, §l bold, §o italic,
+            §r reset.
+          </p>
+          <div className="rounded-md border border-border bg-panel2 px-2.5 py-1.5">
+            <div className="text-[10px] uppercase tracking-wide text-faint">
+              Preview (formatting codes only; the in-game font and truncation differ)
+            </div>
+            {lines.map((l, i) => (
+              <div key={i} className="font-mono text-[12px] leading-relaxed text-ink">
+                {formatMc(l)}
+              </div>
+            ))}
+          </div>
+          {(tooManyLines || tooLong) && (
+            <p className="prose-line text-[11px] leading-relaxed text-warn">
+              {tooManyLines
+                ? `An MOTD is at most ${MOTD_MAX_LINES} lines.`
+                : `A line is capped at ${MOTD_MAX_LINE_LENGTH} characters here.`}
+            </p>
+          )}
+          <div className="flex items-center gap-2">
+            <Btn
+              onClick={() => {
+                apply('motd', value)
+                setDraft(null)
+              }}
+              disabled={pending !== null || tooManyLines || tooLong || value === (motd ?? '')}
+              label={pending === 'motd' ? 'Saving…' : 'Save MOTD'}
+            />
+            <button
+              type="button"
+              onClick={() => setDraft(null)}
+              className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-ink"
+            >
+              cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function ServerSettingsPanel({ s }: { s: ServerStatus }) {
@@ -73,6 +195,11 @@ export default function ServerSettingsPanel({ s }: { s: ServerStatus }) {
           next restart.
         </p>
       )}
+
+      {/* ----------------------------------------------------------------- motd */}
+      <MotdEditor motd={settings.motd} pending={pending} apply={apply} />
+
+      <div className="border-t border-border pt-3" />
 
       {/* ------------------------------------------------------------ whitelist */}
       <div className="flex items-start justify-between gap-4">

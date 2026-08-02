@@ -210,7 +210,7 @@ function srv(name: string, health: ServerStatus['health']): ServerStatus {
     gamePort: 25565,
     levelName: 'world',
     worldDirs: [],
-    settings: { onlineMode: true, whitelist: true, fileModifiedAt: null, changedSinceStart: null },
+    settings: { onlineMode: true, whitelist: true, motd: null, fileModifiedAt: null, changedSinceStart: null },
     rconConfigured: true,
     health,
     healthDetail: '',

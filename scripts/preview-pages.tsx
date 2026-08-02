@@ -31,7 +31,7 @@ const gtnh: ServerStatus = {
   levelName: 'World Of Extremely Long Names For Testing',
   worldDirs: ['World Of Extremely Long Names For Testing'],
   rconConfigured: true,
-  settings: { onlineMode: false, whitelist: true, fileModifiedAt: null, changedSinceStart: false },
+  settings: { onlineMode: false, whitelist: true, motd: 'A Minecraft Server', fileModifiedAt: null, changedSinceStart: false },
   health: 'HEALTHY',
   healthDetail: 'Port answering and the main game thread acknowledged RCON in 24 ms.',
   healthSince: new Date('2026-07-31T05:02:00Z').toISOString(),

@@ -290,18 +290,34 @@ export const BootTiming = z.object({
 export type BootTiming = z.infer<typeof BootTiming>
 
 /**
- * The two settings the dashboard can write into server.properties.
+ * The settings the dashboard can write into server.properties.
  *
- * An allowlist of two, not a property editor. A general editor would be a way
- * to set `rcon.password` from a browser, which is the exact boundary this
- * contract exists to hold.
+ * An allowlist of three, not a property editor: two booleans and the MOTD.
+ * A general editor would be a way to set `rcon.password` from a browser,
+ * which is the exact boundary this contract exists to hold. The MOTD is the
+ * one free-text value, and it gets its own shape below so "free text" never
+ * loosens the boolean pair.
  */
 export const ServerSettingKey = z.enum(['white-list', 'online-mode'])
 export type ServerSettingKey = z.infer<typeof ServerSettingKey>
 
+/**
+ * MOTD limits, shared so the wire, the writer and the UI agree. Two lines is
+ * what the client renders; the length cap bounds the request, not the client
+ * (which truncates on its own).
+ */
+export const MOTD_MAX_LINES = 2
+export const MOTD_MAX_LINE_LENGTH = 128
+
 export const ServerSettings = z.object({
   onlineMode: z.boolean(),
   whitelist: z.boolean(),
+  /**
+   * The MOTD as a player would read it (decoded from the file's Java escapes;
+   * a real newline separates the two lines). Null when server.properties has
+   * no motd line; the server then shows Minecraft's default.
+   */
+  motd: z.string().nullable(),
   fileModifiedAt: z.string().nullable(),
   /**
    * server.properties has been edited since the running process started, so the
@@ -316,10 +332,25 @@ export const ServerSettings = z.object({
 })
 export type ServerSettings = z.infer<typeof ServerSettings>
 
-export const SetServerSettingRequest = z.object({
-  key: ServerSettingKey,
-  value: z.boolean(),
-})
+export const SetServerSettingRequest = z.union([
+  z.object({
+    key: ServerSettingKey,
+    value: z.boolean(),
+  }),
+  z.object({
+    key: z.literal('motd'),
+    // Bounded on the wire; the writer re-validates and ENCODES (newlines
+    // become the \n escape), so a raw newline can never reach the file as a
+    // second property line. Control characters other than \n are refused
+    // here so a bad request fails at the contract, not halfway into a write.
+    value: z
+      .string()
+      .max(MOTD_MAX_LINES * (MOTD_MAX_LINE_LENGTH + 1))
+      .refine((v) => !/[\u0000-\u0009\u000B-\u001F\u007F]/.test(v), {
+        message: 'control characters cannot appear in an MOTD',
+      }),
+  }),
+])
 export type SetServerSettingRequest = z.infer<typeof SetServerSettingRequest>
 
 export const ServerStatus = z.object({

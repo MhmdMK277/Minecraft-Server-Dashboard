@@ -77,7 +77,7 @@ function srv(o: Partial<ServerStatus> & { name: string }): ServerStatus {
     levelName: 'world',
     worldDirs: ['world'],
     rconConfigured: true,
-    settings: { onlineMode: true, whitelist: true, fileModifiedAt: null, changedSinceStart: false },
+    settings: { onlineMode: true, whitelist: true, motd: 'A Minecraft Server', fileModifiedAt: null, changedSinceStart: false },
     health: 'HEALTHY',
     healthDetail: 'Port answering and the main game thread acknowledged RCON in 1 ms.',
     healthSince: new Date().toISOString(),
