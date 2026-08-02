@@ -72,6 +72,7 @@ import { startPagingSampler, stopPagingSampler } from './hostpaging'
 import { runColdBackup, restoreColdBackup, listColdBackups } from './coldbackup'
 import { writeSetting, writeMotd } from './serversettings'
 import { readGameRules, setGameRule } from './gamerules'
+import { profileSafepoints } from './profiling'
 import { startServer, stopServer, restartServer, runCommand } from './control'
 import { detectLauncher, indexTasks } from './launcher'
 import { loadPrefs, setPlayerAvatars, AVATAR_ORIGIN, type Prefs } from './prefs'
@@ -1531,6 +1532,28 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     await pushSnapshot()
     return { ok: true, detail: result.detail }
   })
+
+  /**
+   * Profiling: the safepoint record, read from the live gc.log on demand.
+   * A pure file read (no RCON, no process touched), so it is viewer-visible
+   * like every other reading. The threshold is clamped rather than trusted.
+   */
+  app.get<{ Params: { id: string }; Querystring: { threshold?: string } }>(
+    '/api/servers/:id/profiling',
+    async (req, reply) => {
+      if (!require_(req, reply, 'viewer', 'profiling.read')) return
+      const snap = latest ?? (await doScan())
+      const s = snap.servers.find((x) => x.id === req.params.id)
+      if (!s) return reply.code(404).send({ error: 'no server with that id' })
+      const t = Number(req.query.threshold)
+      const thresholdMs = Number.isFinite(t) ? Math.min(Math.max(t, 10), 60_000) : 200
+      const uptime = s.proc?.uptimeSeconds ?? null
+      return profileSafepoints(s.dir, {
+        thresholdMs,
+        processStartMs: uptime !== null ? Date.now() - uptime * 1000 : null,
+      })
+    },
+  )
 
   /**
    * Game rules: the runtime surface. Both routes work on a FRESH occupancy

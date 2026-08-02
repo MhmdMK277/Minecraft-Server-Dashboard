@@ -12,6 +12,7 @@ import { dashboard } from './client'
 import { Input } from '@/components/ui/input'
 import ServerSettingsPanel from './ServerSettings'
 import GameRulesPanel from './GameRules'
+import ProfilingPanel from './Profiling'
 import { href, type ServerPage } from './router'
 
 /**
@@ -160,6 +161,7 @@ export default function ServerPages({
         {page === 'players' && <Players s={s} canEdit={canEdit} prefs={prefs} />}
         {page === 'worlds' && <Worlds s={s} />}
         {page === 'gamerules' && <GameRulesPanel s={s} canEdit={canEdit} />}
+        {page === 'profiling' && <ProfilingPanel s={s} />}
         {page === 'console' && <ConsolePage s={s} canEdit={canEdit} lines={lines} />}
         {page === 'backups' && <Backups s={s} canEdit={canEdit} />}
         {page === 'settings' &&

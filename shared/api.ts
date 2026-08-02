@@ -396,6 +396,60 @@ export const GameRulesReading = z.object({
 })
 export type GameRulesReading = z.infer<typeof GameRulesReading>
 
+/**
+ * Profiling: every stop-the-world pause the JVM wrote down, split into the
+ * two sides of a safepoint. `reachMs` is time the OS spent NOT running the
+ * threads (paging, CPU starvation, a stalled disk -- a host fault); `atSpMs`
+ * is the operation itself (GC tuning). Ported from scripts/gc-report.py,
+ * which is what the 2026-08 stall investigation was conducted with.
+ */
+export const SafepointPause = z.object({
+  at: z.string(),
+  op: z.string(),
+  totalMs: z.number(),
+  reachMs: z.number(),
+  atSpMs: z.number(),
+  /** Whichever side got more of the stopped time owns the pause. */
+  attribution: z.enum(['host', 'jvm']),
+})
+export type SafepointPause = z.infer<typeof SafepointPause>
+
+export const ProfilingReading = z.object({
+  /**
+   * 'read' is the only state with figures. 'no-gclog' is a server started
+   * without the logging flag (normal, not a fault); 'parser-mismatch' means
+   * safepoint-looking lines exist and none parsed, which is a parser gap to
+   * report, never an empty healthy table; 'unreadable' is an I/O failure.
+   */
+  state: z.enum(['read', 'no-gclog', 'parser-mismatch', 'unreadable']),
+  detail: z.string(),
+  thresholdMs: z.number(),
+  /** Lines that LOOK like safepoints vs lines that parsed. A gap is a bug. */
+  candidates: z.number(),
+  parsed: z.number(),
+  window: z.object({
+    from: z.string().nullable(),
+    to: z.string().nullable(),
+    hours: z.number().nullable(),
+    readBytes: z.number(),
+    fileBytes: z.number(),
+    /** False when the read budget covered only the tail of the live file. */
+    wholeFile: z.boolean(),
+  }),
+  /** Figures describe the CURRENT process only; see previousProcessNote. */
+  n: z.number(),
+  p50Ms: z.number(),
+  p95Ms: z.number(),
+  p99Ms: z.number(),
+  maxMs: z.number(),
+  overCount: z.number(),
+  hostAttributedCount: z.number(),
+  /** Over-threshold pauses, worst first, capped server-side. */
+  pauses: z.array(SafepointPause),
+  previousProcessNote: z.string().nullable(),
+})
+export type ProfilingReading = z.infer<typeof ProfilingReading>
+
 export const SetGameRuleRequest = z.object({
   name: GameRuleName,
   /** Booleans for boolean rules, bounded integers for integer rules; the server-side catalog re-checks both. */
@@ -1333,6 +1387,8 @@ export const API = {
   setBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/backup`,
   backupDetection: (id: string, fresh = false) =>
     `/api/servers/${encodeURIComponent(id)}/backup/detection${fresh ? '?fresh=1' : ''}`,
+  profiling: (id: string, thresholdMs?: number) =>
+    `/api/servers/${encodeURIComponent(id)}/profiling${thresholdMs ? `?threshold=${thresholdMs}` : ''}`,
   gameRules: (id: string) => `/api/servers/${encodeURIComponent(id)}/gamerules`,
   setGameRule: (id: string) => `/api/servers/${encodeURIComponent(id)}/gamerules/set`,
   coldBackups: (id: string) => `/api/servers/${encodeURIComponent(id)}/coldbackups`,

@@ -1,4 +1,5 @@
 import {
+  Activity,
   Archive,
   ArrowLeft,
   ChevronsUpDown,
@@ -62,6 +63,7 @@ const SERVER_NAV: Array<{ page: ServerPage; label: string; icon: LucideIcon; adm
   // Readable by a viewer (it is a reading); changing a rule is gated at the
   // route and the buttons, not by hiding the page.
   { page: 'gamerules', label: 'Game Rules', icon: Dices },
+  { page: 'profiling', label: 'Profiling', icon: Activity },
   { page: 'backups', label: 'Backups', icon: Archive },
   { page: 'settings', label: 'Settings', icon: Settings2, adminOnly: true },
 ]

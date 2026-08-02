@@ -14,6 +14,7 @@ import type {
   ServerSettingKey,
   GameRuleName,
   GameRulesReading,
+  ProfilingReading,
   WorldsReading,
   ConfirmedLaunch,
   AttachCandidate,
@@ -233,6 +234,8 @@ export const dashboard = {
     get<BackupDetection>(API.backupDetection(id, fresh)),
   getColdBackups: (id: string) => get<{ entries: ColdBackupEntry[] }>(API.coldBackups(id)),
   getGameRules: (id: string) => get<GameRulesReading>(API.gameRules(id)),
+  getProfiling: (id: string, thresholdMs?: number) =>
+    get<ProfilingReading>(API.profiling(id, thresholdMs)),
   /** A 409 carries the module's refusal sentence via the thrown Error. */
   setGameRule: (id: string, name: GameRuleName, value: boolean | number) =>
     post<{ ok: boolean; detail: string; readBack: string | null }>(API.setGameRule(id), {
