@@ -45,6 +45,19 @@ zero garbage collections during either storm window, so its vulnerability
 was not exercised. The overnight window and the 05:00 rotation remain the
 confirming observation for the fleet as a whole.
 
+**Addendum, later that night, and the refault penalty quantified.** GTNH's
+first post-storm collection (22:55:41 local, 16 minutes after the storms)
+was bracketed by the residency sampler: 12% resident (846-870 MB of 6.9 GB)
+in the samples before it, 19% (1,310 MB) in the sample after. The
+collection faulted roughly 450 MB of heap back in and paid 502 ms, all
+at-safepoint work, time-to-safepoint 0.04 ms -- no host-fault signature.
+Under base priority 6 the same class of walk had cost up to 8.9 seconds.
+That is the "refaults come back cheaply at normal priority" claim with a
+number on it, from one observation. The evening's single host-withheld
+pause (Paper 1.21.11, Cleanup, 23:14 local) was 207 ms: under base 8 the
+host-withheld signature stayed in the hundreds of milliseconds where base 6
+gave seconds.
+
 ## 2026-08-02: the stall mechanism, established and instrumented
 
 Multi-second stop-the-world pauses on an idle machine with free RAM had
