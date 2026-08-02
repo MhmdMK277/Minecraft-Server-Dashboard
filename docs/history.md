@@ -1,5 +1,50 @@
 # Project history: settled milestones and findings
 
+## 2026-08-02 late evening: the controlled eviction stress test
+
+Rather than waiting for the 05:00 backup, the trigger was reproduced
+deliberately, twice, read-only (buffered sequential 1 MB reads through
+share-everything handles; nothing written). Round 1 streamed the backup
+archives: 53,920 pages input/s peak, roughly 5,300/s sustained for two
+minutes. Round 2 streamed 64.6 GB of files 4 MB and larger at ~198 MB/s for
+5.6 minutes: ten consecutive 30-second samples between 43,000 and 160,000
+pages input/s. The worst naturally occurring spike on record was 41,425/s;
+the storms were run against all four servers at base priority 8, roughly
+two hours after the priority fix landed, with zero players online and the
+cost and risk stated before the run.
+
+**What held: the harm.** Fleet-wide worst pause across 2.6 hours spanning
+both storms was 237.85 ms; zero pauses over 100 ms landed inside either
+storm window; and every pause over 100 ms that evening attributed as "work
+at safepoint" with time-to-safepoint at or below 0.03 ms, which is the JVM
+doing GC work, not the OS withholding threads. The same class of trigger at
+a quarter the intensity had produced 542/780/946 ms pauses under base
+priority 6 that very morning (04:24-04:57, after a 41,425 pages/s burst).
+
+**What did not hold: residency.** Under sustained pressure the base-8 heaps
+were trimmed from 9-20% resident down to 5-10% within five minutes, back
+inside the 4-15% band measured under base 6. Raising base priority does
+not keep heaps resident.
+
+**The accidental control group.** A freshly created server running at base
+priority 6 (it had inherited the dashboard's BelowNormal class through the
+spawn chain; see decision 0009) idled down to 9 MB resident of a 2.3 GB
+private set within thirty minutes of boot, while the base-8 JVMs held
+hundreds of MB through the storms.
+
+**The revised mechanism story, superseding the original.** Base priority
+does not prevent eviction; it changes the depth and order of eviction, and,
+on this evidence, whether the refaults hurt: at normal priority the trimmed
+pages appear to come back cheaply instead of stalling a garbage collection
+for seconds. The original chain ("low priority -> residency 4-15% -> GC
+hard-faults for seconds") survives only in its last link; the middle link
+is now known to be shared by both priorities.
+
+**Untested by this run**: GTNH, the deepest heap in the fleet, executed
+zero garbage collections during either storm window, so its vulnerability
+was not exercised. The overnight window and the 05:00 rotation remain the
+confirming observation for the fleet as a whole.
+
 ## 2026-08-02: the stall mechanism, established and instrumented
 
 Multi-second stop-the-world pauses on an idle machine with free RAM had

@@ -29,7 +29,17 @@ export function describeWorld(jvms: JvmProcess[]): World {
   const taskStarted = jvms.filter((j) => j.startedBy === 'scheduled-task').length
   const session0 = jvms.filter((j) => j.sessionId === 0).length
   const total = jvms.length
-  const isProduction = total > 0 && taskStarted === total && session0 === total
+  // Revised 2026-08-03. "Every JVM task-started" was the original gate, and it
+  // broke on a case that is production BY DESIGN: a server the dashboard
+  // spawns outlives the dashboard (spawned detached -- the attach model), and
+  // once the dashboard restarts, the survivor's ancestry walk dies at a dead
+  // pid and its provenance reads `unknown`. That server is not the desktop
+  // hazard this gate exists to catch (proof-coverage.md: suites green against
+  // interactively started servers only). The hazard is session-1 processes
+  // and a world where the task-started path goes unexercised -- so the gate
+  // is exactly that: everything in session 0, nothing on a desktop, and the
+  // scheduler-started shape present to be tested.
+  const isProduction = total > 0 && session0 === total && taskStarted > 0
 
   const bySignal = jvms.reduce<Record<string, number>>((a, j) => {
     a[j.attributedBy] = (a[j.attributedBy] ?? 0) + 1
@@ -44,8 +54,11 @@ export function describeWorld(jvms: JvmProcess[]): World {
     summary:
       total === 0
         ? 'no servers are running, so nothing about process identity is being tested at all'
-        : `${total} running: ${taskStarted} started by a scheduled task, ${session0} in session 0. ` +
-          `Attributed by ${Object.entries(bySignal).map(([k, v]) => `${k} ${v}`).join(', ')}.`,
+        : `${total} running: ${taskStarted} started by a scheduled task, ${session0} in session 0` +
+          (session0 - taskStarted > 0
+            ? `, ${session0 - taskStarted} session-0 with no surviving launcher ancestry (a detached spawn outliving its launcher)`
+            : '') +
+          `. Attributed by ${Object.entries(bySignal).map(([k, v]) => `${k} ${v}`).join(', ')}.`,
     remedy:
       total === 0
         ? 'Start the servers via their scheduled tasks before running this.'

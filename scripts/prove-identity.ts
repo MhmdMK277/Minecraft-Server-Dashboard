@@ -93,7 +93,7 @@ const taskStarted = scan.jvms.filter((j) => j.startedBy === 'scheduled-task')
 // The load-bearing assertion. A green run must mean "the production
 // configuration works", not "some configuration works".
 check(
-  'every server under test was started by a scheduled task, not a desktop',
+  'the world is production-shaped: all session 0, none desktop-started, the task path exercised',
   world.isProduction,
   `${world.summary} ${world.remedy}`,
 )

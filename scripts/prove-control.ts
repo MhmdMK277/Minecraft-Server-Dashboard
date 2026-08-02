@@ -78,6 +78,7 @@ type Snap = {
   servers: Array<{
     id: string
     name: string
+    dir: string
     health: string
     launchStrategy: string
     launchDetail: string

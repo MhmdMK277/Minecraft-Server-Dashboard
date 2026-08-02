@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { getPriority, setPriority, constants as osConstants } from 'node:os'
 import { scanJvms, jvmForDir, type JvmScan } from './platform'
 import { gamePortOf, rconConfig } from './properties'
 import { Rcon } from './rcon'
@@ -187,6 +188,42 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
  * immediately rather than waiting for the loop to finish, because the damage is
  * happening while we poll.
  */
+/**
+ * A server the dashboard spawns must run like a server, not like the
+ * dashboard. The observer deliberately stays BelowNormal (decision 0009: it
+ * must not compete with what it watches), but priority class is inherited,
+ * so a script-started server would run at base 6 with its pages first in
+ * line for eviction. launcher.ts raises the wrapper at spawn; this closes
+ * the race for the JVM itself once the post-start verification has named
+ * it. Task-started servers are never touched here: their priority belongs
+ * to the task definition, which the operator owns.
+ *
+ * Node maps Windows priority classes onto nice-style numbers: BelowNormal
+ * reads as 10, Normal as 0. Raising to Normal needs no elevation for a
+ * same-user process.
+ */
+function ensureSpawnedPriority(pid: number): 'normal' | 'unverified' {
+  try {
+    if (getPriority(pid) > osConstants.priority.PRIORITY_NORMAL) {
+      setPriority(pid, osConstants.priority.PRIORITY_NORMAL)
+    }
+    // Read back rather than trust either raise (launcher's or this one): the
+    // sentence built from this return value states the priority as a fact.
+    return getPriority(pid) <= osConstants.priority.PRIORITY_NORMAL ? 'normal' : 'unverified'
+  } catch {
+    return 'unverified'
+  }
+}
+
+/** The sentence fragment the control result carries for each outcome. */
+function priorityNote(outcome: 'normal' | 'unverified' | null): string {
+  if (outcome === 'normal')
+    return ' It runs at normal priority, read back after the start: a spawned process would otherwise inherit this dashboard\'s own below-normal class (decision 0009).'
+  if (outcome === 'unverified')
+    return ' Its priority could not be read or raised, so it may be running below normal; the Overview\'s eviction exposure panel shows the live reading.'
+  return ''
+}
+
 async function waitForOccupancy(
   t: Target,
   want: 'one' | 'none',
@@ -251,10 +288,11 @@ export async function startServer(t: Target, launcher: Launcher): Promise<Contro
       // will not answer during the minute you need it is not. The measured boot
       // time (M3.5) makes the wait unnecessary: the reader is told what to expect
       // instead of being made to sit through it.
+      const pri = launcher.strategy === 'script' ? ensureSpawnedPriority(after.pids[0]!) : null
       return ok(
         t,
         'start',
-        `Started. One java process owns this directory (pid ${after.pids[0]}). ${readiness(t)}`,
+        `Started. One java process owns this directory (pid ${after.pids[0]}).${priorityNote(pri)} ${readiness(t)}`,
       )
     }
     return fail(
@@ -380,10 +418,11 @@ export async function restartServer(t: Target, launcher: Launcher): Promise<Cont
       )
     }
     if (after.pids.length === 1) {
+      const pri = launcher.strategy === 'script' ? ensureSpawnedPriority(after.pids[0]!) : null
       return ok(
         t,
         'restart',
-        `Restarted. One java process owns this directory (pid ${after.pids[0]}). ${readiness(t)}`,
+        `Restarted. One java process owns this directory (pid ${after.pids[0]}).${priorityNote(pri)} ${readiness(t)}`,
       )
     }
     return fail(

@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFile, spawn } from 'node:child_process'
+import { setPriority, constants as osConstants } from 'node:os'
 import { promisify } from 'node:util'
 import type { LaunchStrategy } from '@shared/api'
 
@@ -286,4 +287,22 @@ export async function invokeLauncher(dir: string, l: Launcher): Promise<void> {
     windowsVerbatimArguments: true,
   })
   child.unref()
+
+  // Priority class is inherited, and this dashboard deliberately runs
+  // BelowNormal (decision 0009: an observer must not compete with what it
+  // watches). Its children are not observers. Without this line a server
+  // started here runs at base priority 6 with its pages first in line for
+  // eviction -- measured 2026-08-02, when a freshly created server idled
+  // down to 9 MB of working set within half an hour. Raising the wrapper
+  // immediately means the java it spawns inherits Normal; the narrow race
+  // where java appears first is closed by the post-start verification in
+  // control.ts, which re-checks the identified JVM itself.
+  if (child.pid !== undefined) {
+    try {
+      setPriority(child.pid, osConstants.priority.PRIORITY_NORMAL)
+    } catch {
+      // The wrapper can already be gone (a script that exits instantly);
+      // the post-start verification still covers any JVM that appeared.
+    }
+  }
 }

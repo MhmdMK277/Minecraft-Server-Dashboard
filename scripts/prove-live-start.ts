@@ -165,11 +165,31 @@ check(
 
 // ------------------------------------------------------- 2. it starts
 
-console.log('\nstarting ...')
-const started = await startServer(target, launcher)
+// The production dashboard runs BelowNormal (decision 0009), and priority
+// class is inherited -- so without launcher.ts raising the wrapper and
+// control.ts verifying the JVM, a server started here would run at base 6.
+// Measured before the fix: a freshly created server's working set trimmed
+// to 9 MB of 2.3 GB within half an hour. Lowering THIS process reproduces
+// the condition; the assertions below then read the JVM's priority back
+// from the process table, not from our own bookkeeping.
+console.log('\nstarting (with this process lowered to BelowNormal, as production runs) ...')
+const { getPriority, setPriority, constants: osConstants } = await import('node:os')
+const ownPriorityBefore = getPriority(0)
+setPriority(0, osConstants.priority.PRIORITY_BELOW_NORMAL)
+let started: Awaited<ReturnType<typeof startServer>>
+try {
+  started = await startServer(target, launcher)
+} finally {
+  setPriority(0, ownPriorityBefore)
+}
 console.log(`  ${started.ok ? 'OK  ' : 'FAIL'} ${started.detail}`)
 check('startServer() invokes the launcher and a JVM appears', started.ok, started.detail)
 check('and the success message names one pid', /pid \d+/.test(started.detail), started.detail)
+check(
+  'and states, from a read-back, that the server runs at normal priority',
+  /runs at normal priority, read back/.test(started.detail),
+  started.detail,
+)
 
 const after = await occupancyOf(dir)
 console.log(`  occupancy: pids ${after.pids.join(', ') || 'none'} certain=${after.certain}`)
@@ -185,6 +205,15 @@ check(
   'the fake server is NOT attributed via the scheduled-task signal',
   mine.every((j) => j.attributedBy !== 'scheduled-task'),
   'nothing scheduled it, so claiming otherwise would mean the task index is matching too loosely',
+)
+// The process table's own reading, not ours: Win32_Process.Priority 8 is
+// Normal, 6 is BelowNormal. This is the assertion that fails if either the
+// launcher's raise or control's read-back is removed while the dashboard
+// runs BelowNormal.
+check(
+  'the spawned JVM runs at Normal base priority, not the observer\'s inherited class',
+  mine.length === 1 && mine[0]!.basePriority === 8,
+  `basePriority=${mine[0]?.basePriority ?? 'unknown'}`,
 )
 
 // ------------------------------------------------- 3. a second start is refused
