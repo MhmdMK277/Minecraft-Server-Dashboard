@@ -332,6 +332,77 @@ export const ServerSettings = z.object({
 })
 export type ServerSettings = z.infer<typeof ServerSettings>
 
+/**
+ * Game rules: the runtime surface. Read through the running server's RCON on
+ * demand (never in the scan), set only from this catalog of names -- the
+ * command sent is built from a catalog constant plus a validated value, so
+ * this route can never become a raw RCON pipe. The catalog in
+ * server/gamerules.ts carries types, bounds and descriptions; prove-gamerules
+ * asserts it and this enum cannot drift apart.
+ */
+export const GAME_RULE_NAMES = [
+  'keepInventory',
+  'mobGriefing',
+  'doFireTick',
+  'doDaylightCycle',
+  'doWeatherCycle',
+  'doMobSpawning',
+  'doMobLoot',
+  'doTileDrops',
+  'naturalRegeneration',
+  'commandBlockOutput',
+  'announceAdvancements',
+  'showDeathMessages',
+  'doImmediateRespawn',
+  'randomTickSpeed',
+  'playersSleepingPercentage',
+  'spawnRadius',
+] as const
+export const GameRuleName = z.enum(GAME_RULE_NAMES)
+export type GameRuleName = z.infer<typeof GameRuleName>
+
+export const GameRuleReading = z.object({
+  name: GameRuleName,
+  type: z.enum(['boolean', 'integer']),
+  description: z.string(),
+  /** Integer rules only; null for booleans. */
+  min: z.number().nullable(),
+  max: z.number().nullable(),
+  /**
+   * 'value': parsed from a measured reply shape. 'absent': this server's
+   * version does not have the rule (never rendered as a default). 'unparsed':
+   * the reply matched no measured shape; `raw` carries what it said.
+   */
+  status: z.enum(['value', 'absent', 'unparsed']),
+  boolValue: z.boolean().nullable(),
+  intValue: z.number().nullable(),
+  /** The server's own reply, verbatim. The honesty escape hatch. */
+  raw: z.string(),
+})
+export type GameRuleReading = z.infer<typeof GameRuleReading>
+
+export const GameRulesReading = z.object({
+  /**
+   * 'read' is the only state with rules in it. The rest are the honest
+   * refusals: not-running (rules live in level.dat, which is not parsed
+   * here), uncertain (doubt is not a reading), no-rcon, rcon-failed, and
+   * queries-unsupported (measured on Paper 1.21.11, which rejects the
+   * gamerule query form over RCON).
+   */
+  state: z.enum(['read', 'not-running', 'uncertain', 'no-rcon', 'rcon-failed', 'queries-unsupported']),
+  detail: z.string(),
+  rules: z.array(GameRuleReading),
+  queriedAt: z.string().nullable(),
+})
+export type GameRulesReading = z.infer<typeof GameRulesReading>
+
+export const SetGameRuleRequest = z.object({
+  name: GameRuleName,
+  /** Booleans for boolean rules, bounded integers for integer rules; the server-side catalog re-checks both. */
+  value: z.union([z.boolean(), z.number().int().min(0).max(100000)]),
+})
+export type SetGameRuleRequest = z.infer<typeof SetGameRuleRequest>
+
 export const SetServerSettingRequest = z.union([
   z.object({
     key: ServerSettingKey,
@@ -1262,6 +1333,8 @@ export const API = {
   setBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/backup`,
   backupDetection: (id: string, fresh = false) =>
     `/api/servers/${encodeURIComponent(id)}/backup/detection${fresh ? '?fresh=1' : ''}`,
+  gameRules: (id: string) => `/api/servers/${encodeURIComponent(id)}/gamerules`,
+  setGameRule: (id: string) => `/api/servers/${encodeURIComponent(id)}/gamerules/set`,
   coldBackups: (id: string) => `/api/servers/${encodeURIComponent(id)}/coldbackups`,
   runColdBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/coldbackup`,
   restoreColdBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/coldbackup/restore`,

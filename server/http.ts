@@ -20,6 +20,7 @@ import {
   RunColdBackupRequest,
   RestoreColdBackupRequest,
   SetServerSettingRequest,
+  SetGameRuleRequest,
   RunCommandRequest,
   AttachRequest,
   AttachLaunchRequest,
@@ -70,6 +71,7 @@ import { readBackupDetection, resetDetectionCache } from './backupdetect'
 import { startPagingSampler, stopPagingSampler } from './hostpaging'
 import { runColdBackup, restoreColdBackup, listColdBackups } from './coldbackup'
 import { writeSetting, writeMotd } from './serversettings'
+import { readGameRules, setGameRule } from './gamerules'
 import { startServer, stopServer, restartServer, runCommand } from './control'
 import { detectLauncher, indexTasks } from './launcher'
 import { loadPrefs, setPlayerAvatars, AVATAR_ORIGIN, type Prefs } from './prefs'
@@ -1528,6 +1530,57 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     // Reflect it immediately rather than waiting for the next poll.
     await pushSnapshot()
     return { ok: true, detail: result.detail }
+  })
+
+  /**
+   * Game rules: the runtime surface. Both routes work on a FRESH occupancy
+   * reading inside server/gamerules.ts (doubt refuses, like the start guard),
+   * and the RCON work happens only on demand -- never in the 10 s scan.
+   * The read is viewer-visible like every other reading; the set is
+   * admin-only and audited with the read-back, because "what did it change
+   * to" is the fact worth having later, not "what was asked".
+   */
+  app.get<{ Params: { id: string } }>('/api/servers/:id/gamerules', async (req, reply) => {
+    if (!require_(req, reply, 'viewer', 'gamerules.read')) return
+    const snap = latest ?? (await doScan())
+    const s = snap.servers.find((x) => x.id === req.params.id)
+    if (!s) return reply.code(404).send({ error: 'no server with that id' })
+    return readGameRules(s.dir)
+  })
+
+  app.post<{ Params: { id: string } }>('/api/servers/:id/gamerules/set', async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'gamerule.set')
+    if (!session) return
+    const parsed = SetGameRuleRequest.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'expected { name: <catalogued rule>, value: boolean | integer }' })
+    }
+    const snapshot = latest ?? (await doScan())
+    const server = snapshot.servers.find((s) => s.id === req.params.id)
+    if (!server) {
+      audit({
+        actor: session.username,
+        role: session.role,
+        action: 'gamerule.set',
+        target: req.params.id,
+        outcome: 'denied',
+        ip: clientIp(req),
+        detail: 'no such server directory in the current scan',
+      })
+      return reply.code(404).send({ error: 'no such server directory' })
+    }
+    const result = await setGameRule(server.dir, parsed.data.name, parsed.data.value)
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'gamerule.set',
+      target: server.name,
+      outcome: result.ok ? 'ok' : 'denied',
+      ip: clientIp(req),
+      detail: `${parsed.data.name} -> ${String(parsed.data.value)}. ${result.detail}`,
+    })
+    if (!result.ok) return reply.code(409).send({ error: result.detail })
+    return { ok: true, detail: result.detail, readBack: result.readBack }
   })
 
   // ------------------------------------------------------------------ static

@@ -2,6 +2,7 @@ import {
   Archive,
   ArrowLeft,
   ChevronsUpDown,
+  Dices,
   Earth,
   FolderPlus,
   Gauge,
@@ -58,6 +59,9 @@ const SERVER_NAV: Array<{ page: ServerPage; label: string; icon: LucideIcon; adm
   { page: 'players', label: 'Players', icon: Users },
   { page: 'console', label: 'Console', icon: Terminal },
   { page: 'worlds', label: 'Worlds', icon: Earth },
+  // Readable by a viewer (it is a reading); changing a rule is gated at the
+  // route and the buttons, not by hiding the page.
+  { page: 'gamerules', label: 'Game Rules', icon: Dices },
   { page: 'backups', label: 'Backups', icon: Archive },
   { page: 'settings', label: 'Settings', icon: Settings2, adminOnly: true },
 ]

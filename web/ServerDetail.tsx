@@ -11,6 +11,7 @@ import { formatMc } from './mcformat'
 import { dashboard } from './client'
 import { Input } from '@/components/ui/input'
 import ServerSettingsPanel from './ServerSettings'
+import GameRulesPanel from './GameRules'
 import { href, type ServerPage } from './router'
 
 /**
@@ -32,7 +33,7 @@ function pauseText(ms: number): string {
 }
 
 /** A board section: hairline rule, mono label, the reason, the content. */
-function Section({
+export function Section({
   label,
   note,
   children,
@@ -158,6 +159,7 @@ export default function ServerPages({
         {page === 'overview' && <Overview s={s} canEdit={canEdit} />}
         {page === 'players' && <Players s={s} canEdit={canEdit} prefs={prefs} />}
         {page === 'worlds' && <Worlds s={s} />}
+        {page === 'gamerules' && <GameRulesPanel s={s} canEdit={canEdit} />}
         {page === 'console' && <ConsolePage s={s} canEdit={canEdit} lines={lines} />}
         {page === 'backups' && <Backups s={s} canEdit={canEdit} />}
         {page === 'settings' &&

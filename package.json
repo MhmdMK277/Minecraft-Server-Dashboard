@@ -47,6 +47,7 @@
     "prove-backup-policy": "tsx scripts/prove-backup-policy.ts",
     "prove-backup-route": "tsx scripts/prove-backup-route.ts",
     "prove-coldbackup-route": "tsx scripts/prove-coldbackup-route.ts",
+    "prove-gamerules": "tsx scripts/prove-gamerules.ts",
     "prove-backup-detect": "tsx scripts/prove-backup-detect.ts",
     "prove-cold-backup": "tsx scripts/prove-cold-backup.ts",
     "prove-settings": "tsx scripts/prove-settings.ts",
