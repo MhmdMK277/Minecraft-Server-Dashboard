@@ -4,6 +4,14 @@ Performed 2026-07-31 against commit `ed3adf6` (the state before the fixes
 below). Every check here is a command a stranger can rerun; where a claim
 could not be tested, it says so instead of asserting it.
 
+**A second adversarial pass ran 2026-08-03 against `e846ce1`**, scoped to
+everything added since M4 (cold backups, creation, the tunnel, the
+MOTD/game-rule/settings writes, the instance lock, profiling, and every route
+added since). It found nothing: five candidates were raised and all five were
+dropped in independent triage. Workstream 3 records what was attacked, what
+was demonstrated rather than argued, and the two conditions that would make
+the one real primitive reachable.
+
 **One critical vulnerability was found and fixed.** An unauthenticated caller
 on the network could read the entire dashboard, including console lines, by
 percent-encoding a letter of the URL. Details in F1.
@@ -402,6 +410,117 @@ provenance is a claim, and the provenance here is who owned the route.
   constructed on this platform. A directory named
   `Audit & Co %TEMP% $(whoami) ` + backtick + `id` + backtick flowed through
   discovery and the API without incident.
+
+## Workstream 3: the second adversarial pass (2026-08-03)
+
+Performed against commit `e846ce1`, clean tree, scoped to everything added
+since M4: cold backups and their routes, server creation, the tunnel, the
+MOTD/game-rules/settings write paths, the instance lock, profiling, and every
+route registered since M4.
+
+**Result: no finding survived triage.** Five candidates were raised by the
+reviewers and all five were dropped by independent triage at 2-3 out of 10.
+Saying that plainly is the point of this section: a pass that manufactures a
+finding to look thorough is worth less than one that reports nothing.
+
+Method, and its limits. Three reviewers were spawned without the build
+context, one per surface group, and told not to trust the code comments,
+which in this repository assert security properties confidently. Each
+candidate then went to a separate triage agent that re-read the code itself.
+Same caveat as workstream 2: **this is still an AI reviewing code an AI
+wrote.** What survives the reviewers is the artifacts.
+
+### The five candidates, and why each was dropped
+
+| # | Candidate | Verdict |
+| --- | --- | --- |
+| 1 | Authenticode check gates on signature validity but never compares the signer subject, so any trusted-root code-signing certificate satisfies it (`server/tunnel.ts`) | **Dropped, 2/10.** The attack begins "compromise playit's release pipeline". Upstream supply chain, plus a per-run operator confirmation before the binary executes. Pinning the subject is a worthwhile comment-level hardening note, not a finding |
+| 2 | The tunnel forwards to whatever `server-port` declares, including the dashboard's own port or the RCON port (`server/tunnel.ts`) | **Dropped, 2/10.** Requires write access to a server directory, which is the operator's own account. The port is rendered twice in the confirm UI before the typed consent, so the "believed it was a game port" premise fails |
+| 3 | Restore extraction honors symlink members and writes through them (`server/coldbackup.ts:298`) | **Dropped, 3/10.** See below: the primitive is real and demonstrated, the reachability is not |
+| 4 | Restore trusts the manifest's `archivePath`, `serverDir` and recorded `sha256` with no containment check, while the backup path does apply `within()` | **Dropped, 2/10.** Requires local same-user write to the data directory, which also holds `sessions.json` and `config.json`; that actor can forge an admin session or repoint the servers root, which is strictly more power |
+| 5 | The archive is hashed and then re-opened for extraction, so the integrity check is not atomic with the use | **Dropped, 2/10.** A race strictly dominated by its own precondition: anyone who can win it can instead edit the manifest's recorded hash at leisure |
+
+### What was demonstrated rather than argued
+
+The primary target was zip-slip on restore, and it was attacked empirically:
+real malicious archives built in a scratch directory, extracted with the exact
+command `server/coldbackup.ts:298` runs (`System32 bsdtar`, `-x -f … -C … 
+--strip-components 1`, no `-P`).
+
+**Every traversal and absolute-path form was refused or neutralised.** `..`
+at several depths, backslash and mixed separators, doubled separators,
+traversal buried mid-path, percent-encoded `..`, trailing dots and spaces:
+all refused with `Path contains '..'`, exit 1, nothing written. POSIX
+absolute, drive-letter, drive-relative and UNC paths were stripped to land
+inside the destination. A hardlink aimed at a sibling `start.bat` was
+contained. A zip whose local header and central directory disagreed escaped
+neither way. **`--strip-components` is applied before the `..` guard**, so the
+strip-prefix trick does not bypass it.
+
+The one primitive that did escape is **symlink members**: bsdtar creates the
+link, then follows it to write the next member outside the destination. Four
+variants escaped in the lab. It is not reachable through this application:
+restore only extracts manifest-listed archives, the sole manifest writer is
+the app's own backup, and `tar -a -c` records a symlink as an inert member
+and never emits a write-through-the-link member. A full round trip confirmed
+it: a symlink planted in a server directory came back as an inert reparse
+point with the victim file outside untouched.
+
+**Two conditions would make it live, and are recorded here so the re-test is
+not forgotten:**
+
+1. **A File Manager, or any route that writes into server directories**
+   (deferred on the roadmap). A planted directory symlink plus a
+   backup/restore round trip is the realistic route to a hostile member.
+2. **Any route that accepts archive bytes.** There is no upload route today;
+   `grep multipart server/` returns nothing.
+
+If either lands, extraction needs its own guard rather than the archiver's:
+walk `restoredDir` after extraction and fail loudly on any reparse point
+whose target leaves the folder.
+
+### What was checked and held
+
+- **Property injection into `server.properties` is unconstructible.** Nine
+  payloads were run end to end through the real `writeMotd`: LF, U+2028,
+  U+2029, U+0085, a trailing backslash (`.properties` line continuation), and
+  four escape-syntax tricks. All nine stayed inside the `motd` value; the
+  credential line was byte-identical every time and the line count never
+  changed. U+2028/U+2029/U+0085 do pass the wire's control-character filter,
+  which does not matter: the encoder renders everything outside printable
+  ASCII as `\uXXXX`, and a backslash is always doubled.
+- **Game rules cannot smuggle an RCON command.** Eleven payloads through the
+  real wire contract: newline and semicolon in the value, injection in the
+  name, `1e10`, `NaN`, `Infinity`, `-0`, `3.5`, a `toString` object,
+  `__proto__`. All rejected except legitimate values, and the command is
+  always two tokens built from a catalog constant.
+- **The gate covers the new routes without being told to.** `prove-authgate`
+  is 121 checks; the three cold-backup, two game-rule and one profiling route
+  each answer 401 unauthenticated. Every mutating route requires admin; no
+  mutating route is viewer-reachable.
+- **Creation cannot escape the servers root.** The name regex rejects every
+  separator, drive-colon, UNC and ADS form; `..`, trailing dot/space and
+  reserved device names are separately blocked; and `basename(dir) !== name`
+  after `resolve(normalize(join(...)))` is the second gate. `parentDir` is
+  hardcoded to the configured servers root and the request's field is never
+  read. Every download is checksum-verified before use, redirects are
+  re-checked per hop against hardcoded host lists, and the installer spawn is
+  an args array gated on a server-side `confirmRunDownloadedProgram === true`.
+- **The tunnel's typed confirmation is enforced in the module**, not the UI,
+  and the secret is never returned by any route: status carries
+  `secretPresent: boolean` only.
+- **A crafted instance-lock file cannot redirect a write**: no path is ever
+  read from the lock, and the pid is integer-validated twice before it
+  reaches a command line, then used only for a liveness probe.
+
+### Observations recorded, not findings
+
+- `POST /api/servers/:id/coldbackup/restore` never resolves its `:id`
+  parameter; any admin may restore any `archiveId` regardless of the server
+  the URL names. Both sides are admin-only, so no boundary is crossed, but
+  the path parameter is decorative and reads as scoping that is not there.
+- The session cookie omits `Secure`, which is the documented plain-HTTP LAN
+  deployment decision, and the login route is a public CSRF exception.
 
 ## Reproducing the whole audit
 
