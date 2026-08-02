@@ -155,6 +155,34 @@ the control routes cannot reach a real JVM and no real world can be touched.
 | F5 | Low | Session file trusted `role`, `username` and future timestamps | **Fixed**, `5be2c48` |
 | F6 | Medium | Backups page claimed a detection that never existed (found 2026-08-01, an honesty defect rather than a network one) | **Fixed**, `6b6dc9b` |
 | F7 | Medium | Addresses page presented a VPN's exit address as the home public address (found 2026-08-02, honesty defect) | **Fixed** |
+| F8 | Low | The pre-push guard's one-pattern-list design made per-file whole-exemption the only available fix, so a legitimate reference forced dropping every check for that file (found 2026-08-02, guard-design defect) | **Fix written**, applied by the operator's hand (the hook is local and untracked) |
+
+#### F8 (low): a guard whose only exception is total exemption
+
+The local pre-push hook (untracked, on the development machine only) scanned
+outgoing commits with one combined regex of six patterns: five genuinely
+private values (public IP, username, hostname, LAN prefix, tailnet address)
+plus the name of the gitignored handoff file, which tracked code must not
+cite. Its only exception mechanism was a git pathspec exclusion, which
+exempts a FILE from the whole scan, not from one pattern.
+
+That shape failed the first time a legitimate single-pattern reference
+appeared: CLAUDE.md must, by operator instruction, tell every session to
+read the handoff file, and the only edit the hook's design offered was to
+stop scanning CLAUDE.md for the five private values too. The pre-existing
+`.gitignore` exemption had the same over-breadth from day one; it simply had
+never mattered. A guard whose easiest correct-looking fix is a broad
+weakening will eventually get that fix under deadline, so the design is the
+defect, independent of whether anything leaked (nothing did: both scans were
+re-run over the whole tree and every outgoing commit before the rewrite).
+
+The fix splits the scan in two: the five private patterns apply to every
+tracked file with no exceptions at all, tightening `.gitignore` back under
+them, and the handoff-name pattern alone carries the two legitimate
+exceptions, each with its reason in the hook's comment. Both scans were
+verified clean over the tree and every outgoing commit before the rewrite
+was proposed. The general rule worth keeping: **an allowlist must be scoped
+to the rule that needs it, never to the file that triggered it.**
 
 #### F1 (critical): the gate keyed on spelling, not on the route
 
