@@ -7,10 +7,12 @@ could not be tested, it says so instead of asserting it.
 **A second adversarial pass ran 2026-08-03 against `e846ce1`**, scoped to
 everything added since M4 (cold backups, creation, the tunnel, the
 MOTD/game-rule/settings writes, the instance lock, profiling, and every route
-added since). It found nothing: five candidates were raised and all five were
-dropped in independent triage. Workstream 3 records what was attacked, what
-was demonstrated rather than argued, and the two conditions that would make
-the one real primitive reachable.
+added since). The reviewer triage dropped five candidates, but firing the
+exploits rather than arguing them surfaced **F10**, a HIGH: a symlink archive
+member escaped cold-backup restore under an elevated token. It is fixed in code
+(a pre-extraction member guard) with a proof that demonstrates the escape
+first. Workstream 3 records every attack that was fired and its output; F10 is
+written up in workstream 2's finding list.
 
 **One critical vulnerability was found and fixed.** An unauthenticated caller
 on the network could read the entire dashboard, including console lines, by
@@ -165,6 +167,7 @@ the control routes cannot reach a real JVM and no real world can be touched.
 | F7 | Medium | Addresses page presented a VPN's exit address as the home public address (found 2026-08-02, honesty defect) | **Fixed** |
 | F8 | Low | The pre-push guard's one-pattern-list design made per-file whole-exemption the only available fix, so a legitimate reference forced dropping every check for that file (found 2026-08-02, guard-design defect) | **Fix written**, applied by the operator's hand (the hook is local and untracked) |
 | F9 | Medium | A GC pause window spanning a restart presented a replaced process's pause as the live server's: "304 pauses, worst 946 ms" combined a dead JVM's stall with a fresh JVM's harmless warmup churn and read as a current crisis (found 2026-08-02, honesty defect, same class as F6/F7) | **Fixed**, `server/gclog.ts` splits at the process boundary; prove-gclog pins it |
+| F10 | High | Cold-backup restore extracted a symlink archive member and wrote THROUGH it, outside the restore directory: arbitrary file write, which on this host means overwriting a start script or a scheduled-task target (code execution). Found by attack 2026-08-03; the escape was demonstrated. In production it was contained only because a limited Windows token is denied symlink creation, an OS default that breaks under an elevated dashboard or Developer Mode | **Fixed**, `server/coldbackup.ts` enumerates members and refuses any link/device member by name before extraction, regardless of OS privilege; prove-coldbackup-linkguard (12), including the elevated case that escapes without the guard |
 
 #### F9 (medium): two processes presented as one sick one
 
@@ -566,16 +569,44 @@ they hardcode throwaway paths). Summary of what was fired and what happened:
   and zip, deep, backslash, mixed, strip-then-dotdot) REFUSED by bsdtar (`Path
   contains '..'`); every absolute / drive-letter / drive-relative / UNC form
   stripped and CONTAINED inside the restore dir; percent-encoded `..` treated
-  as a literal filename, contained. The one primitive that escaped is a
-  **symlink member** (write-through-the-link, 1 of 2 variants), and only
-  because the test shell was elevated.
-- **The symlink escape is not reachable through the app.** A full round trip
-  (plant a symlink in a server dir, run the real `runColdBackup`, restore it)
-  stored the symlink as an INERT link member (`lrw-rw-rw- World/escape -> ...`)
-  and left the outside victim file untouched. And the production token cannot
-  create the link at all: `SeCreateSymbolicLinkPrivilege` is granted to
-  `S-1-5-32-544` (Administrators) only, Developer Mode is off, and the
-  dashboard task runs `RunLevel: Limited`. Measured this time, not inferred.
+  as a literal filename, contained. The one primitive that escaped was a
+  **symlink member** (write-through-the-link), demonstrated under an elevated
+  token. **This became finding F10 and is fixed** (see the F10 write-up): the
+  same 12-archive corpus re-fired against the fixed code refuses the symlink
+  cases by name, zero escapes.
+
+#### F10 (high): a symlink archive member escaped restore
+
+The attack that found it: a tar with two members, a symlink `World/esc -> ..`
+and a file `World/esc/pwn.txt`. bsdtar creates the link, then writes the second
+member through it, landing one directory above the restore folder. On this host
+that is a sibling of a live server directory, so the write can land on a
+`start.bat` or a scheduled-task target: code execution, not just a stray file.
+
+Measured containment BEFORE the fix, and why it was not enough. The raw
+extraction escaped under an elevated token; a limited token was blocked because
+`SeCreateSymbolicLinkPrivilege` is granted to `S-1-5-32-544` (Administrators)
+only and Developer Mode is off, and the dashboard task runs `RunLevel: Limited`.
+That is an OS default, not our code. It breaks in two common setups the project
+does not get to assume against: a dashboard run elevated, and a host with
+Developer Mode enabled. This project does not accept "safe because of an OS
+default" anywhere, so it was fixed in code.
+
+The fix (`server/coldbackup.ts`): before extraction, and after the hash check,
+`restoreColdBackup` enumerates the archive's members with two bsdtar listings
+(names, and the verbose type column, zipped by index) and refuses any member
+whose type is not a plain file or directory, naming it: symlink, hardlink,
+block/character device, fifo, socket. A world backup has none of these
+legitimately. If the two listings disagree in count, which a newline in a
+member name would cause, the archive is refused rather than risk mis-typing a
+member. The app's own backup+restore round trip is unaffected; a server
+directory that happens to contain a symlink is now archived and then REFUSED on
+restore, which is the safe direction.
+
+Honest framing, as this was found: found by attack, contained by privilege, now
+contained by code. Proof `prove-coldbackup-linkguard` (12 checks) demonstrates
+the raw escape under the elevated token first, then proves the guard refuses the
+symlink, hardlink and device archives while a legitimate one still restores.
 - **Manifest / archive disagreement, 5 cases**: a journaled hash that does not
   match the bytes, an archive tampered after journaling, a missing archive
   path, an unknown archive id, all REFUSED with the sha256 sentence; a ~1000x

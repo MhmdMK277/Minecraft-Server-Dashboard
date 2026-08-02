@@ -125,6 +125,61 @@ export async function listColdBackups(dataDir: string, serverDir?: string): Prom
   return out
 }
 
+/**
+ * The first archive member that is not a plain file or directory, or null.
+ *
+ * F10, found by attack 2026-08-03: a symlink member is how a crafted archive
+ * escapes the restore folder. bsdtar refuses every `..` and absolute path, but
+ * it will CREATE a symlink member and then write the next member through it,
+ * landing outside the destination. In the lab that escaped; in production it
+ * was contained only because a limited Windows token is denied
+ * SeCreateSymbolicLinkPrivilege. That is an OS default, not our code, and it
+ * breaks for an elevated dashboard or a host with Developer Mode on. So the
+ * members are enumerated BEFORE extraction and anything that is not a file or
+ * directory is refused by name, regardless of what the OS would permit.
+ *
+ * A cold backup of a Minecraft world is files and directories only; a link,
+ * device, fifo or socket member has no legitimate place in one. Enumeration
+ * uses two listings (names, and the verbose type column) zipped by index; if
+ * their counts disagree -- which a member name containing a newline would
+ * cause -- the archive is refused rather than risk mis-typing a member.
+ */
+const MEMBER_KIND: Record<string, string> = {
+  l: 'symlink',
+  h: 'hardlink',
+  b: 'block-device',
+  c: 'character-device',
+  p: 'fifo',
+  s: 'socket',
+}
+
+async function firstNonFileMember(archivePath: string): Promise<{ member: string; kind: string } | null> {
+  const list = async (args: string[]): Promise<string[]> => {
+    const { stdout } = await execFileP(tarBin(), args, { windowsHide: true, maxBuffer: 32 * 1024 * 1024 })
+    return stdout.split(/\r?\n/).filter((l) => l.length > 0)
+  }
+  let names: string[]
+  let verbose: string[]
+  try {
+    names = await list(['-tf', archivePath])
+    verbose = await list(['-tvf', archivePath])
+  } catch (e) {
+    // Could not read the members at all. Refuse: an archive whose table of
+    // contents will not parse is not one to extract blindly.
+    return { member: '(archive)', kind: `unreadable table of contents: ${e instanceof Error ? e.message : String(e)}` }
+  }
+  if (names.length !== verbose.length) {
+    return { member: '(unnamed)', kind: 'a member whose two listings disagree, likely a newline in the name' }
+  }
+  for (let i = 0; i < verbose.length; i++) {
+    const t = verbose[i]![0]!
+    if (t !== '-' && t !== 'd') {
+      return { member: names[i] ?? verbose[i]!, kind: MEMBER_KIND[t] ?? `non-file type '${t}'` }
+    }
+  }
+  return null
+}
+
 async function coldCheck(dir: string, deps: ColdDeps): Promise<ColdRefusal | null> {
   const occ = await (deps.occupancy ?? occupancyOf)(dir)
   if (occ.pids.length > 0) {
@@ -275,6 +330,20 @@ export async function restoreColdBackup(
       reason:
         'The archive on disk does not match the sha256 recorded when it was written. These are not the ' +
         'bytes that were journaled, so restoring them would restore an unknown world. Nothing was restored.',
+    }
+  }
+
+  // F10: refuse link/device members BEFORE extraction, whatever the OS would
+  // allow. A symlink member is how a crafted archive writes outside the
+  // restore folder; a world backup never legitimately contains one.
+  const link = await firstNonFileMember(entry.archivePath)
+  if (link) {
+    return {
+      ok: false,
+      reason:
+        `The archive contains a ${link.kind} member ("${link.member}"), which a cold backup of a world ` +
+        'never legitimately has. A member of that kind is how a crafted archive writes outside the restore ' +
+        'folder, so extraction was refused before it began. Nothing was restored.',
     }
   }
 
