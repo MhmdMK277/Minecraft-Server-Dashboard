@@ -16,7 +16,15 @@
  * and a manifest disagreeing with the published checksum file is a worse
  * failure than either being wrong on its own.
  *
- * Run:  npx tsx scripts/scoop-manifest.ts --version 0.1.0
+ * `--published` takes that authority one step further: it reads SHA256SUMS
+ * from the RELEASE THAT IS ACTUALLY DOWNLOADABLE rather than from a local
+ * build. Both produce the same bytes only if the local tree matches the
+ * tag, and on v0.1.0 they did not: a locally generated manifest carried a
+ * hash from a different build of the same version, which would have made
+ * `scoop install` fail its checksum on a release that was otherwise fine.
+ * Use --published whenever fixing up a manifest after a release exists.
+ *
+ * Run:  npx tsx scripts/scoop-manifest.ts --version 0.1.0 [--published]
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -37,12 +45,24 @@ const pkg = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8')) as {
 const version = arg('version') ?? pkg.version
 const folder = `minecraft-server-dashboard-${version}-win-x64`
 
-const sumsPath = join(REPO, 'release', 'SHA256SUMS')
-if (!existsSync(sumsPath)) {
-  console.error('FAIL: release/SHA256SUMS is missing. Package the release first.')
-  process.exit(1)
+let sums: string
+if (process.argv.includes('--published')) {
+  const url = `${REPO_URL}/releases/download/v${version}/SHA256SUMS`
+  const res = await fetch(url)
+  if (!res.ok) {
+    console.error(`FAIL: could not read the published SHA256SUMS (HTTP ${res.status}) at ${url}`)
+    process.exit(1)
+  }
+  sums = await res.text()
+  console.log(`reading the PUBLISHED checksums from ${url}`)
+} else {
+  const sumsPath = join(REPO, 'release', 'SHA256SUMS')
+  if (!existsSync(sumsPath)) {
+    console.error('FAIL: release/SHA256SUMS is missing. Package the release first, or pass --published.')
+    process.exit(1)
+  }
+  sums = readFileSync(sumsPath, 'utf8')
 }
-const sums = readFileSync(sumsPath, 'utf8')
 const line = sums.split(/\r?\n/).find((l) => l.includes(`${folder}.zip`))
 const hash = line?.trim().split(/\s+/)[0]
 if (!hash || !/^[0-9a-f]{64}$/.test(hash)) {

@@ -6,7 +6,7 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/MhmdMK277/Minecraft-Server-Dashboard/releases/download/v0.1.0/minecraft-server-dashboard-0.1.0-win-x64.zip",
-            "hash": "e46f04f9a3835552ee639b602a7872d8d8118c4821aaf7f23a2e46423b922d0f",
+            "hash": "7b275d411833761c26e99cf8593ef645224746891f98568f05d837af03d133c2",
             "extract_dir": "minecraft-server-dashboard-0.1.0-win-x64"
         }
     },
