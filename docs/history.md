@@ -1,5 +1,37 @@
 # Project history: settled milestones and findings
 
+## 2026-08-02: the stall mechanism, established and instrumented
+
+Multi-second stop-the-world pauses on an idle machine with free RAM had
+been an open investigation since 2026-07-28. The mechanism, pinned by
+correlating GC logs against host hard-fault rates across three separate
+storm windows: the servers' scheduled tasks carried Task Scheduler's
+default `Priority=7`, which runs a process at low MEMORY priority, so
+Windows trimmed their working sets first whenever anything did bulk file
+reads (a background scan, a repository clone, a build). Heaps idled at
+4-15% resident, and the next garbage collection that walked old regions
+hard-faulted through the missing pages for seconds; the two worst pauses
+(8.9 s and 2.6 s) matched hard-fault spikes to within one 30-second
+metrics sample.
+
+**The nightly cold-backup rotation was suspected and is exonerated on its
+own evidence**: three consecutive runs produced the largest fault spikes of
+each day and zero multi-second pauses after any of them. A freshly
+restarted JVM has nothing paged out, so the backup resets the vulnerable
+state rather than creating it. One storm window's trigger (a 90-minute
+overnight cluster with only mildly elevated fault samples) remains
+unidentified, and is recorded as such rather than guessed at.
+
+What shipped from it, all read-only: GC pause summaries split at the
+process boundary so a replaced JVM's stall can never read as the live
+server's crisis (finding F9 in `security-audit.md`); a per-server "memory
+eviction exposure" reading pairing the launching task's priority with live
+residency (`server/residency.ts`); and the host's hard-fault rate sampled
+beside the dashboard's own loop lag (`server/hostpaging.ts`), so the
+correlation this investigation performed by hand is a standing reading.
+The mitigation itself, raising the tasks' priority, is a Task Scheduler
+change and stays the operator's act; the dashboard reports the condition.
+
 This is the settled narrative moved out of the working handoff, newest first.
 Everything here is finished work or a measured fact; open items live in the
 handoff, constraints live in `liveness-spec.md` and `../DESIGN.md`, decisions
