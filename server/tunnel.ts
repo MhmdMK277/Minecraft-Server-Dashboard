@@ -505,6 +505,21 @@ export function stopAgent(deps: TunnelDeps): { ok: true } {
   return { ok: true }
 }
 
+/**
+ * Kill the agent when the dashboard is shutting down, without auditing an
+ * operator action nobody took. Public reachability is this process's doing,
+ * so it ends with this process: Windows does not promise to reap a child,
+ * and an orphaned agent would keep a world reachable after the dashboard
+ * that exposed it is gone. Called from the server's onClose hook.
+ */
+export function stopAgentOnShutdown(): void {
+  if (!runtime.proc) return
+  runtime.proc.kill()
+  runtime.proc = null
+  runtime.connected = false
+  runtime.detail = 'The agent was stopped because the dashboard shut down.'
+}
+
 /** Test seam. */
 export function resetAgentRuntime(): void {
   runtime.proc = null

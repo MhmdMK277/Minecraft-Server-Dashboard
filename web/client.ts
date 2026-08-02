@@ -18,6 +18,8 @@ import type {
   CreationInfo,
   CreationJobStatus,
   RemoveFailedResult,
+  TunnelStatus,
+  TunnelClaimStatus,
 } from '@shared/api'
 import { API, WS_PATH } from '@shared/api'
 
@@ -270,6 +272,23 @@ export const dashboard = {
     post<{ ok: boolean }>(API.createRunInstaller, { opId, confirmRunDownloadedProgram }),
   removeFailedCreation: (dir: string, folderName: string) =>
     post<RemoveFailedResult>(API.createRemoveFailed, { dir, folderName }),
+
+  /**
+   * Public access. Same rule as creation: the server's refusal sentences are
+   * the product and travel unreplaced, and no response here ever carries the
+   * agent credential; the address field is null unless the agent reports
+   * connected, enforced server-side (server/tunnel.ts).
+   */
+  getTunnelStatus: () => get<TunnelStatus>(API.tunnelStatus),
+  tunnelInstall: () => post<{ ok: boolean; version: string }>(API.tunnelInstall),
+  tunnelClaimStart: () => post<TunnelClaimStatus>(API.tunnelClaimStart),
+  getTunnelClaimStatus: () => get<TunnelClaimStatus>(API.tunnelClaimStatus),
+  tunnelRunAgent: (confirmRunDownloadedProgram: boolean) =>
+    post<{ ok: boolean }>(API.tunnelRunAgent, { confirmRunDownloadedProgram }),
+  tunnelStopAgent: () => post<{ ok: boolean }>(API.tunnelStopAgent),
+  tunnelEnable: (id: string, confirmServerName: string) =>
+    post<{ ok: boolean; tunnelId: string }>(API.tunnelEnable, { id, confirmServerName }),
+  tunnelDisable: (id: string) => post<{ ok: boolean }>(API.tunnelDisable, { id }),
 
   getAuthState: () => get<AuthState>(API.authState),
   login: (username: string, password: string) =>

@@ -8,6 +8,7 @@ import ServerDetail from './ServerDetail'
 import { ServerRow } from './ServerRow'
 import { AttachPage, AttachPointer, ScanPanel } from './Attach'
 import { CreatePage } from './Create'
+import { PublicPage } from './Public'
 import { dashboard, type ConnectionState } from './client'
 import { SectionHead } from './controls'
 import { useRoute, navigate, href } from './router'
@@ -264,7 +265,9 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
                         ? 'Attach'
                         : route.name === 'create'
                           ? 'Create'
-                          : 'Servers'}
+                          : route.name === 'public'
+                            ? 'Public'
+                            : 'Servers'}
                 </BreadcrumbPage>
               </BreadcrumbItem>
             )}
@@ -404,6 +407,22 @@ function Dashboard({ user, onSignedOut }: { user: SessionUser; onSignedOut: () =
               <p className="prose-line mx-auto mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
                 Creating a server downloads a program onto this machine and writes a new folder, so
                 it is an admin action.
+              </p>
+            </div>
+          )
+        )}
+
+        {/* Exposing a world to the internet is a security decision, so the
+            surface is admin-only, same reasoning as attach and create. */}
+        {snap && route.name === 'public' && (
+          isAdmin ? (
+            <PublicPage servers={snap.servers} />
+          ) : (
+            <div className="mx-auto max-w-lg py-16 text-center">
+              <h2 className="text-[15px] font-semibold text-ink">Admins only</h2>
+              <p className="prose-line mx-auto mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                Public access makes a server reachable from the internet, so it is an admin
+                surface.
               </p>
             </div>
           )

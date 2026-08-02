@@ -89,6 +89,7 @@ import {
   enableTunnel,
   disableTunnel,
   tunnelStatus,
+  stopAgentOnShutdown,
 } from './tunnel'
 import { basename } from 'node:path'
 
@@ -1453,6 +1454,11 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     consoleBus.off('batch', onBatch)
     stopObserverMonitor()
     stopAllConsoles()
+    // The tunnel agent is OUR child process and public reachability is its
+    // doing, so it does not outlive the dashboard that started it. The
+    // Public page says so; this is the code that makes it true, rather than
+    // relying on Windows to reap a child, which it does not promise.
+    stopAgentOnShutdown()
     for (const ws of clients) ws.close()
   })
 

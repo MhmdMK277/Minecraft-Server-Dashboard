@@ -5,6 +5,7 @@ import {
   Earth,
   FolderPlus,
   Gauge,
+  Globe,
   LayoutDashboard,
   LogOut,
   Network,
@@ -48,6 +49,8 @@ const VIEWS: Array<{ route: Route; label: string; icon: LucideIcon; adminOnly?: 
   { route: { name: 'attach' }, label: 'Attach', icon: FolderPlus, adminOnly: true },
   // Admin only: creation downloads executable code and writes a folder.
   { route: { name: 'create' }, label: 'Create', icon: PackagePlus, adminOnly: true },
+  // Admin only: exposing a world to the internet is a security decision.
+  { route: { name: 'public' }, label: 'Public', icon: Globe, adminOnly: true },
 ]
 
 const SERVER_NAV: Array<{ page: ServerPage; label: string; icon: LucideIcon; adminOnly?: boolean }> = [

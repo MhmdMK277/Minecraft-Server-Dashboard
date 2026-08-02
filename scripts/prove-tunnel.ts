@@ -45,6 +45,7 @@ const {
   resetClaim,
   runAgent,
   stopAgent,
+  stopAgentOnShutdown,
   resetAgentRuntime,
   enableTunnel,
   disableTunnel,
@@ -201,6 +202,25 @@ console.log('\n=== 3. running the binary needs everything, every time ===\n')
   stopAgent(IDENT)
   status = await tunnelStatus({ ...IDENT, fetchers: { json: async () => ({}), post: async () => ok({}) } })
   check('after stop the state is claimed again', status.agent.state === 'claimed')
+
+  // The Public page says the agent stops when the dashboard exits. That is a
+  // claim about shutdown, so it needs code and a check, not an assumption
+  // that Windows reaps a child process (it does not promise to).
+  let killed = false
+  runAgent(true, {
+    ...IDENT,
+    spawnAgent: () => {
+      const p = new EventEmitter() as import('node:child_process').ChildProcess
+      ;(p as { stdout: EventEmitter }).stdout = new EventEmitter()
+      ;(p as { stderr: EventEmitter }).stderr = new EventEmitter()
+      ;(p as { kill: () => boolean }).kill = () => ((killed = true), p.emit('exit', 0), true)
+      return p
+    },
+  })
+  stopAgentOnShutdown()
+  check('the shutdown path kills the agent it started', killed)
+  status = await tunnelStatus({ ...IDENT, fetchers: { json: async () => ({}), post: async () => ok({}) } })
+  check('and no address survives the shutdown', status.tunnels.every((t) => t.address === null))
 }
 
 // ===========================================================================
