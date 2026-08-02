@@ -262,6 +262,19 @@ async function ps(script: string, env: NodeJS.ProcessEnv, timeoutMs = 30_000): P
 const asArray = (v: unknown): Array<Record<string, unknown>> =>
   Array.isArray(v) ? (v as Array<Record<string, unknown>>) : v ? [v as Record<string, unknown>] : []
 
+/**
+ * Proof seam. prove-identity substitutes the PowerShell invocation with a
+ * canned process table so the attribution rules run against topologies that
+ * cannot be staged safely live -- above all a JVM whose ancestry passes
+ * through the dashboard's OWN scheduled task, the shape that misattributed a
+ * created server on 2026-08-02. Everything after the substitution is the real
+ * code path. Never set outside a proof; pass null to restore.
+ */
+let psOverride: typeof ps | null = null
+export function setPsForProof(fn: typeof ps | null): void {
+  psOverride = fn
+}
+
 export const windowsProvider: ProcessProvider = {
   platform: 'win32',
   name: 'Windows (scheduled task, then launcher command line, then open log)',
@@ -274,7 +287,7 @@ export const windowsProvider: ProcessProvider = {
     const t0 = Date.now()
     let raw: string
     try {
-      raw = await ps(SCRIPT, env)
+      raw = await (psOverride ?? ps)(SCRIPT, env)
     } catch (e) {
       // A failure here must be loud. Reported as ok:false so callers cannot
       // mistake it for "nothing is running", which is what it looks like.
@@ -384,7 +397,17 @@ export const windowsProvider: ProcessProvider = {
     const claimed = new Set<number>()
     const takenDirs = new Set<string>()
 
-    const push = (row: JvmRow, dir: string, by: JvmProcess['attributedBy'], viaTask: boolean) => {
+    // `task` is the scheduled task found in the row's ancestry, or null.
+    // startedBy only needs its existence; taskLaunched additionally requires
+    // that it names the directory being attributed, because a task in the
+    // ancestry that points elsewhere did not launch this server -- the
+    // dashboard's own boot task is the case that made the difference matter.
+    const push = (
+      row: JvmRow,
+      dir: string,
+      by: JvmProcess['attributedBy'],
+      task: { name: string; dir: string } | null,
+    ) => {
       claimed.add(row.pid)
       takenDirs.add(norm(dir))
       out.push({
@@ -398,7 +421,8 @@ export const windowsProvider: ProcessProvider = {
         cpuMs: row.cpuMs,
         attributedBy: by,
         sessionId: row.sessionId,
-        startedBy: startedBy(row, viaTask),
+        startedBy: startedBy(row, task !== null),
+        taskLaunched: task !== null && norm(task.dir) === norm(dir),
       })
     }
 
@@ -409,13 +433,28 @@ export const windowsProvider: ProcessProvider = {
     for (const row of rows.values()) {
       const t = taskAncestor(row.pid)
       if (!t) continue
+      // A running task in the ancestry is NOT always the thing that did the
+      // launching. This dashboard itself runs from a boot-triggered scheduled
+      // task, so a server it starts (the Create page, or a 'script' launcher)
+      // is a descendant of the DASHBOARD's task engine -- and this loop
+      // attributed the new JVM to the dashboard's own directory. The wrongly
+      // claimed pid then blocked signals 2 and 3, and the directory the JVM
+      // was actually serving read UNKNOWN with its log held open (observed
+      // 2026-08-02, minutes after the Create page started a server). When the
+      // JVM's own parent command line names a launcher script in a DIFFERENT
+      // directory than the task's, the nearer evidence wins: the row is left
+      // for signal 2, which reads that command line. Production servers are
+      // unaffected: their parent command lines are either unreadable (S4U
+      // session 0, spec §14) or name the same directory as their task.
+      const near = dirFromCommandLine(row.parentCmd, row.ownCmd)
+      if (near && norm(near) !== norm(t.dir)) continue
       const key = `${t.dir}\u0000${t.name}`
       byEngine.set(key, [...(byEngine.get(key) ?? []), row])
     }
     for (const [key, group] of byEngine) {
       const dir = key.split('\u0000')[0]!
       if (group.length !== 1) continue // ambiguous: never guessed at
-      push(group[0]!, dir, 'scheduled-task', true)
+      push(group[0]!, dir, 'scheduled-task', taskAncestor(group[0]!.pid))
     }
 
     // ------------------------------------------ signal 2: the command line
@@ -423,7 +462,7 @@ export const windowsProvider: ProcessProvider = {
       if (claimed.has(row.pid)) continue
       const dir = dirFromCommandLine(row.parentCmd, row.ownCmd)
       if (!dir || takenDirs.has(norm(dir))) continue
-      push(row, dir, 'command-line', taskAncestor(row.pid) !== null)
+      push(row, dir, 'command-line', taskAncestor(row.pid))
     }
 
     // -------------------------------------- signal 3: open log + the port
@@ -442,7 +481,7 @@ export const windowsProvider: ProcessProvider = {
       if (!Number.isFinite(pid) || claimed.has(pid)) continue
       const row = rows.get(pid)
       if (!row) continue // listening, but not a java process we enumerated
-      push(row, dir, 'open-log-and-port', taskAncestor(row.pid) !== null)
+      push(row, dir, 'open-log-and-port', taskAncestor(row.pid))
     }
 
     const unattributed: UnattributedJvm[] = []

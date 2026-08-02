@@ -386,6 +386,27 @@ function attribute(
   const held = `${describe(now - streak.since)} and ${streak.scans} consecutive scan${streak.scans === 1 ? '' : 's'}`
 
   if (s.health === 'UNKNOWN') {
+    // Blind because no process could be matched to the directory. This
+    // UNKNOWN was decided before any probe ran (health.ts sets it from
+    // identityDoubt when hasProcess is false), so there is NO discarded
+    // reading and loop lag is not evidence about it. First, before the RCON
+    // branch: with no process matched, "enable RCON" would be advice about a
+    // server we cannot even see. The branch further down used to swallow
+    // this case and blame our own scan-path CPU, §11 -- a second, false
+    // explanation rendered beside the true one (observed 2026-08-02 on a
+    // server the Create page had just started, while the real cause was an
+    // identity misattribution in the Windows provider). The health sentence
+    // names the identity evidence; this note carries only whose problem it
+    // is and how long it has held.
+    if (s.proc === null) {
+      return {
+        attribution: 'observer',
+        detail:
+          `An identity failure in this dashboard, not a measurement failure and not a fault in ${s.name}: no probe was taken, because no running process could be matched to this directory, so there is no reading to attribute and loop lag says nothing about it. ` +
+          `Unknown for ${held}. If a server is running here, its launcher did not leave a trail the process scan can read; a start through this dashboard or through a scheduled task resolves on the next scan.`,
+      }
+    }
+
     // Blind by configuration. Permanent until someone edits a file, so saying
     // "retrying on the next scan" -- which is what it used to say -- is a
     // promise that will never be kept.

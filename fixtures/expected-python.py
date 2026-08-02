@@ -47,8 +47,12 @@ for name, entry in samples["slp"].items():
         continue
     out["slpReady"][name] = m._ping_is_ready(entry["parsed"])
 
+# The fixture stores server NAMES, never absolute paths (see crossvalidate.ts:
+# a stored dir wrote the developer's username into a tracked file). The servers
+# root is machine state and comes from the live config, exactly as the
+# TypeScript side resolves it.
 for e in servers:
-    d = e["dir"]
+    d = os.path.join(m.SERVERS_ROOT, e["name"])
     lvl = m.level_dat_path(d)
     out["worlds"][e["name"]] = {
         "worldDirs": m.world_dirs(d),
@@ -63,7 +67,7 @@ out["discovery"] = {
 
 for e in servers:
     if e["isServer"]:
-        out["identity"][e["name"]] = m.pid_of_server(e["dir"]) is not None
+        out["identity"][e["name"]] = m.pid_of_server(os.path.join(m.SERVERS_ROOT, e["name"])) is not None
 
 # Normalisation: feed the tricky shapes through the python normaliser.
 def py_normalise(text):

@@ -108,15 +108,25 @@ check(
 check('no server is reported busy on a quiet system', snap.servers.every((s) => !s.controlBusy))
 check('no double-spawn alert on a clean system', snap.doubleSpawn.length === 0)
 
-// The running servers here are all started by scheduled tasks, so the strategy
-// must be windows-task. Detecting `script` for one of them would mean the
-// dashboard would start it a different way than it boots, which spec §14 says
-// produces a materially different process.
+// A running server whose directory has a scheduled task must be detected as
+// windows-task: starting it any other way produces a materially different
+// process (spec §14). But "every running server is task-started" stopped being
+// true of this machine on 2026-08-02, when the Create page made a server that
+// runs from its start script -- so the assertion is split by what the task
+// index actually says, instead of assuming the fleet's shape.
 const running = snap.servers.filter((s) => s.health === 'HEALTHY' || s.health === 'STALLED')
 console.log(`  ${running.length} running servers`)
+const liveTaskIndex = await indexTasks(0)
+const nrm = (p: string) => p.replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase()
+const hasOwnTask = (dir: string) => liveTaskIndex.has(nrm(dir))
 check(
   'a running, task-started server is detected as windows-task, not script',
-  running.every((s) => s.launchStrategy === 'windows-task'),
+  running.every((s) => !hasOwnTask(s.dir) || s.launchStrategy === 'windows-task'),
+  running.map((s) => `${s.name}=${s.launchStrategy}`).join(', '),
+)
+check(
+  'a running server with no task of its own is never claimed as windows-task',
+  running.every((s) => hasOwnTask(s.dir) || s.launchStrategy !== 'windows-task'),
   running.map((s) => `${s.name}=${s.launchStrategy}`).join(', '),
 )
 // The task enumeration costs ~870 ms and was the slowest thing in a ten-second

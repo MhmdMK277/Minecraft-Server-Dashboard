@@ -77,6 +77,16 @@ export type JvmProcess = {
   /** Windows session. 0 means a service or a scheduled task, never a desktop. */
   sessionId: number | null
   startedBy: StartedBy
+  /**
+   * True when the scheduled task in this process's ancestry names the SAME
+   * directory this JVM was attributed to -- the task launched this server.
+   * `startedBy: 'scheduled-task'` is weaker: it only says a task engine is an
+   * ancestor. A server the dashboard starts while itself running from its
+   * boot task is task-DESCENDED but not task-LAUNCHED, and conflating the two
+   * is how such a server was once attributed to the dashboard's own
+   * directory (2026-08-02).
+   */
+  taskLaunched: boolean
 }
 
 /** A java process that is running and could not be tied to any directory. */

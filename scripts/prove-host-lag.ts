@@ -377,6 +377,54 @@ check(
   !/Retrying on the next scan/.test(blind[0]!.attributionDetail ?? ''),
 )
 
+// The THIRD UNKNOWN: identity doubt. health.ts renders UNKNOWN with
+// hasProcess false when a directory is occupied but no process could be
+// matched to it (observed live 2026-08-02, on a server the Create page had
+// just started). No probe ran, so there is no discarded reading -- but the
+// settled self-lag branch used to swallow this case and blame our own
+// scan-path CPU, citing §11: a second, false explanation rendered beside the
+// true one. The note must talk about identity and must not cite §11 or CPU
+// accounting for a reading that was never taken.
+resetFleetMemory()
+const ghost = [{ ...srv('ghost', 'UNKNOWN'), proc: null }]
+// Settle it under SELF lag: the exact conditions that produced the false
+// diagnosis (settled streak, host measured, lag accounted for by our own CPU).
+observeFleet(ghost, SELF, Date.now())
+for (let i = 1; i <= 5; i++) observeFleet(ghost, SELF, Date.now() + i * 10_000)
+const ghostDetail = ghost[0]!.attributionDetail ?? ''
+console.log(`\n   identity-doubt UNKNOWN attribution  ${ghost[0]!.attribution}`)
+console.log(`   says: ${ghostDetail.slice(0, 96)}…`)
+check(
+  'an UNKNOWN with no matched process is attributed to the observer',
+  ghost[0]!.attribution === 'observer',
+)
+check('and the note names identity as the cause', /identity/i.test(ghostDetail))
+check(
+  'and does not cite §11 or scan-path CPU for a reading that was never taken',
+  !/§11|scan path|CPU/.test(ghostDetail),
+)
+check('and does not accuse the server', /not a fault in ghost/.test(ghostDetail))
+check('and states how long it has held', /consecutive scan/.test(ghostDetail))
+
+// The same explanation must hold before it settles and whatever the lag says.
+resetFleetMemory()
+const ghost2 = [{ ...srv('ghost2', 'UNKNOWN'), proc: null }]
+observeFleet(ghost2, STARVED, Date.now())
+check(
+  'the identity explanation does not depend on lag state or streak length',
+  /identity/i.test(ghost2[0]!.attributionDetail ?? '') && !/§11/.test(ghost2[0]!.attributionDetail ?? ''),
+)
+
+// Identity doubt with RCON unconfigured is still identity first: advice to
+// enable RCON is advice about a server we cannot even see.
+resetFleetMemory()
+const ghost3 = [{ ...srv('ghost3', 'UNKNOWN'), proc: null, rconConfigured: false }]
+observeFleet(ghost3, FLAT, Date.now())
+check(
+  'identity doubt outranks the RCON-configuration explanation',
+  /identity/i.test(ghost3[0]!.attributionDetail ?? ''),
+)
+
 // ===========================================================================
 // The paging reading (stall investigation, 2026-08-02): the number that had
 // to come from an external monitor's CSV now rides in the snapshot. What

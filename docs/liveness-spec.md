@@ -348,8 +348,15 @@ A server whose RCON is not configured is excluded from the correlation. It is
 `UNKNOWN` in every scan for ever, and a constant cannot correlate with anything.
 
 **Rule, part three: a persistent `UNKNOWN` must explain itself.** `UNKNOWN` has
-two causes that render identically and have nothing else in common:
+three causes that render identically and have nothing else in common:
 
+- **identity doubt** (checked first, added 2026-08-02): the directory is
+  occupied but no process could be matched to it, so **no probe ever ran**.
+  There is no discarded reading, loop lag is not evidence about it, and the
+  RCON remedy is advice about a server we cannot even see. The attribution used
+  to fall through to the self-lag branch here and blame our own scan-path CPU,
+  citing §11 -- a second, false explanation rendered beside the true one, on a
+  server the Create page had just started.
 - **no RCON configured**, permanent until someone edits `server.properties`.
   Saying "retrying on the next scan" is a promise that will never be kept.
 - **no usable reading**. The host was too loaded to measure through. This one
@@ -447,6 +454,21 @@ Signal 1 is primary because it reads identity from the thing that did the
 launching rather than inferring it from side effects. Signal 3 remains for servers
 nobody scheduled: started by hand, by a wrapper, or by another tool.
 
+**A task in the ancestry is not always the launcher** (found 2026-08-02). The
+dashboard itself runs from a boot-triggered scheduled task, so a server it
+starts -- the Create page, or a `script` launcher -- is a *descendant* of the
+dashboard's task engine without being that task's payload. Signal 1 walked the
+ancestry, found the dashboard's task, and attributed the new JVM to the
+dashboard's own directory; the wrongly claimed pid then blocked signals 2 and 3,
+and a healthy server the dashboard had just started read `UNKNOWN` with its log
+held open. The rule: when the JVM's own parent command line names a launcher
+script in a **different** directory than the ancestor task's, the nearer
+evidence wins and the row is left to signal 2. Production servers are
+unaffected, their parent command lines are either unreadable (session 0) or name
+the same directory as their task. `JvmProcess.taskLaunched` records the strong
+fact (the ancestor task names the attributed directory) separately from
+`startedBy: 'scheduled-task'`, which only records descent.
+
 **Not the event log.** `Microsoft-Windows-TaskScheduler/Operational` records the
 same task-to-PID mapping and is the obvious place to look, but it is **disabled by
 default** on Windows 10, measured on this host: `IsEnabled False`, zero records.
@@ -502,8 +524,10 @@ dropping a per-JVM `Get-Process` whose fields `Win32_Process` already carries, a
 skipping the listening-socket enumeration (590 ms via `Get-NetTCPConnection`, 70 ms
 via `netstat`) whenever a stronger signal has already answered.
 
-Proof: `scripts/prove-identity.ts` (26 checks) for the signals, the doubt rule and
-the cost; `scripts/crossvalidate.ts` §6 for agreement with an independent Python
+Proof: `scripts/prove-identity.ts` (36 checks) for the signals, the doubt rule,
+the cost, and the ancestry-vs-launcher distinction (its group D replays the
+dashboard-task topology through the real interpretation path via a substituted
+process table); `scripts/crossvalidate.ts` §6 for agreement with an independent Python
 implementation using a different mechanism entirely. Both fail if the servers under
 test were not started by the scheduler, because a proof that passes against the
 wrong configuration is what allowed this in the first place.

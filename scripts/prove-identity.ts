@@ -26,6 +26,7 @@
  */
 import { join } from 'node:path'
 import { scanJvms, jvmForDir } from '../server/platform'
+import { setPsForProof } from '../server/platform/windows'
 import { loadConfig, dataDir } from '../server/config'
 import { listDirectories, levelDatPath, gamePortOf } from '../server/properties'
 import { assessHealth } from '../server/health'
@@ -112,10 +113,20 @@ const bySignal = {
 }
 console.log(`  by signal: ${JSON.stringify(bySignal)}`)
 check('every attributed JVM records which signal resolved it', scan.jvms.every((j) => !!j.attributedBy))
+// task-LAUNCHED, not task-started: a server the dashboard starts while itself
+// running from its boot task is a task DESCENDANT without being the task's
+// payload, and it is correctly resolved by the command-line signal. Group D
+// below pins that distinction; here the live fleet asserts both directions
+// of the strong form.
 check(
-  'a task-started server is resolved by the task signal, not left to a fallback',
-  bySignal['scheduled-task'] === taskStarted.length,
+  'a task-launched server is resolved by the task signal, not left to a fallback',
+  scan.jvms.every((j) => !j.taskLaunched || j.attributedBy === 'scheduled-task'),
   JSON.stringify(bySignal),
+)
+check(
+  'and the task signal never claims a server its task did not launch',
+  scan.jvms.every((j) => j.attributedBy !== 'scheduled-task' || j.taskLaunched),
+  'a task-signal attribution must point at the task directory itself',
 )
 // This is the state that existed for a day and looked fine.
 if (bySignal['command-line'] === 0 && scan.jvms.length > 0) {
@@ -297,6 +308,138 @@ console.log(`  listening sockets enumerated: ${scan.portsEnumerated}`)
 if (bySignal['scheduled-task'] === scan.jvms.length && scan.jvms.length === hints.filter((h) => isOccupied(h.dir)).length) {
   check('when every server is task-resolved, the port scan is skipped', !scan.portsEnumerated)
 }
+
+// ================================= D. a task in the ancestry is not the launcher
+
+/**
+ * 2026-08-02, live: a server started by the Create page read UNKNOWN while its
+ * JVM ran, its log held open. The dashboard itself runs from a boot-triggered
+ * scheduled task, so the new JVM's ancestry passed through THAT task's engine
+ * and signal 1 attributed it to the dashboard's own directory; the wrongly
+ * claimed pid then blocked signals 2 and 3. The tables below replay that
+ * topology through the REAL interpretation path -- only the PowerShell
+ * invocation is substituted (setPsForProof) -- and pin the rule: a task in the
+ * ancestry wins only when it names the directory the evidence points at;
+ * otherwise the nearest launcher command line does. This is the misreporting
+ * category: a healthy server the dashboard itself started, reported UNKNOWN.
+ */
+console.log('\n--- D. a task in the ancestry is not always the launcher')
+
+const CREATED = 'C:\\srv\\MC Created'
+const PAPER = 'C:\\srv\\MC Paper'
+const SAME = 'C:\\srv\\MC Same'
+const MCDASH = 'C:\\ops\\mcdash'
+
+// Topology: dashboard task engine 40 -> node 41 -> cmd 42 -> java 43 (the
+// created server; readable parent command line naming CREATED). Paper task
+// engine 60 -> cmd 61 -> java 62 (S4U: command lines unreadable, the
+// production shape). Task engine 70 -> cmd 71 -> java 72 with a READABLE
+// parent command line naming the task's own directory.
+const syntheticWorld = (dashboardUnderTask: boolean) => ({
+  jvms: [
+    {
+      pid: 43, ppid: 42, sessionId: 0,
+      parentCmd: `cmd.exe /d /s /c ""${CREATED}\\start.bat""`,
+      ownCmd: 'java  -Xms2048M -Xmx2048M -jar "server.jar" nogui',
+      ws: 9437184, priv: 2446983168, basePri: 6, cpu100ns: 120000000,
+      start: '2026-08-02T21:51:39.000Z',
+    },
+    {
+      pid: 62, ppid: 61, sessionId: 0, parentCmd: null, ownCmd: null,
+      ws: 626524160, priv: 3711959040, basePri: 8, cpu100ns: 9000000000,
+      start: '2026-08-02T20:03:42.000Z',
+    },
+    {
+      pid: 72, ppid: 71, sessionId: 0,
+      parentCmd: `cmd.exe /c "${SAME}\\start.bat"`,
+      ownCmd: 'java -Xmx1024M -jar "server.jar" nogui',
+      ws: 314572800, priv: 1073741824, basePri: 8, cpu100ns: 4000000000,
+      start: '2026-08-02T20:05:00.000Z',
+    },
+  ],
+  tasks: [
+    ...(dashboardUnderTask
+      ? [{ name: 'Minecraft Server Dashboard', enginePid: 40, dir: MCDASH, args: '' }]
+      : []),
+    { name: 'Minecraft Paper', enginePid: 60, dir: PAPER, args: '' },
+    { name: 'Minecraft Same', enginePid: 70, dir: SAME, args: '' },
+  ],
+  parents: [[40, 4], [41, 40], [42, 41], [43, 42], [60, 4], [61, 60], [62, 61], [70, 4], [71, 70], [72, 71]],
+  dirs: [
+    { dir: CREATED, logHeld: true, port: 25599, listenerPid: 43 },
+    { dir: PAPER, logHeld: true, port: 25565, listenerPid: 62 },
+    { dir: SAME, logHeld: true, port: 25570, listenerPid: 72 },
+  ],
+  phases: {},
+  portsEnumerated: false,
+})
+
+const dHints: DirHint[] = [
+  { dir: CREATED, gamePort: 25599 },
+  { dir: PAPER, gamePort: 25565 },
+  { dir: SAME, gamePort: 25570 },
+]
+
+const forDir = (s: Awaited<ReturnType<typeof scanJvms>>, dir: string) =>
+  s.jvms.find((j) => nkey(j.dir) === nkey(dir)) ?? null
+
+// The world that failed live: the dashboard runs from its boot task.
+setPsForProof(async () => JSON.stringify(syntheticWorld(true)))
+const d1 = await scanJvms(dHints)
+setPsForProof(null)
+
+check('D: the synthetic scan succeeded', d1.ok, d1.failure ?? '')
+const created = forDir(d1, CREATED)
+check(
+  'a server the dashboard started is attributed to ITS directory, not the dashboard task directory',
+  created !== null && created.pid === 43,
+  JSON.stringify(d1.jvms.map((j) => [j.pid, j.dir])),
+)
+check(
+  'and by the command-line signal, its nearest launcher evidence',
+  created?.attributedBy === 'command-line',
+  created?.attributedBy,
+)
+check(
+  'and it is task-descended without being task-launched',
+  created !== null && created.startedBy === 'scheduled-task' && !created.taskLaunched,
+  created ? `startedBy=${created.startedBy} taskLaunched=${created.taskLaunched}` : 'not attributed',
+)
+check(
+  'nothing is attributed to the dashboard directory',
+  d1.jvms.every((j) => nkey(j.dir) !== nkey(MCDASH)),
+)
+const dPaper = forDir(d1, PAPER)
+check(
+  'the S4U production shape still resolves by its task',
+  dPaper !== null && dPaper.pid === 62 && dPaper.attributedBy === 'scheduled-task' && dPaper.taskLaunched,
+  dPaper ? `${dPaper.attributedBy} taskLaunched=${dPaper.taskLaunched}` : 'not attributed',
+)
+const dSame = forDir(d1, SAME)
+check(
+  'a readable command line agreeing with its task stays with the task signal',
+  dSame !== null && dSame.pid === 72 && dSame.attributedBy === 'scheduled-task' && dSame.taskLaunched,
+  dSame ? `${dSame.attributedBy} taskLaunched=${dSame.taskLaunched}` : 'not attributed',
+)
+check('no JVM is left unattributed in this topology', d1.unattributed.length === 0,
+  JSON.stringify(d1.unattributed))
+
+// The same fleet with the dashboard NOT under any task -- the world in which
+// creation was originally proven green, kept green.
+setPsForProof(async () => JSON.stringify(syntheticWorld(false)))
+const d2 = await scanJvms(dHints)
+setPsForProof(null)
+const created2 = forDir(d2, CREATED)
+check(
+  'with the dashboard outside any task, the created server still resolves by command line',
+  created2 !== null && created2.pid === 43 && created2.attributedBy === 'command-line',
+  created2 ? created2.attributedBy : 'not attributed',
+)
+check(
+  'and is then plain unknown provenance, not claimed task-descended',
+  created2 !== null && created2.startedBy === 'unknown' && !created2.taskLaunched,
+  created2 ? `startedBy=${created2.startedBy}` : 'not attributed',
+)
 
 stopObserverMonitor()
 
