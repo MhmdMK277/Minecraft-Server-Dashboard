@@ -4,6 +4,7 @@ import { buildServer } from './http'
 import { loadConfig, dataDir } from './config'
 import { processProvider, knownPlatforms } from './platform'
 import { bootstrapIfEmpty } from './auth'
+import { acquireInstanceLock, releaseInstanceLock } from './instancelock'
 
 /**
  * Entry point for the self-hosted service.
@@ -122,6 +123,44 @@ async function main(): Promise<void> {
     console.error('')
     process.exit(2)
   }
+
+  // One dashboard per data directory, before anything in it is written. Two
+  // instances sharing sessions, attachments and backup policy would corrupt
+  // them; the port is not the shared resource, the directory is (the whole
+  // argument is in server/instancelock.ts).
+  const lock = acquireInstanceLock(dataDir(), { host, port })
+  if (!lock.acquired) {
+    const h = lock.holder
+    console.error('')
+    console.error('  Another dashboard is already running against this data directory.')
+    console.error('')
+    console.error(`    data directory   ${dataDir()}`)
+    console.error(`    held by          pid ${h.pid || 'unknown'}, since ${h.acquiredAt}`)
+    console.error(`    lock file        ${lock.lockPath}`)
+    console.error('')
+    console.error('  Two dashboards sharing one data directory would write its sessions,')
+    console.error('  attachments and backup policy concurrently and corrupt them, so')
+    console.error('  this one is refusing to start.')
+    console.error('')
+    if (h.port) {
+      const shownHost = !h.host || h.host === '0.0.0.0' ? 'localhost' : h.host
+      console.error('  If the running dashboard is the one you want, it is at')
+      console.error(`    http://${shownHost}:${h.port}`)
+      console.error('')
+    }
+    console.error('  To run a second, independent dashboard, give it its own data')
+    console.error('  directory with the MCDASH_DATA_DIR environment variable.')
+    console.error('')
+    process.exit(3)
+  }
+  if (lock.via === 'stale') {
+    console.warn(`  A previous dashboard (pid ${lock.previousPid}) exited without releasing`)
+    console.warn(`  its lock on ${dataDir()}; taking it over.`)
+  } else if (lock.via === 'corrupt') {
+    console.warn(`  The instance lock at ${lock.lockPath} was unreadable, which points`)
+    console.warn('  to a crash while it was being written. Taking it over.')
+  }
+  process.on('exit', () => releaseInstanceLock(dataDir()))
 
   // First start: mint one admin and print the password exactly once, before the
   // socket opens. There is deliberately no default password to change later and

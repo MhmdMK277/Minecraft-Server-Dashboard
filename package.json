@@ -53,7 +53,8 @@
     "prove-concurrent-start": "tsx scripts/prove-concurrent-start.ts",
     "prove-control": "tsx scripts/prove-control.ts",
     "prove-boottime": "tsx scripts/prove-boottime.ts",
-    "prove-live-start": "tsx scripts/prove-live-start.ts"
+    "prove-live-start": "tsx scripts/prove-live-start.ts",
+    "prove-instancelock": "tsx scripts/prove-instancelock.ts"
   },
   "devDependencies": {
     "@fontsource-variable/geist": "^5.3.0",
