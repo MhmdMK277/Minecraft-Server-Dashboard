@@ -90,16 +90,11 @@ rather than forgotten. The honest consequence is the warning above: you are
 trusting the download, the checksum, and the source, not a certificate with
 this project's name on it.
 
-<!--
-  SCREENSHOT WANTED: the dialog Windows actually shows on first run of
-  `Start Dashboard.bat` from a zip that was NOT unblocked. It has to be
-  captured on a machine that downloaded the release through a browser,
-  because the dialog is a desktop window and cannot be captured from a
-  build or a headless session. Save it as docs/images/windows-warning.png
-  and replace this comment with the image. Do not draw a mock-up of it:
-  a made-up picture of a security dialog is the one illustration in this
-  repository that would be actively harmful to get wrong.
--->
+This is the dialog as Windows actually shows it, captured on first run of
+`Start Dashboard.bat` from a release zip downloaded through a browser and
+not unblocked:
+
+![The Open File - Security Warning dialog Windows shows for Start Dashboard.bat from a zip that was not unblocked](images/windows-warning.png)
 
 ## Verifying the download
 
