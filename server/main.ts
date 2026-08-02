@@ -17,6 +17,67 @@ import { bootstrapIfEmpty } from './auth'
 const DEFAULT_PORT = 8422
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost'])
 
+type SysError = NodeJS.ErrnoException & { port?: number; address?: string }
+
+/**
+ * Plain-language explanations for the startup failures a first-time user can
+ * plausibly hit. The first release's launcher printed a raw
+ * "Error: listen EACCES ... 127.0.0.1:8422" stack when a second copy was
+ * started while the first held the port, which teaches a new user nothing.
+ * Anything not recognised here keeps its stack: a raw trace is bad copy but
+ * good evidence, and swallowing it would hide real bugs.
+ */
+function explainStartupError(e: unknown): string[] | null {
+  if (!(e instanceof Error)) return null
+  const err = e as SysError
+
+  if (err.syscall === 'listen' && (err.code === 'EADDRINUSE' || err.code === 'EACCES')) {
+    // On Windows a port held by another process surfaces as EACCES, not only
+    // EADDRINUSE; EACCES can also mean the port sits in a range Windows has
+    // reserved. Both codes get the same advice because the user's next step
+    // is the same.
+    const port = err.port ?? DEFAULT_PORT
+    const addr = !err.address || err.address === '0.0.0.0' ? 'localhost' : err.address
+    return [
+      err.code === 'EACCES'
+        ? `Port ${port} is not available: another program holds it, or Windows has reserved it.`
+        : `Port ${port} is not available: another program is already listening on it.`,
+      '',
+      'If the dashboard is already running, there is nothing to start:',
+      `  open http://${addr}:${port} in your browser.`,
+      '',
+      'Otherwise, close the program that is using the port, or run the',
+      'dashboard on a different port by setting the MCDASH_PORT environment',
+      'variable.',
+    ]
+  }
+
+  if (err.syscall === 'listen' && err.code === 'EADDRNOTAVAIL') {
+    return [
+      `MCDASH_HOST is set to ${err.address ?? 'an address'} but this machine`,
+      'has no network interface with that address.',
+      '',
+      'Use an address this machine owns, 0.0.0.0 for all interfaces, or',
+      'unset MCDASH_HOST to serve on 127.0.0.1 only.',
+    ]
+  }
+
+  if ((err.code === 'EACCES' || err.code === 'EPERM' || err.code === 'EROFS') && err.path) {
+    // Filesystem errors during startup come from the data directory: config,
+    // the first-start admin account, sessions. err.syscall distinguishes them
+    // from the listen cases above.
+    return [
+      `Cannot ${err.syscall === 'mkdir' ? 'create' : 'write'} ${err.path}`,
+      '',
+      'The dashboard keeps its configuration, accounts and sessions there',
+      "and cannot start without it. Check the folder's permissions, or set",
+      'MCDASH_DATA_DIR to a writable directory.',
+    ]
+  }
+
+  return null
+}
+
 function version(): string {
   try {
     const pkg = JSON.parse(
@@ -53,6 +114,14 @@ async function main(): Promise<void> {
   const cfg = loadConfig(dataDir())
   const host = process.env.MCDASH_HOST?.trim() || '127.0.0.1'
   const port = Number(process.env.MCDASH_PORT ?? DEFAULT_PORT)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    console.error('')
+    console.error(`  MCDASH_PORT is set to "${process.env.MCDASH_PORT}", which is not a`)
+    console.error('  usable port. It must be a whole number between 1 and 65535.')
+    console.error(`  Unset it to use the default, ${DEFAULT_PORT}.`)
+    console.error('')
+    process.exit(2)
+  }
 
   // First start: mint one admin and print the password exactly once, before the
   // socket opens. There is deliberately no default password to change later and
@@ -103,6 +172,13 @@ async function main(): Promise<void> {
 }
 
 void main().catch((e: unknown) => {
-  console.error(e instanceof Error ? e.stack : e)
+  const explained = explainStartupError(e)
+  if (explained) {
+    console.error('')
+    for (const line of explained) console.error(line ? `  ${line}` : '')
+    console.error('')
+  } else {
+    console.error(e instanceof Error ? e.stack : e)
+  }
   process.exit(1)
 })
