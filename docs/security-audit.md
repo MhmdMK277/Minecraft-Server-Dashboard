@@ -522,6 +522,96 @@ whose target leaves the folder.
 - The session cookie omits `Secure`, which is the documented plain-HTTP LAN
   deployment decision, and the login route is a public CSRF exception.
 
+### Workstream 3a: the deterministic tools over the M4+ code
+
+The parts of this pass a stranger can trust without trusting an AI. Run
+2026-08-03 against `e846ce1`.
+
+**`npm audit`: 0 vulnerabilities**, 595 dependencies.
+
+**CodeQL** (`security-extended`, GitHub-hosted, published to the Security tab):
+the workflow is green, which means it RAN, not that it is silent. It carries 37
+open informational alerts. Eight are in M4+ shipped modules, and every one is
+an excluded category or a pre-existing pattern:
+
+| Alert | Location | Disposition |
+| --- | --- | --- |
+| `js/biased-cryptographic-random` | `creation.ts:235` | `b % 56` modulo bias on the generated RCON password. Real bias, negligible against ~139 bits from `randomBytes(24)`; the value is server-side only, written to `server.properties`, never on the wire. Secret-on-disk / hardening, excluded. |
+| `js/insecure-temporary-file` (x3) | `creation.ts:156,469,570` | Staging files written INSIDE the job's own directory under the servers root, not a world-writable shared temp, so the shared-temp swap the rule warns about does not apply. |
+| `js/file-system-race` | `profiling.ts:101` | A read-side race on a server's own `gc.log`. No integrity sink; a viewer reads a log. |
+| `js/http-to-file-access` (x3) | `tunnel.ts:115`, `creation.ts:156,469` | The verified downloads (agent, server jars, Java). Each is checksum-verified before use; this is the intended data flow, flagged structurally. |
+
+The `js/command-line-injection` (critical) alerts are in `launcher.ts`, pre-M4
+and already dispositioned (the `cmd.exe` launcher takes a discovery-derived
+directory, never request data; a directory name cannot contain a quote).
+
+**Semgrep** (`p/nodejs`, `p/owasp-top-ten`, external ruleset): 7 blocking
+findings, the same recurring set the CI has carried for months, none in new
+exploitable code. Two touch M4+ modules and both are excluded categories:
+`detect-non-literal-regexp` at `gamerules.ts:103,105` (the rule name in the
+query regex is a catalog constant, not user input; ReDoS/regex-injection
+excluded) and at `mcsources.ts:176` (the length in a hex-check regex is a
+number). The rest (`prove-stall.py` subprocess, a FAKE hex secret in
+`prove-tunnel.ts`, `parse.ts` marker-strip, `index.html` `ws://`) were
+dispositioned in workstream 1.
+
+### Workstream 3b: exploits fired, with their output
+
+Every attack below was RUN against the real module functions, not argued from
+the code. The scripts are the session's exploit corpus (kept out of the repo;
+they hardcode throwaway paths). Summary of what was fired and what happened:
+
+- **Zip-slip on restore, 12 crafted archives** through the real
+  `restoreColdBackup` with a correct-hash manifest entry: every `..` form (tar
+  and zip, deep, backslash, mixed, strip-then-dotdot) REFUSED by bsdtar (`Path
+  contains '..'`); every absolute / drive-letter / drive-relative / UNC form
+  stripped and CONTAINED inside the restore dir; percent-encoded `..` treated
+  as a literal filename, contained. The one primitive that escaped is a
+  **symlink member** (write-through-the-link, 1 of 2 variants), and only
+  because the test shell was elevated.
+- **The symlink escape is not reachable through the app.** A full round trip
+  (plant a symlink in a server dir, run the real `runColdBackup`, restore it)
+  stored the symlink as an INERT link member (`lrw-rw-rw- World/escape -> ...`)
+  and left the outside victim file untouched. And the production token cannot
+  create the link at all: `SeCreateSymbolicLinkPrivilege` is granted to
+  `S-1-5-32-544` (Administrators) only, Developer Mode is off, and the
+  dashboard task runs `RunLevel: Limited`. Measured this time, not inferred.
+- **Manifest / archive disagreement, 5 cases**: a journaled hash that does not
+  match the bytes, an archive tampered after journaling, a missing archive
+  path, an unknown archive id, all REFUSED with the sha256 sentence; a ~1000x
+  compression bomb extracted into its own restore dir (contained; DoS out of
+  scope). The self-referential-hash weakness is real only for an attacker who
+  can rewrite the manifest, i.e. same-user data-dir write.
+- **Creation, 19 hostile names** through the real `validateName` +
+  `startCreation`: `..`, `../escape`, `..\escape`, `../../Windows/Temp/evil`,
+  `C:evil`, drive and UNC paths, `world:$DATA` ADS, `CON`/`PRN`/`LPT1`,
+  trailing dot and space, embedded NUL, `a/b`, all REJECTED; only the control
+  name `good-name` created, inside the root; the canary outside stayed empty.
+- **Tunnel exposure, 4 wrong confirmations** (empty, wrong name, case
+  mismatch, whitespace pad) all REFUSED server-side by the typed-name check;
+  the correct name passed the gate as intended.
+- **Tunnel secret readback**: a real hex secret loaded from `playit.toml`
+  (`secretPresent: true` proves it was read), and the secret string appears
+  NOWHERE in the `tunnelStatus` response, which carries only the boolean.
+- **Installer without confirmation**: unconfirmed `runInstaller` calls never
+  executed anything. The specific `confirm !== true` branch needs an
+  `awaiting-installer` job (a real Forge download not stageable offline); it is
+  read-verified at `creation.ts:521`, identical in shape to the tunnel
+  `confirmRunDownloadedProgram !== true` gate at `tunnel.ts:446` which WAS
+  fired. Stated as read-verified, not fired.
+- **MOTD / game rules / settings**: 9 MOTD property-injection payloads (LF,
+  U+2028, U+2029, U+0085, trailing backslash, escape tricks) all contained
+  inside the value with the credential line byte-identical; 11 game-rule wire
+  payloads (newline/semicolon in value, injection in name, `1e10`, `NaN`,
+  `Infinity`, `-0`, `3.5`, `toString` object, `__proto__`) all rejected except
+  legitimate values; `rcon.password`, `server-port` and `__proto__` keys
+  rejected at the wire.
+- **Instance lock, 9 crafted files**: a command-injection string in `pid`
+  rejected as `corrupt` before reaching the command line (no process spawned);
+  numeric pids stringify to injection-free characters; the `host` field is
+  never used as a path; `released:true` and stale takeovers are announced and
+  require same-user data-dir write.
+
 ## Reproducing the whole audit
 
 ```bash
