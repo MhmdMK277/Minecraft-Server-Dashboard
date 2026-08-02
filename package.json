@@ -46,6 +46,7 @@
     "prove-gclog": "tsx scripts/prove-gclog.ts",
     "prove-backup-policy": "tsx scripts/prove-backup-policy.ts",
     "prove-backup-route": "tsx scripts/prove-backup-route.ts",
+    "prove-backup-detect": "tsx scripts/prove-backup-detect.ts",
     "prove-settings": "tsx scripts/prove-settings.ts",
     "prove-identity": "tsx scripts/prove-identity.ts",
     "prove-concurrent-start": "tsx scripts/prove-concurrent-start.ts",

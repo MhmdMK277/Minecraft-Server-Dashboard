@@ -64,6 +64,7 @@ import {
 } from './auth'
 import { audit, initAudit } from './audit'
 import { setBackupEnabled, isBackupEnabled } from './backuppolicy'
+import { readBackupDetection } from './backupdetect'
 import { writeSetting } from './serversettings'
 import { startServer, stopServer, restartServer, runCommand } from './control'
 import { detectLauncher, indexTasks } from './launcher'
@@ -729,6 +730,26 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
       } catch {
         return reply.code(404).send({ error: 'this world has no icon.png' })
       }
+    },
+  )
+
+  // Backup detection (decision 0001): a read-only reading of what backup
+  // systems already exist for this server. The directory and name come from
+  // the dashboard's own discovery, the external paths from the operator's
+  // config.json; nothing from the request is ever joined into a path.
+  app.get<{ Params: { id: string }; Querystring: { fresh?: string } }>(
+    '/api/servers/:id/backup/detection',
+    async (req, reply) => {
+      if (!require_(req, reply, 'viewer', 'backup.detection')) return
+      const snap = latest ?? (await doScan())
+      const s = snap.servers.find((x) => x.id === req.params.id)
+      if (!s) return reply.code(404).send({ error: 'no server with that id' })
+      return readBackupDetection(
+        s.dir,
+        s.name,
+        cfg.externalBackupPaths,
+        req.query.fresh === '1' ? 0 : undefined,
+      )
     },
   )
 

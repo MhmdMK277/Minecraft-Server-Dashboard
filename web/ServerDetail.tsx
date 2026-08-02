@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { ServerStatus, LogLine, Snapshot } from '@shared/api'
 import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT, fmtMemPair } from './status'
-import type { DimensionInfo, WorldsReading } from '@shared/api'
+import type { BackupDetection, DimensionInfo, WorldsReading } from '@shared/api'
 import { WorldIcon } from './WorldIcon'
 import { HistoryPanel } from './History'
 import { API } from '@shared/api'
@@ -937,25 +937,168 @@ function Worlds({ s }: { s: ServerStatus }) {
   )
 }
 
+const DETECT_STATUS_LABEL: Record<BackupDetection['systems'][number]['status'], string> = {
+  active: 'active',
+  configured: 'configured, not observed running',
+  stale: 'stale',
+}
+
+function fmtCadence(hours: number): string {
+  if (hours >= 36) return `~${Math.round((hours / 24) * 10) / 10} days`
+  return `~${Math.round(hours * 10) / 10} h`
+}
+
 /**
- * Management surface: the policy-file opt-in. The dashboard owns no backups,
- * and this page claims NOTHING about whether backups happen: no detection
- * exists, so no detection is claimed. The previous copy here asserted "the
- * external backup system this dashboard detected" and a "nightly" schedule;
- * both were assumptions imported from one machine's setup, recorded as a
- * found defect in docs/security-audit.md.
+ * The detection reading (decision 0001, server/backupdetect.ts). Every
+ * sentence here reports what that module read from disk; the statuses and
+ * their thresholds are its exported constants, not this page's opinion.
+ */
+function BackupDetectionPanel({ s }: { s: ServerStatus }) {
+  const [reading, setReading] = useState<BackupDetection | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(
+    (fresh: boolean) => {
+      setBusy(true)
+      setErr(null)
+      dashboard
+        .getBackupDetection(s.id, fresh)
+        .then(setReading)
+        .catch((e: unknown) =>
+          setErr(e instanceof Error ? e.message : 'could not read backup signals'),
+        )
+        .finally(() => setBusy(false))
+    },
+    [s.id],
+  )
+
+  useEffect(() => {
+    setReading(null)
+    load(false)
+  }, [s.id, load])
+
+  if (err) return <p className="prose-line text-[12px] text-bad">{err}</p>
+  if (reading === null) {
+    return (
+      <p className="prose-line text-[12px] text-faint">
+        Reading the backup signals from disk. The archive directories are statted at their top
+        level only, so this stays quick even over years of archives.
+      </p>
+    )
+  }
+
+  const active = reading.systems.filter((x) => x.status === 'active')
+
+  return (
+    <>
+      {reading.systems.length === 0 && (
+        <p className="prose-line text-[12px] leading-relaxed text-faint">
+          No backup system was detected for this server: no archive directory, no ServerUtilities
+          config enabling backups, no backup-named plugin or mod jar
+          {reading.externalPathsConfigured
+            ? ', and nothing for this server under the configured external path.'
+            : ', and no external path is configured for the dashboard to look at.'}{' '}
+          An external backup script leaves no trace inside the server folder, so if one exists the
+          dashboard genuinely cannot see it; name where it writes in{' '}
+          <code className="font-mono">externalBackupPaths</code> in{' '}
+          <code className="font-mono">config.json</code> (the dashboard&apos;s data folder) and it
+          will be read here.
+        </p>
+      )}
+
+      {reading.activeCount >= 2 && (
+        <p className="prose-line mb-3 text-[12px] leading-relaxed text-warn">
+          {reading.activeCount} backup systems are active for this server at once:{' '}
+          {active.map((x) => `${x.name} (writing to ${x.writesTo ?? 'an unknown place'})`).join(' and ')}
+          . Two systems copying the same world means duplicated disk and duplicated I/O on every
+          run. Which one to keep is a judgement about which you trust, so nothing here will offer
+          to disable either.
+        </p>
+      )}
+
+      {reading.systems.map((sys) => (
+        <div key={`${sys.signal}:${sys.name}`} className="mb-3 border-l-2 border-border pl-3">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-[13px] font-medium text-ink">{sys.name}</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground">
+              {DETECT_STATUS_LABEL[sys.status]}
+            </span>
+            {sys.confidence === 'guess' && (
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-faint">
+                a guess
+              </span>
+            )}
+          </div>
+          <p className="prose-line mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            {sys.evidence}
+          </p>
+          {sys.archives && (
+            <p className="prose-line mt-0.5 font-mono text-[11px] text-faint">
+              {sys.archives.count} archives, at least {fmtBytes(sys.archives.totalBytes)}
+              {sys.archives.newestAt
+                ? `, newest ${new Date(sys.archives.newestAt).toLocaleString()}`
+                : ''}
+              {sys.archives.approxCadenceHours !== null
+                ? `, roughly every ${fmtCadence(sys.archives.approxCadenceHours)}`
+                : ''}
+            </p>
+          )}
+          {sys.lastLogLine && (
+            <p
+              className="mt-0.5 overflow-x-auto whitespace-nowrap font-mono text-[11px] text-faint"
+              title="The newest line mentioning this server in a log found at the external path."
+            >
+              {sys.lastLogLine}
+            </p>
+          )}
+        </div>
+      ))}
+
+      <p className="prose-line mt-2 text-[11px] leading-relaxed text-faint">
+        {reading.cached
+          ? 'This is the reading already taken, shown as it was. '
+          : `Read from disk in ${reading.readMs} ms. `}
+        <button
+          type="button"
+          onClick={() => load(true)}
+          disabled={busy}
+          className="text-muted-foreground underline underline-offset-2 transition-colors duration-150 hover:text-ink disabled:opacity-50"
+        >
+          {busy ? 'Reading…' : 'Read the signals again'}
+        </button>
+      </p>
+    </>
+  )
+}
+
+/**
+ * Management surface: detection first (decision 0001, backupdetect.ts reads
+ * the four signals), then the policy-file opt-in. The page claims exactly
+ * what the reading supports: "active" needs archives inside the module's
+ * recency window, a config flag alone reads as configured. The pre-detection
+ * copy here once said "detected" with no detection code behind it; that was
+ * audit finding F6, and this panel is what finally makes the word honest.
  */
 function Backups({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
   return (
-    <Section
-      label="Backups"
-      note="The dashboard owns no backups. This switch records intent in a policy file (backup-policy.json in the dashboard's data folder) that an external backup script can read. If your backup system does not read that file, or you have none, this switch changes nothing, and nothing on this page means your worlds are backed up."
-    >
-      <BackupToggle s={s} canEdit={canEdit} />
-      <p className="prose-line mt-3 text-[12px] leading-relaxed text-faint">
-        A script that honours the policy file skips excluded directories before its rotation runs,
-        so archives already written are never touched, whichever way the switch points.
-      </p>
-    </Section>
+    <>
+      <Section
+        label="Detected backup systems"
+        note="Four read-only signals (decision 0001): archive directories in the server folder, a ServerUtilities config, backup-named plugin and mod jars, and any external path named in the dashboard's config.json. The dashboard reads these; it never writes them."
+      >
+        <BackupDetectionPanel s={s} />
+      </Section>
+      <Section
+        label="External rotation opt-in"
+        note="The dashboard owns no backups. This switch records intent in a policy file (backup-policy.json in the dashboard's data folder) that an external backup script can read. If your backup system does not read that file, or you have none, this switch changes nothing, and nothing on this page means your worlds are backed up."
+      >
+        <BackupToggle s={s} canEdit={canEdit} />
+        <p className="prose-line mt-3 text-[12px] leading-relaxed text-faint">
+          A script that honours the policy file skips excluded directories before its rotation
+          runs, so archives already written are never touched, whichever way the switch points.
+        </p>
+      </Section>
+    </>
   )
 }

@@ -685,6 +685,97 @@ export const SetBackupRequest = z.object({
 })
 export type SetBackupRequest = z.infer<typeof SetBackupRequest>
 
+/**
+ * Backup detection (decision 0001): the dashboard detects and surfaces
+ * whatever backup system a server already has; it does not implement one.
+ * Everything below is a READING of what was on disk at one moment, produced
+ * by server/backupdetect.ts, and every number carries its provenance.
+ */
+
+/**
+ * Statistics from statting the TOP LEVEL of one archive directory. The tree
+ * is deliberately not walked: a backups directory can be tens of gigabytes
+ * (decision 0001), so `totalBytes` sums top-level files only, and a
+ * timestamped subdirectory counts as one archive of unknown size.
+ */
+export const ArchiveStats = z.object({
+  /** Absolute path of the directory that was read. */
+  dir: z.string(),
+  /** Entries that look like archives: known extensions plus dated directories. */
+  count: z.number(),
+  /** Sum of top-level FILE sizes. Directories are not walked, so this is a floor. */
+  totalBytes: z.number(),
+  newestAt: z.string().nullable(),
+  oldestAt: z.string().nullable(),
+  /**
+   * Median gap between the newest few archives, in hours. Null below three
+   * archives, because two points do not make a cadence.
+   */
+  approxCadenceHours: z.number().nullable(),
+})
+export type ArchiveStats = z.infer<typeof ArchiveStats>
+
+/**
+ * What one detected system's evidence supports. The vocabulary is decision
+ * 0001's reporting rule: a config flag alone is intent, never activity.
+ *
+ * - `active`: archives observed, newest inside the recency window
+ *   (3x the observed cadence with a 24 h floor; 7 days when no cadence is
+ *   derivable). The window is code, in server/backupdetect.ts.
+ * - `configured`: a flag or an installed jar says backups should run, but
+ *   the archives are absent or older than the window. The evidence sentence
+ *   states which.
+ * - `stale`: archives exist, nothing claims to still produce them, and the
+ *   newest is older than the window.
+ */
+export const BackupSystemStatus = z.enum(['active', 'configured', 'stale'])
+export type BackupSystemStatus = z.infer<typeof BackupSystemStatus>
+
+export const BackupSystem = z.object({
+  /** Human name: "ServerUtilities", a jar's base name, or the directory read. */
+  name: z.string(),
+  /** Which of decision 0001's four signals produced this entry. */
+  signal: z.enum(['archive-dir', 'serverutilities', 'plugin-or-mod', 'external-path']),
+  /**
+   * `known` = a recognized provider or directly observed archives.
+   * `guess` = a filename that merely contains "backup" (decision 0001 says
+   * label that as a guess, so it is one on the wire, not just in the UI).
+   */
+  confidence: z.enum(['known', 'guess']),
+  status: BackupSystemStatus,
+  /** Where this system writes (absolute path), when that is known. */
+  writesTo: z.string().nullable(),
+  /** One sentence naming exactly what was observed on disk. */
+  evidence: z.string(),
+  archives: ArchiveStats.nullable(),
+  /** ServerUtilities only: the configured backup_timer, in hours. Intent, not evidence. */
+  configuredTimerHours: z.number().nullable(),
+  /** External path only: the newest backup-log line mentioning this server. */
+  lastLogLine: z.string().nullable(),
+})
+export type BackupSystem = z.infer<typeof BackupSystem>
+
+/**
+ * One reading of a server's backup systems. Same provenance envelope as
+ * WorldsReading: when it was read, what it cost, and whether it is a cached
+ * earlier reading being shown again.
+ *
+ * `externalPathsConfigured` exists because absence means two different
+ * things: with no configured external path, an external script is INVISIBLE
+ * to the dashboard (decision 0001, signal 4) and "nothing detected" must not
+ * be worded as "no backups exist".
+ */
+export const BackupDetection = z.object({
+  readAt: z.string(),
+  readMs: z.number(),
+  cached: z.boolean(),
+  systems: z.array(BackupSystem),
+  /** How many systems are `active`. Two or more is the duplicate-work warning. */
+  activeCount: z.number(),
+  externalPathsConfigured: z.boolean(),
+})
+export type BackupDetection = z.infer<typeof BackupDetection>
+
 /** One active session, for the "where am I logged in" list. */
 export const SessionSummary = z.object({
   sessionId: z.string(),
@@ -1032,6 +1123,8 @@ export const API = {
     `/api/servers/${encodeURIComponent(id)}/worlds/${encodeURIComponent(dir)}/icon`,
   ackIpChange: '/api/network/ack-ip-change',
   setBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/backup`,
+  backupDetection: (id: string, fresh = false) =>
+    `/api/servers/${encodeURIComponent(id)}/backup/detection${fresh ? '?fresh=1' : ''}`,
   setSetting: (id: string) => `/api/servers/${encodeURIComponent(id)}/settings`,
   control: (id: string, action: 'start' | 'stop' | 'restart') =>
     `/api/servers/${encodeURIComponent(id)}/${action}`,

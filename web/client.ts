@@ -1,6 +1,7 @@
 import type {
   AppInfo,
   AuthState,
+  BackupDetection,
   CommandResponse,
   ControlResult,
   LogBatch,
@@ -225,6 +226,8 @@ export const dashboard = {
   getSnapshot: () => get<Snapshot>(API.snapshot),
   getLogBacklog: (id: string) => get<LogLine[]>(API.logBacklog(id)),
   getWorlds: (id: string, fresh = false) => get<WorldsReading>(API.worlds(id, fresh)),
+  getBackupDetection: (id: string, fresh = false) =>
+    get<BackupDetection>(API.backupDetection(id, fresh)),
   discover: (fresh = false) => get<ScanResult>(API.discover(fresh)),
   validateAttach: (dir: string) => send<AttachCandidate>(API.attachValidate, 'POST', { dir }),
   attach: (path: string, confirmedLaunch: ConfirmedLaunch | null) =>
