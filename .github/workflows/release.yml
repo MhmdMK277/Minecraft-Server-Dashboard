@@ -140,4 +140,18 @@ jobs:
           git add bucket/minecraft-server-dashboard.json
           if (git diff --cached --quiet) { "manifest unchanged"; exit 0 }
           git commit -m "scoop: ${{ steps.v.outputs.version }}"
-          git push origin HEAD:main
+          # main can move while this job runs (it did on v0.1.0: a push
+          # during the build made this a non-fast-forward and turned a
+          # SUCCESSFUL publish into a red run). Rebase onto whatever landed
+          # and retry rather than failing a release that is already out.
+          $pushed = $false
+          foreach ($attempt in 1..3) {
+            git fetch origin main
+            if (-not (git rebase origin/main)) { git rebase --abort; "rebase failed"; break }
+            git push origin HEAD:main
+            if ($LASTEXITCODE -eq 0) { $pushed = $true; break }
+            "push rejected, attempt $attempt"
+          }
+          if (-not $pushed) {
+            throw 'the release published but the scoop manifest could not be pushed; commit bucket/minecraft-server-dashboard.json by hand'
+          }
