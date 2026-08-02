@@ -520,6 +520,8 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
 
   let latest: Snapshot | null = null
   let scanning = false
+  /** A write asked for a rescan while one was already running. */
+  let rescanRequested = false
 
   async function doScan(): Promise<Snapshot> {
     const snap = await scan(cfg.serversRoot, cfg.classificationOverrides)
@@ -528,8 +530,28 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     return Snapshot.parse(snap)
   }
 
+  /**
+   * Rescan and broadcast.
+   *
+   * The `scanning` guard exists so the ten-second poll cannot pile scans on
+   * top of each other. But a WRITE route calls this to make its change
+   * visible at once ("a tick that takes ten seconds to appear reads as a
+   * tick that did not work"), and simply returning while a poll happened to
+   * be in flight left `latest` describing the world BEFORE the write. The
+   * caller was told it had been reflected; it had not. Found by
+   * prove-backup-route failing intermittently, 2026-08-02.
+   *
+   * So a request that arrives during a scan is now remembered and served by
+   * one more scan when the current one finishes, rather than dropped.
+   */
   async function pushSnapshot(): Promise<void> {
-    if (scanning) return
+    if (scanning) {
+      rescanRequested = true
+      // Wait for the in-flight scan and the follow-up, so a caller that
+      // awaits this has the same guarantee whether or not it raced a poll.
+      while (scanning || rescanRequested) await new Promise((r) => setTimeout(r, 50))
+      return
+    }
     scanning = true
     try {
       const snap = await doScan()
@@ -550,6 +572,13 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
       console.error('scan failed:', e instanceof Error ? e.message : e)
     } finally {
       scanning = false
+    }
+    // A write that arrived mid-scan is served now, so its change is in
+    // `latest` before the caller's next read. Cleared first, so a failure
+    // here cannot leave a waiter spinning.
+    if (rescanRequested) {
+      rescanRequested = false
+      await pushSnapshot()
     }
   }
 

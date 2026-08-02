@@ -82,8 +82,15 @@ const snap = (await (await fetch(BASE + API.snapshot, { headers: { cookie: admin
   servers: Array<{ id: string; name: string; backupEnabled: boolean }>
 }
 if (!snap.servers.length) {
-  console.error('no servers discovered; this proof needs at least one server directory')
-  process.exit(1)
+  /**
+   * Production world, like prove-control: the route is exercised against a
+   * really discovered server. No fleet means the world does not exist here,
+   * which is a SKIP with the reason stated, not a failure and not a silent
+   * pass. Same convention as prove-backup-policy's mcbackup.py skips.
+   */
+  console.log('\n  SKIP  this proof needs a real fleet with at least one server directory.')
+  console.log('        Nothing was checked here. Run it on the host that has the servers.')
+  process.exit(0)
 }
 const target = snap.servers[0]!
 console.log(`target: ${target.name} (backupEnabled=${target.backupEnabled})`)

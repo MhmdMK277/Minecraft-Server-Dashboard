@@ -161,8 +161,16 @@ console.log('\n--- the gate')
 
 const stopped = snap.servers.find((s) => s.health === 'DOWN')
 if (!stopped) {
-  console.error('this proof needs at least one stopped server to aim refusals at')
-  process.exit(1)
+  /**
+   * This proof's world is PRODUCTION: it aims real refusals at a real
+   * stopped server. A machine with no fleet (a CI runner, a fresh clone)
+   * cannot provide that world, and a proof that cannot run must say so
+   * rather than fail as though the code were broken, or pass as though it
+   * had checked something. Same SKIP convention as prove-backup-policy.
+   */
+  console.log('\n  SKIP  this proof needs a real fleet with at least one stopped server.')
+  console.log('        Nothing was checked here. Run it on the host that has the servers.')
+  process.exit(0)
 }
 console.log(`  aiming refusals at ${stopped.name} (${stopped.health}, launcher ${stopped.launchStrategy})`)
 
