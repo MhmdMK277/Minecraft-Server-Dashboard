@@ -332,11 +332,23 @@ function Overview({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
                 <Metric label="Working set" value={`${s.memory.workingSetMb} MB`} />
                 <Metric label="Committed" value={`${s.memory.privateMb} MB`} />
                 <Metric
-                  label="Task priority"
-                  value={s.memory.taskPriority != null ? String(s.memory.taskPriority) : '–'}
+                  label="Priority"
+                  value={
+                    s.memory.processPriority != null
+                      ? `base ${s.memory.processPriority}`
+                      : s.memory.taskPriority != null
+                        ? `task ${s.memory.taskPriority}`
+                        : '–'
+                  }
                   tone={s.memory.lowPriority ? 'warn' : undefined}
-                  title="Settings.Priority of the scheduled task that launches this server. 7, the Task Scheduler default, runs the process at low memory priority."
-                />
+                  title="The LIVE process's base scheduling priority (6 = BelowNormal, 8 = Normal). The launching task's Settings.Priority is beneath; a task changed after the process started applies at its next launch, and this reading follows the process, not the setting."
+                >
+                  {s.memory.taskPriority != null && (
+                    <div className="mt-0.5 text-[10px] text-faint">
+                      task Priority={s.memory.taskPriority}
+                    </div>
+                  )}
+                </Metric>
               </div>
               <p
                 className={`prose-line mt-2.5 text-[12px] leading-relaxed ${s.memory.vulnerable ? 'text-warn' : 'text-muted-foreground'}`}

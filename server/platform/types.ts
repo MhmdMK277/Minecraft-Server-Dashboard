@@ -55,6 +55,14 @@ export type JvmProcess = {
   dir: string
   workingSetMb: number | null
   privateMb: number | null
+  /**
+   * Base scheduling priority of the LIVE process (Win32_Process.Priority:
+   * 6 = BelowNormal, 8 = Normal). Read separately from the task's
+   * Settings.Priority, because a task fixed to normal priority does not
+   * change a process started before the fix, and the reading must not say
+   * it did.
+   */
+  basePriority: number | null
   /** -Xmx parsed from the command line; null when unreadable (session 0). */
   heapMaxMb: number | null
   uptimeSeconds: number | null

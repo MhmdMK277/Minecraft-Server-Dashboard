@@ -191,7 +191,14 @@ export const MemoryReading = z.object({
   residencyPercent: z.number(),
   /** The launching task's Settings.Priority; null when no task or unreadable. */
   taskPriority: z.number().nullable(),
-  /** Priority 7-10: BelowNormal or lower, which includes low MEMORY priority. */
+  /**
+   * Base priority of the LIVE process (6 = BelowNormal, 8 = Normal). The
+   * authoritative signal: a task fixed after the process started does not
+   * change the process, and this field is what keeps the reading honest
+   * through that window.
+   */
+  processPriority: z.number().nullable(),
+  /** True when the RUNNING process is BelowNormal or lower. */
   lowPriority: z.boolean(),
   vulnerable: z.boolean(),
   detail: z.string(),

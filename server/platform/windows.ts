@@ -109,6 +109,10 @@ foreach ($k in $all.Keys) {
     ownCmd    = $p.CommandLine
     ws        = $p.WorkingSetSize
     priv      = $p.PrivatePageCount
+    # Base scheduling priority of the LIVE process (6 = BelowNormal, 8 =
+    # Normal). Read so a task whose Priority was fixed cannot make a process
+    # started before the fix read as already-fixed.
+    basePri   = [int]$p.Priority
     # Cumulative CPU since process start, in 100-nanosecond units, kernel plus
     # user. A COUNTER, not a rate: the rate is differenced across scans in
     # server/history.ts, where a pid change can be seen and the sample dropped.
@@ -239,6 +243,8 @@ type JvmRow = {
   ownCmd: string
   ws: number | null
   priv: number | null
+  /** Base scheduling priority of the live process. 6 = BelowNormal, 8 = Normal. */
+  basePriority: number | null
   start: number
   /** Cumulative CPU since process start, milliseconds. A counter. */
   cpuMs: number | null
@@ -329,6 +335,7 @@ export const windowsProvider: ProcessProvider = {
         ownCmd: String(r.ownCmd ?? ''),
         ws: typeof r.ws === 'number' ? Math.round(r.ws / 1048576) : null,
         priv: typeof r.priv === 'number' ? Math.round(r.priv / 1048576) : null,
+        basePriority: typeof r.basePri === 'number' ? r.basePri : null,
         start: r.start ? Date.parse(String(r.start)) : NaN,
         // 100-nanosecond units to milliseconds. Still cumulative.
         cpuMs: typeof r.cpu100ns === 'number' ? Math.round(r.cpu100ns / 10_000) : null,
@@ -385,6 +392,7 @@ export const windowsProvider: ProcessProvider = {
         dir,
         workingSetMb: row.ws,
         privateMb: row.priv,
+        basePriority: row.basePriority,
         heapMaxMb: parseXmx(row.ownCmd || ''),
         uptimeSeconds: Number.isFinite(row.start) ? Math.round((now - row.start) / 1000) : null,
         cpuMs: row.cpuMs,
