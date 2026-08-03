@@ -192,12 +192,7 @@ console.log('\n=== 5. the search must not starve the event loop (spec §11, 2026
 // vacuously.
 
 const BIG = mkdtempSync(join(tmpdir(), 'mcdash-scan-big-'))
-for (let i = 0; i < 60; i++) {
-  for (let j = 0; j < 40; j++) {
-    mkdirSync(join(BIG, `d${i}`, `e${j}`, 'leaf'), { recursive: true })
-  }
-}
-makeServer(join(BIG, 'd30', 'Planted Server'), { world: false, port: 25601 })
+makeServer(join(BIG, 'Planted Server'), { world: false, port: 25601 })
 
 // What the old implementation would do: readdirSync recursion on the loop.
 function syncWalkBlocks(dir: string, depth: number): void {
@@ -213,16 +208,36 @@ function syncWalkBlocks(dir: string, depth: number): void {
     if (e.isDirectory() && !e.isSymbolicLink()) syncWalkBlocks(join(dir, e.name), depth + 1)
   }
 }
-const b0 = Date.now()
-syncWalkBlocks(BIG, 0)
-const baselineMs = Date.now() - b0
 
+// The tree GROWS until a deliberately synchronous walk of it measurably
+// blocks past the limit, with headroom. A fixed-size tree was tried first
+// and CI refused it honestly: 4,860 directories that block 325 ms on this
+// dev machine block 146 ms on a GitHub runner's NVMe, and a tree the old
+// implementation could walk under the limit proves nothing about it.
 const BLOCK_LIMIT_MS = 250
-console.log(`   a synchronous walk of this tree blocks for ${baselineMs} ms`)
+let blocks = 0
+const addBlock = () => {
+  for (let i = 0; i < 20; i++) {
+    for (let j = 0; j < 40; j++) {
+      mkdirSync(join(BIG, `d${blocks}-${i}`, `e${j}`, 'leaf'), { recursive: true })
+    }
+  }
+  blocks++
+}
+for (let i = 0; i < 3; i++) addBlock()
+let baselineMs = 0
+for (let round = 0; round < 24; round++) {
+  const b0 = Date.now()
+  syncWalkBlocks(BIG, 0)
+  baselineMs = Date.now() - b0
+  if (baselineMs > BLOCK_LIMIT_MS * 1.5) break
+  addBlock()
+}
+console.log(`   a synchronous walk of ${blocks} blocks of 1,620 directories blocks for ${baselineMs} ms`)
 check(
-  'the tree is big enough that a synchronous walk would fail the block limit',
+  'the tree grew until a synchronous walk provably exceeds the block limit',
   baselineMs > BLOCK_LIMIT_MS,
-  `baseline ${baselineMs} ms vs limit ${BLOCK_LIMIT_MS} ms`,
+  `baseline ${baselineMs} ms vs limit ${BLOCK_LIMIT_MS} ms after ${blocks} growth blocks`,
 )
 
 // Now the real path, with a timer sampling the loop. Any stretch where the

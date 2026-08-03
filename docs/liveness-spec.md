@@ -302,12 +302,15 @@ on-demand route may run unbounded synchronous filesystem work on the event
 loop.** The search now walks with the async filesystem API and yields between
 candidates; a slow disk costs wall-clock, never measurement.
 
-Proof: `scripts/prove-scan.ts` section 5, self-validating: it measures how
-long a deliberately synchronous walk of its synthetic tree blocks, requires
-that baseline to exceed the 250 ms limit (so the tree is proven big enough to
-catch a regression), then asserts the real search's worst loop gap stays
-under the limit. Measured at the fix: baseline 325 ms, worst gap 16 ms (the
-Windows timer tick) across a 1,263 ms search.
+Proof: `scripts/prove-scan.ts` section 5, self-validating: it GROWS a
+synthetic tree until a deliberately synchronous walk of it measurably blocks
+past the 250 ms limit (so the tree is proven big enough to catch a
+regression on the machine actually running the proof), then asserts the real
+search's worst loop gap stays under the limit. The growth is not decoration:
+the first version used a fixed 4,860-directory tree, which blocks 325 ms on
+the dev machine and only 146 ms on a GitHub runner's NVMe, and CI failed the
+self-check rather than passing vacuously. Measured at the fix on the dev
+machine: worst gap 16 ms (the Windows timer tick) across a 1,263 ms search.
 
 ## 12. Observer lag is a host measurement, not just a correction
 
