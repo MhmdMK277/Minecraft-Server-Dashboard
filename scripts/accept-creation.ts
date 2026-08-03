@@ -1,7 +1,7 @@
 /**
  * ACCEPTANCE: creation produces a real server, end to end, with no shortcuts.
  *
- * The unit proofs (prove-creation, 92 checks) exercise every refusal against
+ * The unit proofs (prove-creation, 113 checks) exercise every refusal against
  * fixtures. What none of them can claim is that the whole path works against
  * the real world: the real Mojang metadata, the real download, the real jar,
  * a real JVM, a real world generated on this disk. This script claims exactly
@@ -261,6 +261,67 @@ while (Date.now() - t2 < 120_000) {
   await sleep(2000)
 }
 check('and the process is gone afterwards', gone)
+
+// ---------------------------------------------------------------------------
+console.log('\n=== 7. created outside the root, it ends attached and watched ===\n')
+// ---------------------------------------------------------------------------
+
+// Decision 0010: the operator may aim creation at any folder they pick. The
+// unit matrix is prove-creation section 13; what only this script can claim
+// is the real end: a real download into a real folder outside the root, and
+// the finished server WATCHED, through the same scan that watches the fleet.
+const OUTSIDE = mkdtempSync(join(tmpdir(), 'mcdash-accept-outside-'))
+const NAME2 = 'Accept Outside'
+const info2 = (await (await fetch(BASE + API.createInfo(), { headers: { cookie } })).json()) as CreationInfo
+const created2 = await fetch(BASE + API.create, {
+  method: 'POST',
+  headers: H,
+  body: JSON.stringify({
+    name: NAME2,
+    flavor: 'vanilla',
+    mcVersion: MC,
+    loaderVersion: null,
+    gamePort: info2.suggestedGamePort,
+    rconPort: info2.suggestedRconPort,
+    eulaAccepted: true,
+    memoryMb: 2048,
+    javaMode: 'existing',
+    parentDir: OUTSIDE,
+  }),
+})
+const created2Body = (await created2.json()) as { opId?: string; dir?: string; error?: string }
+check('an outside-root creation is accepted through the route', created2.status === 200, created2Body.error)
+if (created2.status === 200) {
+  const DIR2 = created2Body.dir!
+  console.log(`folder    : ${DIR2}`)
+  let job2: CreationJobStatus | null = null
+  const t3 = Date.now()
+  while (Date.now() - t3 < 300_000) {
+    const jobs2 = (await (await fetch(BASE + API.createJobs, { headers: { cookie } })).json()) as {
+      jobs: CreationJobStatus[]
+    }
+    job2 = jobs2.jobs.find((j) => j.opId === created2Body.opId) ?? null
+    if (job2 && (job2.state === 'complete' || job2.state === 'failed')) break
+    await sleep(2000)
+  }
+  check('it completes', job2?.state === 'complete', job2?.error ?? job2?.state)
+  check('the completion sentence states the attach and what detaching does', /attached/.test(job2?.detail ?? '') && /[Dd]etach/.test(job2?.detail ?? ''))
+
+  const reg = JSON.parse(readFileSync(join(DATA, 'attached.json'), 'utf8')) as {
+    attached: Array<{ dir: string; confirmedLaunch: { strategy: string; script?: string } | null }>
+  }
+  const entry = reg.attached.find((a) => a.dir.toLowerCase() === DIR2.toLowerCase())
+  check('attached.json carries the folder', !!entry)
+  check('with start.bat as the confirmed launcher', entry?.confirmedLaunch?.strategy === 'script' && entry?.confirmedLaunch?.script === 'start.bat')
+  check('the attach was audited', readFileSync(join(DATA, 'audit.jsonl'), 'utf8').includes('create.attach'))
+
+  const snap3 = await scan(ROOT)
+  const row2 = snap3.servers.find((s) => s.dir.toLowerCase() === DIR2.toLowerCase())
+  check('the same scan that watches the fleet lists it as a server row', !!row2)
+  check('classified never-started, like any created server before first start', row2?.classification === 'never-started', row2?.classification)
+  check('carrying the normal start path from the attach confirmation', row2?.launchStrategy === 'script', row2?.launchStrategy)
+  check('and its attachment state is reported', snap3.attachments.some((a) => a.dir.toLowerCase() === DIR2.toLowerCase()))
+}
 
 await app.close()
 

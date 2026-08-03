@@ -126,7 +126,7 @@ const created = await startCreation(
     java: { mode: 'existing' },
     parentDir: ROOT,
   },
-  { knownDirs: [], ...IDENT },
+  { knownDirs: [], dataDir: DATA, serversRoot: ROOT, ...IDENT },
 )
 if (!created.ok) {
   check('creation started', false, created.reason)

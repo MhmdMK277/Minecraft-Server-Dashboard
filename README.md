@@ -202,6 +202,11 @@ All optional. The dashboard runs with none of them set.
 | `MCDASH_DATA_DIR` | OS app-data directory | Config, sessions, audit log |
 | `MCDASH_TRUST_PROXY` | off | Set to `1` behind a reverse proxy or tunnel |
 
+The servers root can also be set persistently as the `serversRoot` key in
+`config.json` inside the data directory; `MCDASH_SERVERS_ROOT` overrides it
+while set. The configuration is re-read on every ten-second scan, so an edit
+to `config.json` applies within one scan, with no restart.
+
 For full health a server needs `enable-rcon=true` in its `server.properties`,
 because only an RCON round trip can probe the main game thread. Without it
 health honestly reads `UNKNOWN` rather than being guessed from the port.

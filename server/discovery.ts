@@ -124,6 +124,11 @@ export async function scan(
     const name = basename(a.dir)
     const exists = existsSync(a.dir)
     const hasWorld = exists && levelDatPath(a.dir) !== null
+    // Spec §9 as amended: server.properties with no world is a server that
+    // has never started, not junk. An attached folder in that state (an
+    // outside-root creation is exactly this, decision 0010) must get the
+    // same never-started row and Start button the servers-root case gets.
+    const neverStarted = exists && !hasWorld && existsSync(join(a.dir, 'server.properties'))
 
     attachments.push({
       dir: a.dir,
@@ -134,15 +139,18 @@ export async function scan(
         ? 'This folder is not on disk any more. It may have been deleted or renamed, or it may be on a drive that is not connected. Nothing is being reported about it, because there is nothing to read.'
         : hasWorld
           ? 'Watched because you attached it.'
-          : 'The folder is here, but it has no world with a level.dat in it, so there is nothing to watch yet. A server that has never been started once looks like this.',
+          : neverStarted
+            ? 'No world yet: it is listed with the servers as never started, and its first start generates the world.'
+            : 'The folder is here, but it has no world with a level.dat in it, so there is nothing to watch yet.',
       confirmedLaunch: a.confirmedLaunch,
     })
 
     if (candidates.some((c) => c.dir.toLowerCase() === a.dir.toLowerCase())) continue
-    // Only a real, world-bearing folder joins the candidate list. A missing
-    // one must not become a server row that can never resolve.
-    if (!hasWorld) continue
-    candidates.push({ name, dir: a.dir })
+    // A missing folder must not become a server row that can never resolve,
+    // and a folder with neither world nor server.properties has nothing to
+    // watch. World-bearing folders and never-started servers join.
+    if (!hasWorld && !neverStarted) continue
+    candidates.push({ name, dir: a.dir, neverStarted })
   }
 
   // Port conflicts. Spec §1: two directories can legitimately declare the same

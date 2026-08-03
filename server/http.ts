@@ -121,11 +121,27 @@ const PUBLIC_IP_MS = 5 * 60_000
 const WS_HEARTBEAT_MS = 30_000
 
 export type Deps = {
+  /**
+   * The config at startup. Kept in the signature for callers and their
+   * warnings, but the routes below deliberately do NOT close over it:
+   * config.json used to be read once here and never again, so an edit to
+   * serversRoot silently did nothing until restart while the on-demand
+   * search and the creation routes, which re-read, obeyed it. Since
+   * 2026-08-04 every use inside buildServer goes through liveCfg().
+   */
   cfg: AppConfig
   version: string
 }
 
-export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstance> {
+export async function buildServer({ version }: Deps): Promise<FastifyInstance> {
+  /**
+   * The config in force right now: config.json plus the env overrides,
+   * re-read at each use. The read is a few small files (loadConfig also
+   * re-reads attached.json, which discovery already re-reads every scan),
+   * so the ten-second loop follows a config edit within one scan.
+   */
+  const liveCfg = (): AppConfig => loadConfig(dataDir())
+
   const app = Fastify({
     logger: false,
     // A reverse proxy or tunnel in front of this is an expected deployment, not
@@ -518,7 +534,7 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
       name: 'Minecraft Server Dashboard',
       version,
       node: process.versions.node,
-      serversRoot: cfg.serversRoot,
+      serversRoot: liveCfg().serversRoot,
       platform: provider.platform,
       platformSupported: provider.available,
       platformDetail: provider.available ? provider.name : (provider.unavailable?.reason ?? null),
@@ -533,7 +549,8 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
   let rescanRequested = false
 
   async function doScan(): Promise<Snapshot> {
-    const snap = await scan(cfg.serversRoot, cfg.classificationOverrides)
+    const cur = liveCfg()
+    const snap = await scan(cur.serversRoot, cur.classificationOverrides)
     // Validate on the way out. This is where a stray credential field would be
     // caught before it reached a browser.
     return Snapshot.parse(snap)
@@ -754,7 +771,7 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
       return readBackupDetection(
         s.dir,
         s.name,
-        cfg.externalBackupPaths,
+        liveCfg().externalBackupPaths,
         req.query.fresh === '1' ? 0 : undefined,
       )
     },
@@ -917,6 +934,7 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
       suggestedRconPort,
       parentDir: cfg2.serversRoot,
       parentDirExists: cfg2.serversRootExists,
+      parentDirSource: cfg2.source,
       installedRamMb: Math.round((await import('node:os')).totalmem() / 1048576),
     }
     return out
@@ -986,6 +1004,12 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     const body = CreateServerRequest.safeParse(req.body)
     if (!body.success) return reply.code(400).send({ error: 'invalid creation request' })
     const cfg2 = loadConfig(dataDir())
+    // Decision 0010: the operator may pick the parent folder; absent, the
+    // servers root. The pick is not trusted: refuseHostileParent in
+    // creation.ts rejects a missing folder, the data dir, anything inside a
+    // server directory, and anything nested inside the servers root, before
+    // a byte is written. A creation that completes outside the root ends
+    // ATTACHED, which is what makes it watched.
     const result = await startCreation(
       {
         name: body.data.name,
@@ -997,11 +1021,13 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
         eulaAccepted: body.data.eulaAccepted,
         memoryMb: body.data.memoryMb,
         java: { mode: body.data.javaMode },
-        parentDir: cfg2.serversRoot,
+        parentDir: body.data.parentDir?.trim() || cfg2.serversRoot,
       },
       {
         knownDirs: knownDirsForPorts(),
         provision: provisionJava,
+        dataDir: dataDir(),
+        serversRoot: cfg2.serversRoot,
         actor: session.username,
         role: session.role,
         ip: clientIp(req),
@@ -1025,8 +1051,13 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
     if (!session) return
     const body = RunInstallerRequest.safeParse(req.body)
     if (!body.success) return reply.code(400).send({ error: 'invalid request' })
+    // The installer path also ends in complete(), which attaches an
+    // outside-root creation (decision 0010), so it carries the same context.
+    const cfg3 = loadConfig(dataDir())
     const result = await runInstaller(body.data.opId, body.data.confirmRunDownloadedProgram, {
       knownDirs: [],
+      dataDir: dataDir(),
+      serversRoot: cfg3.serversRoot,
       actor: session.username,
       role: session.role,
       ip: clientIp(req),
@@ -1315,7 +1346,7 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
       destDir: parsed.data.destDir,
       dataDir: dataDir(),
       actor: session.username,
-      externalBackupPaths: cfg.externalBackupPaths,
+      externalBackupPaths: liveCfg().externalBackupPaths,
     })
     audit({
       actor: session.username,

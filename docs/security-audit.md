@@ -501,12 +501,19 @@ whose target leaves the folder.
   is 121 checks; the three cold-backup, two game-rule and one profiling route
   each answer 401 unauthenticated. Every mutating route requires admin; no
   mutating route is viewer-reachable.
-- **Creation cannot escape the servers root.** The name regex rejects every
+- **Creation cannot escape the folder it names.** The name regex rejects every
   separator, drive-colon, UNC and ADS form; `..`, trailing dot/space and
   reserved device names are separately blocked; and `basename(dir) !== name`
-  after `resolve(normalize(join(...)))` is the second gate. `parentDir` is
-  hardcoded to the configured servers root and the request's field is never
-  read. Every download is checksum-verified before use, redirects are
+  after `resolve(normalize(join(...)))` is the second gate. `parentDir` was
+  hardcoded to the configured servers root when this was written; since
+  decision 0010 (2026-08-04) the request MAY name a parent folder, and the
+  pick runs a refusal matrix in `creation.ts` (`refuseHostileParent`) before
+  anything touches disk: must exist and be a directory; never inside the
+  dashboard's data directory; never nested inside the servers root; never a
+  server folder or inside one (server.properties ancestor walk). Proofs:
+  prove-creation section 13 (the matrix, plus outside-root creations ending
+  attached), prove-creation-route section 6 (refused through the route,
+  audited). Every download is checksum-verified before use, redirects are
   re-checked per hop against hardcoded host lists, and the installer spawn is
   an args array gated on a server-side `confirmRunDownloadedProgram === true`.
 - **The tunnel's typed confirmation is enforced in the module**, not the UI,

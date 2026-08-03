@@ -90,6 +90,7 @@ export function CreatePage() {
   const [loaderPin, setLoaderPin] = useState('')
 
   const [name, setName] = useState('')
+  const [parent, setParent] = useState('')
   const [gamePort, setGamePort] = useState('')
   const [rconPort, setRconPort] = useState('')
   const [memory, setMemory] = useState('')
@@ -111,6 +112,7 @@ export function CreatePage() {
       .getCreateInfo()
       .then((i) => {
         setInfo(i)
+        setParent((p) => p || i.parentDir)
         setGamePort((p) => p || String(i.suggestedGamePort))
         setRconPort((p) => p || String(i.suggestedRconPort))
       })
@@ -196,6 +198,7 @@ export function CreatePage() {
         eulaAccepted: eula,
         memoryMb: memory.trim() ? Number(memory) : null,
         javaMode,
+        parentDir: parent.trim() || undefined,
       })
       .then((r) => {
         setStartedOp(r.opId)
@@ -229,6 +232,8 @@ export function CreatePage() {
       : null
 
   const ready = eula && name.trim().length > 0 && mcVersion.length > 0 && !submitting
+  /** The operator typed a parent other than the configured servers root. */
+  const customParent = !!info && parent.trim().length > 0 && parent.trim() !== info.parentDir
   const shownJobs = [...jobs].sort((a, b) => (b.startedAt > a.startedAt ? 1 : -1))
 
   return (
@@ -338,7 +343,7 @@ export function CreatePage() {
       <section className="pb-7">
         <SectionHead
           title="Name and folder"
-          note="The name becomes a folder in the place discovery already watches, so the new server is found the same way every other server is. No separate registry, no special status."
+          note="The name becomes a folder in the place you pick below. In the servers root it is found by discovery like every other server; anywhere else, creation attaches the finished folder, and the dashboard watches it because you attached it."
         />
         <Input
           value={name}
@@ -348,19 +353,45 @@ export function CreatePage() {
           autoComplete="off"
           className="max-w-md text-[13px]"
         />
+        <label className="mt-2.5 grid max-w-md gap-1 text-[11px] text-faint">
+          Create in
+          <Input
+            value={parent}
+            onChange={(e) => setParent(e.target.value)}
+            placeholder={info?.parentDir ?? ''}
+            spellCheck={false}
+            autoComplete="off"
+            className="font-mono text-[12px]"
+          />
+        </label>
         {info && (
           <p className="prose-line mt-1.5 break-all font-mono text-[11px] text-faint">
-            {info.parentDir}
+            {parent.trim() || info.parentDir}
             {'\\'}
             {name.trim() || '…'}
           </p>
         )}
-        {info && !info.parentDirExists && (
+        {info && !customParent && info.parentDirSource === 'env' && (
+          <p className="prose-line mt-1.5 text-[11px] text-faint">
+            This default comes from <code className="font-mono">MCDASH_SERVERS_ROOT</code>, which
+            overrides the <code className="font-mono">serversRoot</code> in config.json while it is
+            set.
+          </p>
+        )}
+        {customParent && (
+          <p className="prose-line mt-1.5 text-[11px] text-faint">
+            That is not the servers root, so the folder must already exist, and when creation
+            completes the dashboard attaches it: it appears on the next scan as a server you
+            attached, and detaching it later stops the watching. Folders inside a server, inside
+            the dashboard&apos;s data, or nested inside the servers root are refused.
+          </p>
+        )}
+        {info && !customParent && !info.parentDirExists && (
           <div className="mt-2 space-y-2">
             <Note tone="warn">
               The servers root <span className="font-mono">{info.parentDir}</span> does not exist
-              yet, so creation would be refused. Create it here, or set a different servers root
-              (see below) and it becomes where new servers and discovery both look.
+              yet, so creation there would be refused. Create it here, or type a folder that
+              already exists (another drive is fine) in the field above.
             </Note>
             <div className="flex flex-wrap items-center gap-2">
               <Btn
@@ -369,20 +400,19 @@ export function CreatePage() {
                 label={makingRoot ? 'Creating…' : 'Create this folder'}
               />
               <span className="prose-line text-[11px] text-faint">
-                Keep your servers on another drive? The servers root is set in{' '}
+                To move the servers root itself, set it in{' '}
                 <code className="font-mono">%APPDATA%\minecraft-server-dashboard\config.json</code>{' '}
                 (<code className="font-mono">{'{ "serversRoot": "E:\\\\your\\\\folder" }'}</code>);
-                an in-app setting for it is coming in v0.2.0.
+                the dashboard re-reads it on every scan, so the change applies within ten seconds.
               </span>
             </div>
             {rootErr && <Note tone="bad">{rootErr}</Note>}
           </div>
         )}
-        {info && info.parentDirExists && (
+        {info && !customParent && info.parentDirExists && (
           <p className="prose-line mt-1.5 text-[11px] text-faint">
-            New servers are created in the servers root, where discovery already looks. To keep them
-            elsewhere, point the servers root at that drive (config.json for now; an in-app setting
-            is coming in v0.2.0).
+            New servers are created in the servers root, where discovery already looks. To create
+            one somewhere else, type that folder above.
           </p>
         )}
       </section>

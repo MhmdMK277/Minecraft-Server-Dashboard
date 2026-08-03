@@ -14,6 +14,7 @@ import { createServer as netServer } from 'node:net'
 import { basename, join, resolve, normalize } from 'node:path'
 import { spawn } from 'node:child_process'
 import { audit } from './audit'
+import { attachDir } from './attach'
 import { fetchVerified } from './fetchverify'
 import { gamePortOf, rconConfig } from './properties'
 import {
@@ -249,9 +250,83 @@ export type CreateDeps = {
   download?: (r: ResolvedDownload, dest: string) => Promise<{ bytes: number }>
   /** Provisions a Java runtime; wired to javaprovision.provisionJava. */
   provision?: (major: number) => Promise<{ javaHome: string; reused: boolean }>
+  /**
+   * Both REQUIRED and explicit (decision 0010): creation must never resolve
+   * these itself, because a proof world that forgot to set an env var would
+   * silently attach into the operator's real data directory. The route
+   * passes the freshly loaded config; proofs pass their throwaway world.
+   */
+  dataDir: string
+  serversRoot: string
   actor: string | null
   role: string | null
   ip: string
+}
+
+function normPath(p: string): string {
+  return resolve(normalize(p)).replace(/[\\/]+$/, '').toLowerCase()
+}
+
+/** True when child is parent or lies anywhere under it. */
+function isUnder(child: string, parent: string): boolean {
+  const c = normPath(child)
+  const p = normPath(parent)
+  return c === p || c.startsWith(p + '\\')
+}
+
+/**
+ * The hostile-parent refusal matrix (decision 0010). The operator picks the
+ * parent folder, so the parent is now a request field, and every way a bad
+ * pick could end in an invisible, nested, or self-hosted server is refused
+ * here, before anything touches disk.
+ */
+function refuseHostileParent(parentDir: string, deps: CreateDeps): CreateRefusal | null {
+  if (!existsSync(parentDir) || !statSync(parentDir).isDirectory()) {
+    return { ok: false, reason: 'The target parent folder does not exist. Creation only targets a folder that is already there.' }
+  }
+
+  // The configured servers root is the default target and worked before this
+  // matrix existed; it is never refused here, wherever it lives. (Proof
+  // worlds routinely put it INSIDE their throwaway data dir.)
+  if (normPath(parentDir) === normPath(deps.serversRoot)) return null
+
+  // The dashboard's own data directory holds sessions, the audit log and the
+  // attach registry. A server in there is a server inside the observer.
+  // One direction only: a parent that merely CONTAINS the data dir (a home
+  // folder contains %APPDATA%) is harmless, because the created folder is a
+  // new direct child and an existing folder is refused below.
+  if (isUnder(parentDir, deps.dataDir)) {
+    return { ok: false, reason: "That folder is inside the dashboard's own data directory. Servers cannot be created there." }
+  }
+
+  // Inside the servers root but deeper than its direct children: discovery
+  // lists only the root's direct children, and attach refuses anything
+  // inside the root, so a server created there would be invisible to both.
+  if (isUnder(parentDir, deps.serversRoot)) {
+    return {
+      ok: false,
+      reason:
+        'That folder is inside the servers root, where servers live directly under the root itself. Pick the servers root, or a folder outside it.',
+    }
+  }
+
+  // The parent, or any folder above it, already being a server means the new
+  // server would sit inside a server directory, exactly where a world walk,
+  // a backup or a folder removal would sweep it up.
+  let probe = resolve(normalize(parentDir))
+  for (;;) {
+    if (existsSync(join(probe, 'server.properties'))) {
+      return {
+        ok: false,
+        reason: `That folder is a server folder, or sits inside one (${probe} holds a server.properties). A server cannot be created inside a server.`,
+      }
+    }
+    const up = resolve(probe, '..')
+    if (up === probe) break
+    probe = up
+  }
+
+  return null
 }
 
 export async function startCreation(req: CreateRequest, deps: CreateDeps): Promise<CreateRefusal | CreateAccepted> {
@@ -271,9 +346,8 @@ export async function startCreation(req: CreateRequest, deps: CreateDeps): Promi
     }
   }
 
-  if (!existsSync(req.parentDir) || !statSync(req.parentDir).isDirectory()) {
-    return { ok: false, reason: 'The target parent folder does not exist.' }
-  }
+  const parentRefusal = refuseHostileParent(req.parentDir, deps)
+  if (parentRefusal) return parentRefusal
   const dir = resolve(normalize(join(req.parentDir, req.name)))
   if (basename(dir) !== req.name) return { ok: false, reason: 'That name does not survive as a folder name.' }
   if (existsSync(dir)) {
@@ -454,6 +528,34 @@ function complete(job: CreationJob, journal: Journal, deps: CreateDeps): void {
     'Created. The folder is now just another server: discovery picks it up on the next scan as a never-started row with the normal Start button, and its first start generates the world.'
   journal.state = 'complete'
   writeJournal(job.dir, journal)
+
+  // Outside the servers root, discovery cannot find the folder on its own,
+  // so creation ends by attaching it (decision 0010): the same registry and
+  // the same per-entry state as any folder the operator attaches by hand,
+  // with the journaled start.bat as the confirmed launcher. Detaching it
+  // later removes it from watch like any attachment.
+  if (!isUnder(job.dir, deps.serversRoot)) {
+    const attached = attachDir(
+      deps.dataDir,
+      { dir: job.dir, confirmedLaunch: { strategy: 'script', script: 'start.bat' } },
+      { serversRoot: deps.serversRoot },
+    )
+    if (attached.ok) {
+      job.detail =
+        'Created outside the servers root, so the folder was attached: discovery watches it because you attached it, starting with the next scan, and detaching it later stops the watching. Its first start generates the world.'
+    } else {
+      job.detail = `Created, but the folder is outside the servers root and could not be attached (${attached.reason}) It is NOT watched until you attach it from the Attach page.`
+    }
+    audit({
+      actor: deps.actor,
+      role: deps.role,
+      action: 'create.attach',
+      target: job.name,
+      outcome: attached.ok ? 'ok' : 'failed',
+      ip: deps.ip,
+      detail: attached.ok ? `attached ${job.dir}` : attached.reason,
+    })
+  }
   audit({
     actor: deps.actor,
     role: deps.role,

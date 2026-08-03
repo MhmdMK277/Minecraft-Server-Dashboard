@@ -391,7 +391,19 @@ async function main() {
 
   const PARENT = join(ROOT, 'servers-root')
   mkdirSync(PARENT, { recursive: true })
-  const DEPS = { knownDirs: [] as string[], actor: 'prover', role: 'admin', ip: '127.0.0.1' }
+  // Explicit world for the attach-on-complete path (decision 0010): creation
+  // must never resolve the data dir itself, or this proof would write into
+  // the operator's real attached.json.
+  const FAKE_DATA = join(ROOT, 'data-dir')
+  mkdirSync(FAKE_DATA, { recursive: true })
+  const DEPS = {
+    knownDirs: [] as string[],
+    dataDir: FAKE_DATA,
+    serversRoot: PARENT,
+    actor: 'prover',
+    role: 'admin',
+    ip: '127.0.0.1',
+  }
 
   // Fixture fetchers that resolve a vanilla download served by our fixture
   // HTTP server, so the whole pipeline runs without the internet.
@@ -677,6 +689,109 @@ async function main() {
     check('and leaves no archive staged', !existsSync(join(ROOT, 'appdata3', 'java', 'staging', 'bad.zip')))
 
     check('the consequence text names the absolute path problem', CONSEQUENCE_TEXT.includes('absolute path') && CONSEQUENCE_TEXT.includes('breaks'))
+  }
+
+  // =========================================================================
+  console.log('\n=== 13. hostile parents refused; outside the root ends attached ===\n')
+  // =========================================================================
+  //
+  // Decision 0010: the parent folder is an operator pick now, which makes it
+  // a request field, and a start button can end up aimed at whatever tree it
+  // names. Every hostile shape is refused BEFORE anything touches disk, and
+  // the one legitimate non-root shape (a folder elsewhere on the machine)
+  // must end ATTACHED, or the created server would be invisible.
+  {
+    resetJobs()
+    const fx = { ...DEPS, fetchers: vanillaFx, download: realDownload }
+    const tryParent = (parentDir: string) =>
+      startCreation({ ...baseReq, name: 'Parent Proof', parentDir }, fx)
+
+    const r1 = await tryParent(join(ROOT, 'no-such-parent'))
+    check('a parent that does not exist is refused', !r1.ok && r1.reason.includes('does not exist'))
+
+    const filePath = join(ROOT, 'a-file.txt')
+    writeFileSync(filePath, 'x', 'utf8')
+    const r2 = await tryParent(filePath)
+    check('a parent that is a file, not a folder, is refused', !r2.ok && r2.reason.includes('does not exist'))
+
+    const r3 = await tryParent(FAKE_DATA)
+    check("the dashboard's own data directory is refused", !r3.ok && r3.reason.includes('data directory'))
+    const insideData = join(FAKE_DATA, 'nested')
+    mkdirSync(insideData, { recursive: true })
+    const r4 = await tryParent(insideData)
+    check('a folder inside the data directory is refused', !r4.ok && r4.reason.includes('data directory'))
+    // The other direction must stay ALLOWED: a home folder contains
+    // %APPDATA%, and refusing it would refuse the most ordinary real pick.
+    // The fetchers fail fast so acceptance is proven without a download.
+    const offline = {
+      json: async () => {
+        throw new Error('offline by design')
+      },
+      text: async () => {
+        throw new Error('offline by design')
+      },
+    }
+    const r5 = await startCreation({ ...baseReq, name: 'Home Like', parentDir: ROOT }, { ...DEPS, fetchers: offline })
+    check('a folder that merely CONTAINS the data directory is accepted', r5.ok === true, r5.ok ? undefined : r5.reason)
+
+    const nested = join(PARENT, 'Nested Level')
+    mkdirSync(nested, { recursive: true })
+    const r6 = await tryParent(nested)
+    check(
+      'nested inside the servers root is refused: discovery lists only direct children and attach refuses inside-root, so the server would be invisible to both',
+      !r6.ok && r6.reason.includes('inside the servers root'),
+      r6.ok ? 'accepted' : r6.reason,
+    )
+
+    const serverParent = join(ROOT, 'is-a-server')
+    mkdirSync(serverParent, { recursive: true })
+    writeFileSync(join(serverParent, 'server.properties'), 'server-port=25640\r\n', 'utf8')
+    const r7 = await tryParent(serverParent)
+    check('a parent that is itself a server folder is refused, naming the file', !r7.ok && r7.reason.includes('server.properties'))
+    const insideServer = join(serverParent, 'plugins')
+    mkdirSync(insideServer, { recursive: true })
+    const r8 = await tryParent(insideServer)
+    check('a parent anywhere inside a server folder is refused', !r8.ok && r8.reason.includes('server.properties'))
+
+    check(
+      'no refusal created a folder anywhere',
+      [join(ROOT, 'no-such-parent'), FAKE_DATA, insideData, ROOT, nested, serverParent, insideServer].every(
+        (p) => !existsSync(join(p, 'Parent Proof')),
+      ),
+    )
+
+    // The legitimate case: a folder outside the servers root, end to end.
+    const OUTSIDE = join(ROOT, 'another-drive')
+    mkdirSync(OUTSIDE, { recursive: true })
+    const ok = await startCreation(
+      { ...baseReq, name: 'Outside Root', gamePort: 25965, rconPort: 25975, parentDir: OUTSIDE },
+      fx,
+    )
+    check('a folder outside the servers root is accepted', ok.ok, ok.ok ? undefined : ok.reason)
+    if (ok.ok) {
+      for (let i = 0; i < 100 && !['complete', 'failed'].includes(jobFor(ok.opId)?.state ?? ''); i++) {
+        await new Promise((res) => setTimeout(res, 50))
+      }
+      const job = jobFor(ok.opId)
+      check('the outside-root creation completes', job?.state === 'complete', job?.error ?? job?.state)
+
+      const attachedFile = join(FAKE_DATA, 'attached.json')
+      const reg = existsSync(attachedFile)
+        ? (JSON.parse(readFileSync(attachedFile, 'utf8')) as { attached: Array<{ dir: string; confirmedLaunch: { strategy: string; script?: string } | null }> })
+        : { attached: [] }
+      const entry = reg.attached.find((a) => a.dir.toLowerCase() === join(OUTSIDE, 'Outside Root').toLowerCase())
+      check('and ends ATTACHED: attached.json lists the new folder', !!entry)
+      check(
+        'with the journaled start.bat as the confirmed launcher, so the row carries the normal start path',
+        entry?.confirmedLaunch?.strategy === 'script' && entry?.confirmedLaunch?.script === 'start.bat',
+      )
+      check('the job detail states the attach and what detaching does', /attached/.test(job?.detail ?? '') && /[Dd]etach/.test(job?.detail ?? ''))
+      check('the attach was audited', auditLines().some((l) => l.action === 'create.attach' && l.outcome === 'ok'))
+      check(
+        'creations INSIDE the servers root did not attach anything',
+        !reg.attached.some((a) => a.dir.toLowerCase().startsWith(PARENT.toLowerCase() + '\\')),
+      )
+    }
   }
 
   await new Promise<void>((r) => fixture.close(() => r()))

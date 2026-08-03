@@ -1,6 +1,7 @@
 # 0010. Creation targets the folder the operator picks; the servers root stays a default
 
-**Status:** proposed, awaiting operator approval. Nothing here is built.
+**Status:** accepted (operator approved Option B, 2026-08-04) and BUILT the
+same day; see the build addendum at the end.
 **Date:** 2026-08-04
 
 ## The problem, from the second-machine trial
@@ -153,3 +154,46 @@ suites rather than shipping on review alone: prove-creation grows a refusal
 matrix for hostile parents (inside a server, inside the data dir,
 nonexistent, a file, join-escape), and accept-creation covers the
 outside-root path ending attached and watched on the next scan.
+
+## Build addendum, 2026-08-04
+
+Built as recommended, with three deltas the build itself surfaced:
+
+1. **The matrix gained a row the proposal missed: a parent nested inside
+   the servers root (deeper than its direct children) is refused.**
+   Discovery lists only the root's direct children and attach refuses
+   anything inside the root, so a server created there would be invisible
+   to both. Found while writing the code, not the proposal.
+2. **The data-directory rule is one direction only, and the configured
+   servers root is never refused.** The first cut also refused a parent
+   that CONTAINS the data dir, and `accept-creation` failed on it
+   immediately: proof worlds put their servers root inside their throwaway
+   data dir, and a real operator's home folder contains `%APPDATA%`.
+   Containment is harmless, because the created folder is a new direct
+   child and an existing folder is always refused. The proof now pins the
+   allowed direction so over-blocking cannot return.
+3. **The frozen watch-loop root was fixed rather than documented** (the
+   operator asked for one or the other). `buildServer` no longer closes
+   over the startup config; every use goes through a per-use
+   `loadConfig`, so a config.json edit applies within one ten-second
+   scan. The Create page and the README state that, and only became able
+   to say it truthfully with this change.
+4. **Attached never-started folders become server rows.** accept-creation
+   section 7 failed its first honest run: discovery only promoted
+   world-bearing attachments to server rows, so an outside-root creation
+   had no row and NO START BUTTON until someone started it some other
+   way. Spec section 9's amendment (server.properties with no world is a
+   never-started server) now applies to attachments too
+   (`server/discovery.ts`), with the attachment detail saying so, and
+   prove-attach pinning the row.
+
+Where it landed: `refuseHostileParent` and the attach-on-complete in
+`server/creation.ts` (deps now carry `dataDir` and `serversRoot`
+explicitly, so a proof world can never leak an attach into the real
+registry); `parentDir` on the wire in `shared/api.ts`; the route and
+`liveCfg` in `server/http.ts`; the "Create in" field in `web/Create.tsx`.
+Proofs: prove-creation 113 (section 13), prove-creation-route 29
+(section 6), accept-creation section 7 (real outside-root creation ending
+attached and watched by the fleet scan). The security audit's "creation
+cannot escape the servers root" claim was rewritten to match
+(docs/security-audit.md).

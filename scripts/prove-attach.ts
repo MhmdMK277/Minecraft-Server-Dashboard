@@ -417,10 +417,16 @@ console.log('\n=== 9. an attached folder that is no longer on disk ===\n')
   const empty = after.attachments.find((x) => x.dir === NEVER_STARTED)
   check('a folder that is present but has no world reads no-world', empty?.state === 'no-world', empty?.state)
   check(
-    'and its wording says a server that has never started looks like this',
-    typeof empty?.detail === 'string' && /level\.dat|never been started/i.test(empty.detail),
+    'and its wording says it is listed with the servers as never started',
+    typeof empty?.detail === 'string' && /never started/i.test(empty.detail),
     empty?.detail,
   )
+  // Amended 2026-08-04 (decision 0010): an attached folder holding a
+  // server.properties but no world is spec section 9's never-started case,
+  // and it must be a SERVER ROW with the normal start path, or an
+  // outside-root creation would have no Start button before its first start.
+  const emptyRow = after.servers.find((s) => s.dir === NEVER_STARTED)
+  check('and it appears as a server row, classified never-started', emptyRow?.classification === 'never-started', emptyRow?.classification)
 
   // Standing rule: the dashboard does not tidy up on the operator's behalf.
   // An unplugged drive must not silently cost someone their attachment.

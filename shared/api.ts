@@ -1219,6 +1219,12 @@ export const CreateServerRequest = z.object({
   eulaAccepted: z.boolean(),
   memoryMb: z.number().int().min(512).max(65536).nullable(),
   javaMode: z.enum(['existing', 'adoptium']),
+  /**
+   * Where to create the folder (decision 0010). Absent means the servers
+   * root. The server refuses hostile picks: a missing folder, the data dir,
+   * inside a server, or nested inside the servers root.
+   */
+  parentDir: z.string().min(1).max(4096).optional(),
 })
 export type CreateServerRequest = z.infer<typeof CreateServerRequest>
 
@@ -1270,9 +1276,14 @@ export type CreationInfo = {
   adoptiumConsequence: string
   suggestedGamePort: number
   suggestedRconPort: number
-  /** Where the folder will be created. */
+  /** Where the folder will be created unless the operator picks elsewhere. */
   parentDir: string
   parentDirExists: boolean
+  /**
+   * Where the default came from, so the UI can say when MCDASH_SERVERS_ROOT
+   * is the reason config.json would be ignored.
+   */
+  parentDirSource: 'env' | 'config' | 'default'
   /** This machine's installed physical RAM in MB, so the memory field can warn. */
   installedRamMb: number
 }

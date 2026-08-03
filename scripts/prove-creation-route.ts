@@ -237,6 +237,33 @@ console.log('\n=== 5. the installer route refuses the unknown ===\n')
   check('the jobs list answers an admin and is empty in this world', jobs.status === 200 && jobsBody.jobs.length === 0)
 }
 
+// ===========================================================================
+console.log('\n=== 6. a hostile parent pick is refused on the wire ===\n')
+// ===========================================================================
+// Decision 0010: parentDir is a request field now. The refusal matrix lives
+// in creation.ts (prove-creation section 13 exercises all of it); this
+// section proves a hostile pick is refused THROUGH the route, verbatim,
+// with nothing created and the denial audited.
+{
+  const r = await fetch(BASE + API.create, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie, [CSRF_HEADER]: '1' },
+    body: JSON.stringify({ ...CREATE_BODY, parentDir: DATA }),
+  })
+  const body = (await r.json()) as { error?: string }
+  check('aiming creation at the data directory is 409', r.status === 409)
+  check('with the reason verbatim in the body', (body.error ?? '').includes('data directory'))
+  check('and nothing was created there', !existsSync(join(DATA, 'Route Proof')))
+  check('the denial was audited', auditLines().some((l) => l.action === 'create.start' && l.outcome === 'denied' && (l.detail ?? '').includes('data directory')))
+
+  const r2 = await fetch(BASE + API.create, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', cookie: adminCookie, [CSRF_HEADER]: '1' },
+    body: JSON.stringify({ ...CREATE_BODY, parentDir: '' }),
+  })
+  check('an empty parentDir fails the wire shape, not the filesystem', r2.status === 400)
+}
+
 await app.close()
 
 let pass = 0
