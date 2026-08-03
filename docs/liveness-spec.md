@@ -288,6 +288,27 @@ Proof: `scripts/prove-observer-lag.ts`, blocks the loop for 3,000 ms during a
 probe of a server answering in 1 ms, and asserts the unguarded verdict is
 `STALLED` while the guarded one is not.
 
+**Amended 2026-08-04, after the second-machine first-run trial.** The rule as
+first written governed `inspect()`, and the on-demand filesystem search
+(`server/scan.ts`) violated its spirit from outside it: the walk was
+synchronous `readdirSync` recursion, and on the trial machine one press of
+"Look for servers on this machine" held the event loop for 8,739 ms of a
+9,458 ms search, 97% of blocked time. The attribution built in §12 worked --
+the host panel read "Stalling" and correctly blamed the observer rather than
+a server -- but while the loop is held nothing can be measured at all, so on
+a real fleet every server goes unmeasurable for the duration because someone
+pressed a button. The rule therefore extends beyond `inspect()`: **no
+on-demand route may run unbounded synchronous filesystem work on the event
+loop.** The search now walks with the async filesystem API and yields between
+candidates; a slow disk costs wall-clock, never measurement.
+
+Proof: `scripts/prove-scan.ts` section 5, self-validating: it measures how
+long a deliberately synchronous walk of its synthetic tree blocks, requires
+that baseline to exceed the 250 ms limit (so the tree is proven big enough to
+catch a regression), then asserts the real search's worst loop gap stays
+under the limit. Measured at the fix: baseline 325 ms, worst gap 16 ms (the
+Windows timer tick) across a 1,263 ms search.
+
 ## 12. Observer lag is a host measurement, not just a correction
 
 Added 2026-07-29, immediately after §11 and directly out of it.

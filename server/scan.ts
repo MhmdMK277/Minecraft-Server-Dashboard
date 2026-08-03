@@ -1,4 +1,6 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { readdir, stat } from 'node:fs/promises'
+import { setImmediate as nextTurn } from 'node:timers/promises'
 import { homedir } from 'node:os'
 import { join, parse } from 'node:path'
 import { gamePortOf, levelDatPath } from './properties'
@@ -39,6 +41,17 @@ import type { ScanResult, ScanCandidate, ScanRoot } from '@shared/api'
  * cheap once and far too expensive sixty times a minute, so this never runs
  * on the ten-second scan loop; it runs on demand and at first run, and it
  * reports its own duration the way the worlds walk does.
+ *
+ * THE SECOND RULE THIS MODULE MUST NOT BREAK (spec §11, amended 2026-08-03):
+ * being on demand does not license blocking. On the second-machine trial the
+ * walk was synchronous and its 9,458 ms search held the event loop for
+ * 8,739 ms; while the loop is held, every probe in flight is billed the
+ * blockage, so one button press made the whole fleet unmeasurable and the
+ * host panel read "Stalling", correctly, about us. The walk therefore uses
+ * the async filesystem API and yields between candidates: wall-clock time is
+ * spent in the disk, never in the loop. prove-scan section 5 measures the
+ * worst loop gap during a scan of a tree big enough that the synchronous
+ * version fails it.
  */
 
 /** Same convention as launcher.ts and worlds.ts: 0 means do not use the cache. */
@@ -85,17 +98,24 @@ export function defaultRoots(): ScanRoot[] {
   return roots
 }
 
-function isDir(p: string): boolean {
+async function isDir(p: string): Promise<boolean> {
   try {
-    return statSync(p).isDirectory()
+    return (await stat(p)).isDirectory()
   } catch {
     return false
   }
 }
 
-/** One bounded walk. A server directory is a LEAF: never descend into it. */
-function walk(root: string, maxDepth: number, out: Set<string>, seen: Set<string>): void {
-  const visit = (dir: string, depth: number): void => {
+/**
+ * One bounded walk. A server directory is a LEAF: never descend into it.
+ *
+ * Async on purpose, not for speed: each `await readdir` is one small task,
+ * so the event loop stays live between directories and a slow disk costs
+ * wall-clock, never measurement. The synchronous version of this function
+ * blocked the loop for 8.7 s on the trial machine (spec §11 amendment).
+ */
+async function walk(root: string, maxDepth: number, out: Set<string>, seen: Set<string>): Promise<void> {
+  const visit = async (dir: string, depth: number): Promise<void> => {
     if (depth > maxDepth) return
     // Junctions and symlinks can point back up the tree. Without this a
     // single junction turns the walk into an infinite one.
@@ -105,7 +125,7 @@ function walk(root: string, maxDepth: number, out: Set<string>, seen: Set<string
 
     let entries
     try {
-      entries = readdirSync(dir, { withFileTypes: true })
+      entries = await readdir(dir, { withFileTypes: true })
     } catch {
       // Permission denied, or the directory vanished mid-walk. Both are
       // ordinary on a live machine and neither is worth reporting.
@@ -122,11 +142,11 @@ function walk(root: string, maxDepth: number, out: Set<string>, seen: Set<string
       if (e.isSymbolicLink()) continue
       const name = e.name.toLowerCase()
       if (SKIP.has(name) || name.startsWith('.')) continue
-      visit(join(dir, e.name), depth + 1)
+      await visit(join(dir, e.name), depth + 1)
     }
   }
-  if (!isDir(root)) return
-  visit(root, 0)
+  if (!(await isDir(root))) return
+  await visit(root, 0)
 }
 
 /**
@@ -148,14 +168,14 @@ export async function scanForServers(
 
   const found = new Set<string>()
   const seen = new Set<string>()
-  for (const r of roots) walk(r.dir, r.depth, found, seen)
+  for (const r of roots) await walk(r.dir, r.depth, found, seen)
 
   // What the dashboard already knows about, so nothing is offered twice.
   const cfg = loadConfig(dataDir())
   const attached = new Set(loadAttached(dataDir()).map((a) => norm(a.dir)))
   const watched = new Set<string>()
   try {
-    for (const name of readdirSync(cfg.serversRoot)) {
+    for (const name of await readdir(cfg.serversRoot)) {
       watched.add(norm(join(cfg.serversRoot, name)))
     }
   } catch {
@@ -169,8 +189,16 @@ export async function scanForServers(
    * on each candidate's log and only then uses the port to name the pid.
    * This is the whole reason the scan is worth anything, and the reason it
    * must not shortcut to a port lookup itself.
+   *
+   * The per-candidate property reads are synchronous but each is one small
+   * file; the yield between candidates keeps the loop live even when the
+   * disk is slow enough that many small reads would add up (spec §11).
    */
-  const hints: DirHint[] = dirs.map((d) => ({ dir: d, gamePort: gamePortOf(d) }))
+  const hints: DirHint[] = []
+  for (const d of dirs) {
+    hints.push({ dir: d, gamePort: gamePortOf(d) })
+    await nextTurn()
+  }
   let occupied = new Map<string, number>()
   try {
     const jvms = await scanJvms(hints)
@@ -181,20 +209,22 @@ export async function scanForServers(
     // honest, claiming "not running" would not be.
   }
 
-  const candidates: ScanCandidate[] = dirs.map((dir) => {
+  const candidates: ScanCandidate[] = []
+  for (const [i, dir] of dirs.entries()) {
     const key = norm(dir)
     const pid = occupied.get(key) ?? null
-    return {
+    candidates.push({
       dir,
       name: parse(dir).base,
       known: attached.has(key) ? 'attached' : watched.has(key) ? 'watched' : 'new',
       looksLikeServer: levelDatPath(dir) !== null,
-      gamePort: gamePortOf(dir),
+      gamePort: hints[i]?.gamePort ?? null,
       levelName: levelNameOf(dir),
       running: pid !== null,
       pid,
-    }
-  })
+    })
+    await nextTurn()
+  }
 
   const result: ScanResult = {
     scannedAt: new Date(started).toISOString(),

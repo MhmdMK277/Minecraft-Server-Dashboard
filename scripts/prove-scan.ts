@@ -18,7 +18,7 @@
  *
  * Run: npx tsx scripts/prove-scan.ts
  */
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, readFileSync, existsSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, readFileSync, readdirSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -173,6 +173,80 @@ check(
 // A root that does not exist must not throw: drive letters come and go.
 const missing = await scanForServers({ roots: [{ dir: join(TREE, 'no-such-root'), depth: 2 }] })
 check('a root that does not exist is skipped rather than throwing', missing.candidates.length === 0)
+
+// ===========================================================================
+console.log('\n=== 5. the search must not starve the event loop (spec §11, 2026-08-03) ===\n')
+// ===========================================================================
+//
+// The second-machine trial: the on-demand search reported "Searched 6
+// locations in 9458 ms" and the host panel went red with a worst block of
+// 8,739 ms, 97% of blocked time -- the walk was synchronous, so while it ran
+// nothing else could be measured and every probe in flight would be billed
+// the blockage. On a real fleet, one button press made every server
+// unmeasurable for nine seconds.
+//
+// This section is self-validating: it first measures how long a deliberately
+// SYNCHRONOUS walk of the same tree blocks, and requires that baseline to
+// exceed the threshold. If the tree were too small to catch the old
+// implementation, the proof fails on its own baseline rather than passing
+// vacuously.
+
+const BIG = mkdtempSync(join(tmpdir(), 'mcdash-scan-big-'))
+for (let i = 0; i < 60; i++) {
+  for (let j = 0; j < 40; j++) {
+    mkdirSync(join(BIG, `d${i}`, `e${j}`, 'leaf'), { recursive: true })
+  }
+}
+makeServer(join(BIG, 'd30', 'Planted Server'), { world: false, port: 25601 })
+
+// What the old implementation would do: readdirSync recursion on the loop.
+function syncWalkBlocks(dir: string, depth: number): void {
+  if (depth > 4) return
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return
+  }
+  if (entries.some((e) => e.isFile() && e.name.toLowerCase() === 'server.properties')) return
+  for (const e of entries) {
+    if (e.isDirectory() && !e.isSymbolicLink()) syncWalkBlocks(join(dir, e.name), depth + 1)
+  }
+}
+const b0 = Date.now()
+syncWalkBlocks(BIG, 0)
+const baselineMs = Date.now() - b0
+
+const BLOCK_LIMIT_MS = 250
+console.log(`   a synchronous walk of this tree blocks for ${baselineMs} ms`)
+check(
+  'the tree is big enough that a synchronous walk would fail the block limit',
+  baselineMs > BLOCK_LIMIT_MS,
+  `baseline ${baselineMs} ms vs limit ${BLOCK_LIMIT_MS} ms`,
+)
+
+// Now the real path, with a timer sampling the loop. Any stretch where the
+// loop is held shows up as a gap between ticks.
+let worstGap = 0
+let lastTick = Date.now()
+const sampler = setInterval(() => {
+  const now = Date.now()
+  const gap = now - lastTick
+  if (gap > worstGap) worstGap = gap
+  lastTick = now
+}, 10)
+const s0 = Date.now()
+const big = await scanForServers({ roots: [{ dir: BIG, depth: 4 }] })
+const scanWall = Date.now() - s0
+clearInterval(sampler)
+
+console.log(`   real scan took ${scanWall} ms wall clock; worst loop gap ${worstGap} ms`)
+check('the planted server is still found in the big tree', big.candidates.some((c) => c.dir.toLowerCase().includes('planted server')))
+check(
+  `the search never holds the event loop longer than ${BLOCK_LIMIT_MS} ms`,
+  worstGap < BLOCK_LIMIT_MS,
+  `worst gap ${worstGap} ms over a ${scanWall} ms scan`,
+)
 
 // ===========================================================================
 const failed = checks.filter(([, ok]) => !ok)
