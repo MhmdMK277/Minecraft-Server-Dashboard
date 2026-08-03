@@ -1,5 +1,62 @@
 # Project history: settled milestones and findings
 
+## 2026-08-03 morning: the priority fix WORKED (overnight verdict)
+
+The question open since the fix landed 2026-08-02 20:00 (base priority 7 to 5
+on the four server tasks, so every java.exe runs base 8 / Normal instead of
+base 6 / BelowNormal): did it stop the multi-second eviction stalls? The
+overnight window 01:00-05:00, entirely under base 8, answers it. Read from the
+rotated gc.logs after the 05:00 rotation restarted the JVMs.
+
+**The verdict: WORKED.** The eviction-paging pathology is gone. Every
+stop-the-world pause in the overnight band was JVM work at the safepoint, with
+time-to-reach-safepoint at or below 0.05 ms; NOT ONE carried the host-fault
+signature (reaching-safepoint time dominating, the OS unable to run threads
+through a non-resident heap) that defined the stalls under base 6.
+
+The decisive case, finally observed. A 51,924 pages/s fault storm hit at
+01:20:11 (metrics.csv), comparable to the worst natural triggers and to the
+deliberate stress test. It landed on GTNH, the fleet's deepest heap and the one
+case the stress test left untested (it ran zero GCs during those storms). GTNH
+took a 1,194 ms pause at 01:20:15 -- and its attribution was reaching 0.010 ms,
+at-safepoint 1,194.84 ms: **JVM work, not a host fault.** Under base 6 a storm
+of that intensity produced host-attributed multi-second pauses (up to 8,927 ms
+on 07-31, reaching-time dominating). Under base 8 the same intensity on the
+same heap produced ordinary, if heavy, collection work with the OS delivering
+threads to the safepoint essentially instantly.
+
+The overnight pauses over 100 ms, all JVM-attributed:
+
+| server | when | ms | reaching | operation |
+| --- | --- | ---: | ---: | --- |
+| GTNH | 01:20:15 | 1194.85 | 0.010 | G1PauseRemark |
+| 1.21.11 | 04:42:14 | 580.41 | 0.009 | G1PauseRemark |
+| GTNH | 03:19:23 | 426.70 | 0.009 | G1PauseRemark |
+| 1.21.11 | 03:21:32 | 255.73 | 0.016 | G1CollectForAllocation |
+| Skyblock | 01:12:35 | 182.45 | 0.005 | G1PauseRemark |
+| GTNH | 04:36:56 | 158.10 | 0.042 | G1CollectForAllocation |
+| 1.21.11 | 02:03:02 | 104.61 | 0.033 | G1CollectForAllocation |
+| 1.21.4 | 03:19:49 | 103.92 | 0.009 | G1CollectForAllocation |
+
+The post-05:00 window (fresh JVMs) had zero pauses over 200 ms, which
+re-confirms the backup exoneration a fourth time: a freshly restarted JVM has
+nothing paged out.
+
+**The honest residual, and what it is NOT.** GTNH still takes pauses over a
+second (1,194 ms tonight). That is real and an operator would want to know, but
+it is GC work on a 6.9 GB heap running a 300-plus-mod pack, a heap-sizing and
+collector-tuning matter, NOT the host-eviction pathology this investigation was
+about. The priority fix targeted eviction, and eviction is what it removed; it
+was never meant to shrink a heavy pack's legitimate collection time. If GTNH's
+GC pauses matter to the operator, that is a separate, named conversation
+(heap size, MaxGCPauseMillis, region count), and the Profiling page now shows
+exactly which pauses are JVM work versus host fault to inform it.
+
+This closes the stall investigation opened 2026-07-28. The chain, the fix, and
+now the confirmation are all on record; the one remaining unexplained event
+(the 07-28 128 s host-wide stall never captured in any gc.log, and the 08-01
+01:07-01:40 trigger) stays noted as unexplained rather than folded in.
+
 ## 2026-08-02 late evening: the controlled eviction stress test
 
 Rather than waiting for the 05:00 backup, the trigger was reproduced
