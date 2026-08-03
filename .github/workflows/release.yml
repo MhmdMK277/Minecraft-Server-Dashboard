@@ -64,7 +64,7 @@ jobs:
             'prove-history',
             'prove-portability', 'prove-settings', 'prove-control',
             'prove-concurrent-start', 'prove-backup-policy', 'prove-backup-route',
-            'prove-backup-detect', 'prove-cold-backup'
+            'prove-backup-detect', 'prove-cold-backup', 'prove-fetchverify'
           )
           $failed = @()
           foreach ($s in $suites) {

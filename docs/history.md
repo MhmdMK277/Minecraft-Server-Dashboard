@@ -1,5 +1,71 @@
 # Project history: settled milestones and findings
 
+## 2026-08-03: the second-machine trial, and v0.2.0
+
+The software had never run on a machine other than the one it was built on:
+every proof, acceptance test and screenshot came from one host. The first-run
+trial on a second Windows PC (Minecraft servers present, no Node/npm/git, none
+of this project's assumptions) was run as a real experiment, with predictions
+recorded before the run. Headline: **a stranger got from unzip to seeing their
+real server, unaided, in minutes.**
+
+**The prediction that was wrong, recorded plainly because it was the most
+important result.** Before the trial, the number-one predicted v0.2.0 item was
+an onboarding wall: that a fresh user could not point the dashboard at their
+servers without hand-editing config.json. That wall does not exist. The
+scan-and-attach path built earlier ("Look for servers on this machine")
+already solved it: the empty state offered a scan, it ran in 7.5 seconds,
+found all three server folders, marked exactly the running one as running with
+the correct pid, and one click attached it. The onboarding wall was a real
+risk that a feature built earlier had already closed; the trial's job was to
+find that out, and it did. What remained of the config gap was narrower and
+specific to creation, not discovery (see below).
+
+**The model survived the case the proofs never exercised.** The running server
+was started the canonical way for that machine, a PowerShell window opened in
+the folder running `java -jar paper.jar`, so its java command line contained
+no directory and its parent was `powershell.exe`. Command-line attribution had
+nothing to work with, the exact §5b proof-world blind spot. The open-log-handle
+signal named the directory and pid correctly anyway. A duplicate copy declaring
+a colliding port, and a non-running folder, were both listed present-but-not-
+running and never claimed. RCON-less servers read the honest UNKNOWN. The
+bundled runtime ran with no Node installed; SmartScreen warned but did not
+quarantine; nothing was written into a server folder.
+
+**The real bug the trial found: the download allowlist.** GitHub had moved its
+release-asset CDN from `objects.githubusercontent.com` to
+`release-assets.githubusercontent.com`, and the exact-string host allowlist
+aborted the "download a Java for me" path with "host ... is not on the
+allowlist". Fixed by naming the CDN by AUTHORITY (a `.githubusercontent.com`
+domain-suffix rule matched on the dot boundary) rather than chasing host
+strings, across both GitHub-release paths (Java and the playit agent), with
+`prove-fetchverify` pinning that a novel subdomain is accepted and a lookalike
+refused. The failure path itself behaved correctly: the folder was kept,
+marked, and offered a typed-name removal.
+
+**The creation UX findings from a real first use**, all fixed: the servers root
+does not exist on a fresh machine, so the first creation was refused and the
+form was lost on the reload the operator had to do (now a "Create this folder"
+button, in place, no reload, form preserved); memory was free-text with no
+guidance (now states installed RAM and warns on a dangerous heap fraction, a
+first cut pending a PocketMC/Crafty study); and the RAM readout showed
+"2.4 / 2 GB" because it compared whole-process resident memory to the -Xmx
+heap ceiling (now resident over committed, which never inverts, with the heap
+ceiling stated separately).
+
+**v0.2.0 cut** so the released artifact is no longer four milestones behind
+main: it carries priority normalization, the coldbackup route audit, MOTD,
+Game Rules, Profiling, the F10 link-member guard, and the trial's fixes. The
+artifact passed `accept-release` (runs with no Node/npm/git, prints the
+first-start admin password, scatters no state).
+
+**What the trial could NOT test, so it is not claimed:** the machine was not
+virgin (the source version had run there days earlier, so the data folder
+already existed and no first-start admin password printed), and the v0.1.0 zip
+predated Profiling, Game Rules, MOTD and backup detection. A genuinely virgin
+first-run is still untested; the requirement for testing it is recorded in the
+handoff.
+
 ## 2026-08-03 morning: the priority fix WORKED (overnight verdict)
 
 The question open since the fix landed 2026-08-02 20:00 (base priority 7 to 5
