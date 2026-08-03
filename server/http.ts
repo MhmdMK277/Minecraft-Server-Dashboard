@@ -917,8 +917,41 @@ export async function buildServer({ cfg, version }: Deps): Promise<FastifyInstan
       suggestedRconPort,
       parentDir: cfg2.serversRoot,
       parentDirExists: cfg2.serversRootExists,
+      installedRamMb: Math.round((await import('node:os')).totalmem() / 1048576),
     }
     return out
+  })
+
+  /**
+   * Create the configured servers root when it does not exist yet.
+   *
+   * On a fresh machine the default servers root (Documents\MC Servers) has
+   * never been created, so the first creation always failed and the operator
+   * had to make the folder by hand and reload the page, losing the form. This
+   * makes the folder on request, admin-only and audited like any write, and
+   * only ever the servers root the config already resolves to: it takes no
+   * path from the caller, so it cannot be aimed elsewhere.
+   */
+  app.post('/api/create/servers-root', async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'create.servers-root')
+    if (!session) return
+    const cfg2 = loadConfig(dataDir())
+    const { mkdirSync, existsSync } = await import('node:fs')
+    try {
+      mkdirSync(cfg2.serversRoot, { recursive: true })
+    } catch (e) {
+      audit({
+        actor: session.username, role: session.role, action: 'create.servers-root',
+        target: cfg2.serversRoot, outcome: 'failed', ip: clientIp(req),
+        detail: e instanceof Error ? e.message : String(e),
+      })
+      return reply.code(409).send({ error: `Could not create ${cfg2.serversRoot}: ${e instanceof Error ? e.message : String(e)}` })
+    }
+    audit({
+      actor: session.username, role: session.role, action: 'create.servers-root',
+      target: cfg2.serversRoot, outcome: 'ok', ip: clientIp(req),
+    })
+    return { ok: true, parentDir: cfg2.serversRoot, parentDirExists: existsSync(cfg2.serversRoot) }
   })
 
   app.get<{ Querystring: { flavor?: string } }>('/api/create/versions', async (req, reply) => {

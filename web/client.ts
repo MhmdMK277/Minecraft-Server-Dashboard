@@ -289,6 +289,9 @@ export const dashboard = {
   getForgePromos: () => get<{ promos: Record<string, string> }>(API.createVersions('forge')),
   createServer: (body: CreateServerRequest) =>
     post<{ opId: string; dir: string }>(API.create, body),
+  /** Create the configured servers root when it does not exist yet. Admin only. */
+  createServersRoot: () =>
+    post<{ ok: boolean; parentDir: string; parentDirExists: boolean }>(API.createServersRoot, {}),
   getCreateJobs: () => get<{ jobs: CreationJobStatus[] }>(API.createJobs),
   runInstaller: (opId: string, confirmRunDownloadedProgram: boolean) =>
     post<{ ok: boolean }>(API.createRunInstaller, { opId, confirmRunDownloadedProgram }),

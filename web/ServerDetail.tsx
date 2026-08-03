@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import type { ServerStatus, LogLine, Snapshot } from '@shared/api'
-import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT, fmtMemPair } from './status'
+import { verdict, verdictSentence, Indicator, Meter, Metric, TONE_TEXT, ramFigures } from './status'
 import type { BackupDetection, ColdBackupEntry, DimensionInfo, WorldsReading } from '@shared/api'
 import { WorldIcon } from './WorldIcon'
 import { HistoryPanel } from './History'
@@ -244,27 +244,28 @@ function Overview({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
           >
             {s.gc && <div className="mt-0.5 text-[10px] text-faint">{s.gc.stoppedPercent}% stopped</div>}
           </Metric>
-          <Metric
-            label="RAM"
-            value={fmtMemPair(ws, s.proc?.heapMaxMb ?? priv)}
-            tier="lead"
-            title={
-              ws == null
-                ? 'Working set could not be read.'
-                : s.proc?.heapMaxMb != null
-                  ? `${ws} MB resident of the ${s.proc.heapMaxMb} MB heap ceiling (-Xmx from the command line). The process has committed ${priv ?? '?'} MB; ${residency ?? '?'}% of that is resident. Residency, not heap usage.`
-                  : `${ws} MB resident of ${priv} MB committed by this process. The java command line is not readable for a boot-started process, so -Xmx is unknown and committed memory stands in for allocated. Residency, not heap usage.`
-            }
-          >
-            <Meter value={ws} max={s.proc?.heapMaxMb ?? priv} tone="muted" />
-            {ws != null && (
-              <div className="mt-0.5 text-[10px] text-faint">
-                {s.proc?.heapMaxMb != null
-                  ? `${residency ?? '?'}% of committed memory is in RAM`
-                  : 'committed memory stands in for the heap ceiling'}
-              </div>
-            )}
-          </Metric>
+          {(() => {
+            const ram = ramFigures(ws, priv, s.proc?.heapMaxMb ?? null)
+            return (
+              <Metric
+                label="RAM"
+                value={ram.value}
+                tier="lead"
+                title={
+                  ws == null
+                    ? 'Working set could not be read.'
+                    : `${ws} MB resident of ${priv ?? '?'} MB committed by this process (${residency ?? '?'}% resident). Resident memory is the whole process, not the heap: the ${s.proc?.heapMaxMb != null ? `${s.proc.heapMaxMb} MB -Xmx heap` : 'heap'} is one part of it, alongside metaspace, thread stacks and the JIT, which is why resident can exceed the heap ceiling. Residency, not heap usage.`
+                }
+              >
+                <Meter value={ws} max={ram.meterMax} tone="muted" />
+                {ws != null && (
+                  <div className="mt-0.5 text-[10px] text-faint">
+                    {residency ?? '?'}% resident, {ram.ceilingLabel}
+                  </div>
+                )}
+              </Metric>
+            )
+          })()}
           <Metric label="Uptime" value={age(s.proc?.uptimeSeconds ?? null)} tier="lead" />
         </div>
       )}

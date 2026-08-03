@@ -1273,6 +1273,8 @@ export type CreationInfo = {
   /** Where the folder will be created. */
   parentDir: string
   parentDirExists: boolean
+  /** This machine's installed physical RAM in MB, so the memory field can warn. */
+  installedRamMb: number
 }
 
 /**
@@ -1402,6 +1404,7 @@ export const API = {
     `/api/create/info${mcVersion ? `?mcVersion=${encodeURIComponent(mcVersion)}` : ''}`,
   createVersions: (flavor: string) => `/api/create/versions?flavor=${encodeURIComponent(flavor)}`,
   create: '/api/create',
+  createServersRoot: '/api/create/servers-root',
   createJobs: '/api/create/jobs',
   createRunInstaller: '/api/create/run-installer',
   createRemoveFailed: '/api/create/remove-failed',

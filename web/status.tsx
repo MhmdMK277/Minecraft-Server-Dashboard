@@ -169,6 +169,38 @@ export function fmtMemPair(usedMb: number | null, allocMb: number | null): strin
     : `${Math.round(usedMb)} / ${Math.round(allocMb)} MB`
 }
 
+/**
+ * RAM figures that can never read as "used exceeds allocated".
+ *
+ * The trap this closes (found on a user's machine, 2026-08-03): the pair used
+ * to be resident-memory / -Xmx-heap-ceiling, and those are different scopes.
+ * Resident working set is the WHOLE process (heap + metaspace + thread stacks
+ * + JIT + shared libraries), so it legitimately exceeds the heap ceiling, and
+ * "2.4 / 2 GB" looks broken at a glance even though it is correct. The
+ * denominator is now committed memory, which is always at least the resident
+ * set here, so the ratio is real and never inverts; the heap ceiling is stated
+ * separately, as the different thing it is.
+ */
+export function ramFigures(
+  workingSetMb: number | null,
+  committedMb: number | null,
+  heapMaxMb: number | null,
+): { value: string; meterMax: number | null; residency: number | null; ceilingLabel: string } {
+  const used = workingSetMb
+  const denom = committedMb != null ? Math.max(committedMb, used ?? 0) : used
+  const residency =
+    used != null && committedMb != null && committedMb > 0 ? Math.round((used / committedMb) * 100) : null
+  const gb = (n: number) => {
+    const v = (n / 1024).toFixed(1)
+    return v.endsWith('.0') ? v.slice(0, -2) : v
+  }
+  const ceilingLabel =
+    heapMaxMb != null
+      ? `heap ceiling ${heapMaxMb >= 1000 ? `${gb(heapMaxMb)} GB` : `${heapMaxMb} MB`} (-Xmx)`
+      : 'heap ceiling unknown (boot-started, -Xmx not readable)'
+  return { value: fmtMemPair(used, denom), meterMax: denom, residency, ceilingLabel }
+}
+
 export function verdictSentence(v: Verdict): string {
   const conf =
     v.confidence === 'measured'

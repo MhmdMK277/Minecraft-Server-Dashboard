@@ -98,6 +98,8 @@ export function CreatePage() {
 
   const [submitting, setSubmitting] = useState(false)
   const [submitErr, setSubmitErr] = useState<string | null>(null)
+  const [makingRoot, setMakingRoot] = useState(false)
+  const [rootErr, setRootErr] = useState<string | null>(null)
 
   const [jobs, setJobs] = useState<CreationJobStatus[]>([])
   const [startedOp, setStartedOp] = useState<string | null>(null)
@@ -201,6 +203,18 @@ export function CreatePage() {
       })
       .catch((e: unknown) => setSubmitErr(e instanceof Error ? e.message : 'creation was refused'))
       .finally(() => setSubmitting(false))
+  }
+
+  // Create the missing servers root without leaving the page, so nothing typed
+  // into the form is lost. The refusal used to force a manual mkdir + reload.
+  const makeServersRoot = () => {
+    setMakingRoot(true)
+    setRootErr(null)
+    dashboard
+      .createServersRoot()
+      .then((r) => setInfo((prev) => (prev ? { ...prev, parentDir: r.parentDir, parentDirExists: r.parentDirExists } : prev)))
+      .catch((e: unknown) => setRootErr(e instanceof Error ? e.message : 'could not create the folder'))
+      .finally(() => setMakingRoot(false))
   }
 
   const fabric = info?.flavors.find((f) => f.flavor === 'fabric')
@@ -342,12 +356,34 @@ export function CreatePage() {
           </p>
         )}
         {info && !info.parentDirExists && (
-          <div className="mt-2">
+          <div className="mt-2 space-y-2">
             <Note tone="warn">
-              The servers root {info.parentDir} does not exist right now, so creation will be
-              refused until it does.
+              The servers root <span className="font-mono">{info.parentDir}</span> does not exist
+              yet, so creation would be refused. Create it here, or set a different servers root
+              (see below) and it becomes where new servers and discovery both look.
             </Note>
+            <div className="flex flex-wrap items-center gap-2">
+              <Btn
+                onClick={makeServersRoot}
+                disabled={makingRoot}
+                label={makingRoot ? 'Creating…' : 'Create this folder'}
+              />
+              <span className="prose-line text-[11px] text-faint">
+                Keep your servers on another drive? The servers root is set in{' '}
+                <code className="font-mono">%APPDATA%\minecraft-server-dashboard\config.json</code>{' '}
+                (<code className="font-mono">{'{ "serversRoot": "E:\\\\your\\\\folder" }'}</code>);
+                an in-app setting for it is coming in v0.2.0.
+              </span>
+            </div>
+            {rootErr && <Note tone="bad">{rootErr}</Note>}
           </div>
+        )}
+        {info && info.parentDirExists && (
+          <p className="prose-line mt-1.5 text-[11px] text-faint">
+            New servers are created in the servers root, where discovery already looks. To keep them
+            elsewhere, point the servers root at that drive (config.json for now; an in-app setting
+            is coming in v0.2.0).
+          </p>
         )}
       </section>
 
@@ -393,6 +429,7 @@ export function CreatePage() {
             />
           </label>
         </div>
+        {info && <MemoryGuidance requestedMb={memory.trim() ? Number(memory) : null} installedMb={info.installedRamMb} />}
         <p className="prose-line mt-2.5 text-[11px] leading-relaxed text-faint">
           RCON is enabled from the start, with a password generated at creation. It is written into
           the new server.properties and shown nowhere else: not on this page, not in the logs, not
@@ -521,6 +558,55 @@ export function CreatePage() {
             ))}
           </ul>
         </section>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Memory guidance, so a non-technical user does not hand a single server most
+ * of the machine and leave nothing for the OS or the server's own off-heap
+ * needs. States the installed RAM and warns on a dangerous fraction.
+ *
+ * The thresholds are a conservative first cut, deliberately flagged as such:
+ * the operator asked to study how PocketMC and Crafty present this before we
+ * settle ours, so this errs toward warning rather than toward a number we are
+ * pretending is authoritative. A JVM's resident footprint exceeds its -Xmx
+ * (metaspace, threads, direct buffers), so "leave headroom" is the honest
+ * message, not a precise cap.
+ */
+function MemoryGuidance({ requestedMb, installedMb }: { requestedMb: number | null; installedMb: number }) {
+  const gb = (mb: number) => {
+    const v = (mb / 1024).toFixed(1)
+    return v.endsWith('.0') ? v.slice(0, -2) : v
+  }
+  const base = (
+    <>This machine has {gb(installedMb)} GB installed. Leave room for Windows and the server's own
+    off-heap memory: a single server's heap much above half of installed RAM, or within ~2 GB of it,
+    risks the machine swapping.</>
+  )
+  if (requestedMb == null || !Number.isFinite(requestedMb) || requestedMb <= 0) {
+    return <p className="prose-line mt-2 text-[11px] leading-relaxed text-faint">{base} Left blank, the start script uses a modest default.</p>
+  }
+  const fractionHalf = requestedMb > installedMb * 0.5
+  const withinTwoGb = requestedMb > installedMb - 2048
+  const overInstalled = requestedMb >= installedMb
+  const danger = overInstalled || withinTwoGb
+  return (
+    <div className="mt-2">
+      {danger ? (
+        <Note tone={overInstalled ? 'bad' : 'warn'}>
+          {overInstalled
+            ? `${gb(requestedMb)} GB is at or above this machine's ${gb(installedMb)} GB of installed RAM. The server cannot get that, and Windows will thrash. Pick a heap well below the installed total.`
+            : `${gb(requestedMb)} GB leaves under 2 GB for Windows and the server's off-heap memory on a ${gb(installedMb)} GB machine, which risks swapping. Consider a smaller heap.`}
+        </Note>
+      ) : fractionHalf ? (
+        <p className="prose-line text-[11px] leading-relaxed text-warn">
+          {gb(requestedMb)} GB is more than half of this machine's {gb(installedMb)} GB. That can be
+          fine for a dedicated host, but leaves less for anything else running.
+        </p>
+      ) : (
+        <p className="prose-line text-[11px] leading-relaxed text-faint">{base}</p>
       )}
     </div>
   )
