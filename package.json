@@ -1,6 +1,6 @@
 {
   "name": "minecraft-server-dashboard",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Attach-model dashboard for Minecraft servers started outside the app",
   "private": true,
   "author": "MhmdMK277",

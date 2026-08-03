@@ -131,6 +131,12 @@ idle server's console is not the tool talking to itself.
   flush, never a kill. No identifiable launcher, no start button, with the
   reason on the card. Double-spawns are detected and alarmed, and honestly
   documented as not preventable by an attached observer.
+- **Creation that never trusts a download**: new servers (Vanilla, Paper,
+  Forge, NeoForge) fetched from the publisher and verified against the
+  checksum the publisher states, EULA-gated, every written file journaled.
+  Created in the servers root or any folder you pick; a folder created
+  elsewhere is attached when creation completes, so it is watched like
+  everything else.
 - **Measured start windows**: how long a server may be silent before `HUNG` is
   learned from its own boots. 16 s Paper and 79 s modpack are not one constant.
 - **Live console** that survives rotation and restart, with the dashboard's
@@ -226,15 +232,20 @@ one of them is usually a copy.
 
 For a fresh machine, that means a server appears when:
 
-1. its directory sits directly under the servers root and holds a world
-   with a `level.dat` (a stopped server still appears, shown as not
-   running);
+1. its directory sits directly under the servers root and holds either a
+   world with a `level.dat` (a stopped server still appears, shown as not
+   running) or a `server.properties` with no world yet, which appears as
+   a server that has never started, carrying a normal Start button;
 2. `enable-rcon=true` is set for health beyond up-or-down, since only an
    RCON round trip can probe the main game thread; without it the server
    honestly reads `UNKNOWN`;
 3. it has a findable way to start, a scheduled task or a `start.bat`, or
    the dashboard offers no start button rather than guessing a command
    line.
+
+A folder anywhere else on the machine appears once you attach it, and a
+server the dashboard creates outside the root is attached for you when
+creation completes, so it appears the same way.
 
 **Discovery is per machine.** The service reads the process table of the host
 it runs on, so it can only see servers on that machine. The browser can be
