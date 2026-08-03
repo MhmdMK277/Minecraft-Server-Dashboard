@@ -62,13 +62,47 @@ export type FetchVerifiedInput = {
 
 const DEFAULT_MAX_BYTES = 800 * 1024 * 1024
 
+/**
+ * Is `hostname` permitted by this source's allowlist?
+ *
+ * Two entry shapes, so an allowlist can name an AUTHORITY rather than a
+ * fragile list of one authority's current hosts:
+ *
+ *   - an exact hostname (`api.github.com`) matches only itself;
+ *   - a domain-suffix rule, written with a leading dot (`.githubusercontent.com`),
+ *     matches any subdomain of that domain.
+ *
+ * The suffix form exists because GitHub serves release assets from a CDN host
+ * it moves without notice: `objects.githubusercontent.com` became
+ * `release-assets.githubusercontent.com`, which broke the Java download on a
+ * user's machine (2026-08-03). An exact list has to be chased every time; a
+ * suffix rule says what we actually meant, "GitHub's asset authority", and
+ * survives the next move.
+ *
+ * The match is on the DOT BOUNDARY, never a substring, so it cannot be widened
+ * by a lookalike: `release-assets.githubusercontent.com` ends with
+ * `.githubusercontent.com` and is allowed, while `githubusercontent.com.evil.com`,
+ * `evil-githubusercontent.com` and `notgithubusercontent.com` do NOT end with
+ * the dotted suffix and are refused. The bare registrable domain
+ * (`githubusercontent.com`, no subdomain label) is not matched either; it
+ * serves nothing and we never intend it.
+ */
+export function hostAllowed(hostname: string, allowHosts: string[]): boolean {
+  const h = hostname.toLowerCase()
+  return allowHosts.some((entry) => {
+    const e = entry.toLowerCase()
+    if (e.startsWith('.')) return h.endsWith(e) && h.length > e.length
+    return h === e
+  })
+}
+
 function checkUrl(raw: string, allowHosts: string[]): URL {
   const u = new URL(raw)
   const loopback = u.hostname === '127.0.0.1' || u.hostname === 'localhost'
   if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) {
     throw new VerifyError(`refusing ${u.protocol.replace(':', '')} download from ${u.hostname}`, 'protocol')
   }
-  if (!allowHosts.includes(u.hostname)) {
+  if (!hostAllowed(u.hostname, allowHosts)) {
     throw new VerifyError(`host ${u.hostname} is not on the allowlist for this source`, 'host')
   }
   return u

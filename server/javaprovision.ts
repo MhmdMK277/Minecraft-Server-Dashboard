@@ -31,7 +31,11 @@ const exec = promisify(execFile)
  *     it is not a download at all.
  */
 
-const ADOPTIUM_HOSTS = ['api.adoptium.net', 'github.com', 'objects.githubusercontent.com']
+// api.adoptium.net redirects to a GitHub release, which redirects again to
+// GitHub's asset CDN. That CDN host is not stable (`objects.` became
+// `release-assets.`), so the CDN is named by authority, not by a host string
+// that has to be chased. See hostAllowed in fetchverify.ts.
+export const ADOPTIUM_HOSTS = ['api.adoptium.net', 'github.com', '.githubusercontent.com']
 
 export const CONSEQUENCE_TEXT =
   'The runtime is stored inside this dashboard\'s data folder in your user profile, and the server\'s start.bat will carry that absolute path. Moving the server folder to another machine, or removing the dashboard\'s data folder, breaks the script until you point it at another Java.'

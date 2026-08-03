@@ -33,6 +33,7 @@
     "prove-attach": "tsx scripts/prove-attach.ts",
     "prove-scan": "tsx scripts/prove-scan.ts",
     "prove-history": "tsx scripts/prove-history.ts",
+    "prove-fetchverify": "tsx scripts/prove-fetchverify.ts",
     "prove-creation": "tsx scripts/prove-creation.ts",
     "prove-creation-route": "tsx scripts/prove-creation-route.ts",
     "accept-creation": "tsx scripts/accept-creation.ts",

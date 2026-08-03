@@ -47,7 +47,11 @@ import { dataDir } from './config'
  */
 
 const GH_API_HOSTS = ['api.github.com']
-const GH_ASSET_HOSTS = ['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com']
+// The playit agent is a GitHub release asset, served from GitHub's CDN whose
+// host GitHub moves without notice (objects. -> release-assets. -> whatever is
+// next). Named by authority, not by a chased host string. See hostAllowed in
+// fetchverify.ts.
+export const GH_ASSET_HOSTS = ['github.com', '.githubusercontent.com']
 const PLAYIT_HOSTS = ['api.playit.gg']
 const PLAYIT_API = 'https://api.playit.gg'
 const RELEASES_URL = 'https://api.github.com/repos/playit-cloud/playit-agent/releases/latest'
