@@ -1,10 +1,11 @@
 import { join } from 'node:path'
 import { getPriority, setPriority, constants as osConstants } from 'node:os'
-import { scanJvms, jvmForDir, type JvmScan } from './platform'
+import { scanJvms, jvmForDir, type JvmScan, type UnattributedJvm } from './platform'
 import { gamePortOf, rconConfig } from './properties'
 import { Rcon } from './rcon'
 import { detectLauncher, invokeLauncher, indexTasks, type Launcher } from './launcher'
 import { readinessNote, timingFor } from './boottime'
+import { START_TIME_TOLERANCE_MS } from './instancelock'
 import type { ControlAction, ControlResult, DoubleSpawnAlert } from '@shared/api'
 
 /**
@@ -128,6 +129,15 @@ export type Occupancy = {
   pids: number[]
   certain: boolean
   doubt: string | null
+  /**
+   * Present only when the doubt is FLEET-LEVEL: java processes exist that
+   * could not be matched to any directory (defect 6). An admin may
+   * explicitly acknowledge these, pinned to (pid, start time). Doubt about
+   * the target directory itself (its log held open, a pid on its port) is
+   * deliberately never carried here: that evidence is about THIS world and
+   * no acknowledgment overrides it.
+   */
+  unaccounted?: UnattributedJvm[]
 }
 
 export async function occupancyOf(dir: string, scan?: JvmScan): Promise<Occupancy> {
@@ -160,9 +170,48 @@ export async function occupancyOf(dir: string, scan?: JvmScan): Promise<Occupanc
       pids: [],
       certain: false,
       doubt: `${s.unattributed.length} java process(es) are running that could not be matched to any directory, and one of them may be this server`,
+      unaccounted: s.unattributed,
     }
   }
   return { pids: [], certain: true, doubt: null }
+}
+
+/**
+ * One line per process the guard cannot account for, so the refusal names
+ * what it is refusing over instead of presenting a dead end (defect 6).
+ */
+export function describeUnaccounted(u: UnattributedJvm[]): string {
+  return u
+    .map(
+      (j) =>
+        `pid ${j.pid}${j.exe ? ` (${j.exe})` : ''}${j.start ? `, started ${j.start}` : ''}, session ${j.sessionId ?? '?'}`,
+    )
+    .join('; ')
+}
+
+export type AcknowledgedJvm = { pid: number; startedAt: string }
+
+/**
+ * Does the admin's acknowledgment cover EVERY unaccounted process?
+ *
+ * Pinned to (pid, start time), the instance lock's own recycled-pid
+ * defence: Windows reuses pids, and an acknowledgment matching a number
+ * alone would silently transfer to whatever process wears that pid next.
+ * The same tolerance as the lock, because the two timestamps come through
+ * different clocks. A process with NO readable start time can never be
+ * acknowledged: there is nothing to pin the acknowledgment to.
+ */
+export function ackCovers(unaccounted: UnattributedJvm[], acknowledged: AcknowledgedJvm[]): boolean {
+  return unaccounted.every((u) => {
+    if (u.start === null) return false
+    const actual = Date.parse(u.start)
+    if (!Number.isFinite(actual)) return false
+    return acknowledged.some((a) => {
+      if (a.pid !== u.pid) return false
+      const acked = Date.parse(a.startedAt)
+      return Number.isFinite(acked) && Math.abs(acked - actual) <= START_TIME_TOLERANCE_MS
+    })
+  })
 }
 
 // ------------------------------------------------------------------ actions
@@ -241,7 +290,11 @@ async function waitForOccupancy(
   }
 }
 
-export async function startServer(t: Target, launcher: Launcher): Promise<ControlResult> {
+export async function startServer(
+  t: Target,
+  launcher: Launcher,
+  opts: { acknowledged?: AcknowledgedJvm[] } = {},
+): Promise<ControlResult> {
   return withServerLock(t.id, async () => {
     if (launcher.strategy === 'none') {
       return fail(t, 'start', 'No launcher is known for this server, so the dashboard will not try to start it.')
@@ -258,12 +311,36 @@ export async function startServer(t: Target, launcher: Launcher): Promise<Contro
         `Already running as pid ${before.pids.join(', ')}. Refusing to start a second process against the same world.`,
       )
     }
+    /**
+     * The guard's default is unchanged: doubt refuses. What defect 6 adds is
+     * a NAMED refusal and one explicit way through it -- an admin
+     * acknowledging each fleet-level unaccounted process, pinned to its
+     * (pid, start time) so a recycled pid re-refuses. The acknowledgment is
+     * re-checked HERE, against the fresh scan inside the lock: a process
+     * that appeared since the admin looked is a new unknown and refuses
+     * again. Direct evidence about the target directory (a held log, a pid
+     * on its port) never reaches this branch and is never overridable.
+     */
+    let ackNote = ''
     if (!before.certain) {
-      return fail(
-        t,
-        'start',
-        `Cannot confirm this server is stopped. ${before.doubt}. Refusing to start, because a second JVM on one world corrupts it and "I cannot tell" is not "it is not running".`,
-      )
+      const unaccounted = before.unaccounted ?? []
+      const covered =
+        unaccounted.length > 0 &&
+        (opts.acknowledged?.length ?? 0) > 0 &&
+        ackCovers(unaccounted, opts.acknowledged!)
+      if (!covered) {
+        const named = unaccounted.length > 0 ? ` They are: ${describeUnaccounted(unaccounted)}.` : ''
+        return failWithUnaccounted(
+          t,
+          `Cannot confirm this server is stopped. ${before.doubt}.${named} Refusing to start, because a second JVM on one world corrupts it and "I cannot tell" is not "it is not running".${
+            unaccounted.length > 0
+              ? ' An admin who can vouch that none of these is this server may confirm them explicitly and start anyway; the confirmation is pinned to each process and its start time, and anything new refuses again.'
+              : ''
+          }`,
+          unaccounted,
+        )
+      }
+      ackNote = ` The pre-check's ${unaccounted.length} unaccounted java process(es) were explicitly confirmed not to be this server (${describeUnaccounted(unaccounted)}).`
     }
 
     await invokeLauncher(t.dir, launcher)
@@ -292,7 +369,7 @@ export async function startServer(t: Target, launcher: Launcher): Promise<Contro
       return ok(
         t,
         'start',
-        `Started. One java process owns this directory (pid ${after.pids[0]}).${priorityNote(pri)} ${readiness(t)}`,
+        `Started. One java process owns this directory (pid ${after.pids[0]}).${priorityNote(pri)}${ackNote} ${readiness(t)}`,
       )
     }
     return fail(
@@ -484,6 +561,26 @@ function ok(t: Target, action: ControlAction, detail: string): ControlResult {
 }
 function fail(t: Target, action: ControlAction, detail: string): ControlResult {
   return { server: t.name, action, ok: false, detail, at: new Date().toISOString() }
+}
+/**
+ * A start refusal that carries the processes it is refusing over, so the UI
+ * can offer the explicit acknowledgment instead of a dead end (defect 6).
+ */
+function failWithUnaccounted(t: Target, detail: string, unaccounted: UnattributedJvm[]): ControlResult {
+  return {
+    server: t.name,
+    action: 'start',
+    ok: false,
+    detail,
+    at: new Date().toISOString(),
+    unaccounted: unaccounted.map((u) => ({
+      pid: u.pid,
+      startedAt: u.start,
+      sessionId: u.sessionId,
+      startedBy: u.startedBy,
+      exe: u.exe,
+    })),
+  }
 }
 
 export { detectLauncher, indexTasks, join }

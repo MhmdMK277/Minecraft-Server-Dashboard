@@ -54,6 +54,7 @@ export default function Addresses({
   network: NetworkInfo
 }) {
   const live = servers.filter((s) => s.classification === 'live')
+  const neverStarted = servers.filter((s) => s.classification === 'never-started')
   const lan = network.lanAddress
   const ip = network.publicIp
 
@@ -217,6 +218,60 @@ export default function Addresses({
                       </TableCell>
                     </>
                   )}
+                </TableRow>
+              )
+            })}
+
+            {/* Never-started servers (defect 4): the row a fresh creation
+                lands on. The bind and firewall checks run before the first
+                start; only listening waits. The UNCHECKED firewall state
+                arrives as its own sentence from the service, distinct from
+                "no rule exists", because they demand different actions. */}
+            {neverStarted.map((s) => {
+              const r = reach?.servers.find((x) => x.id === s.id) ?? null
+              return (
+                <TableRow key={s.id} className="align-top">
+                  <TableCell>
+                    <div className="flex items-center gap-2 font-medium text-ink">
+                      {s.name}
+                      <Badge className="border-border bg-muted/40 text-[10px] text-muted-foreground">
+                        never started
+                      </Badge>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">{s.kind}</div>
+                  </TableCell>
+                  <TableCell colSpan={3} className="space-y-1 text-[12px]">
+                    {!reach && !reachErr ? (
+                      <p className="prose-line leading-relaxed text-muted-foreground">
+                        Checking what can be checked before its first start (the configured bind
+                        address, the firewall rules)…
+                      </p>
+                    ) : r ? (
+                      <>
+                        {r.problems.map((p) => (
+                          <p key={p.point} className="prose-line leading-relaxed text-warn">
+                            {p.detail}
+                          </p>
+                        ))}
+                        {r.usable && (
+                          <p className="prose-line leading-relaxed text-muted-foreground">
+                            Nothing checkable is broken before its first start: server-ip is sane
+                            against this machine's interfaces
+                            {r.firewallRule
+                              ? `, and Windows Firewall has an inbound rule covering TCP ${s.gamePort} (${r.firewallRule})`
+                              : reach && reach.firewall.on === false
+                                ? ', and Windows Firewall is off for the current profile, so nothing blocks the port'
+                                : ''}
+                            . Start the server and its addresses appear here, checked.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="prose-line leading-relaxed text-muted-foreground">
+                        Not checked this round.
+                      </p>
+                    )}
+                  </TableCell>
                 </TableRow>
               )
             })}

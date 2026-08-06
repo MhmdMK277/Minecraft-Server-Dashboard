@@ -115,10 +115,15 @@ const post = <T,>(url: string, body?: unknown) => send<T>(url, 'POST', body)
  * behave like a 401, and anything that is not a well-formed ControlResult is still
  * an error.
  */
-async function sendControl(url: string): Promise<ControlResult> {
+async function sendControl(url: string, reqBody?: unknown): Promise<ControlResult> {
   const r = await fetch(url, {
     method: 'POST',
-    headers: { accept: 'application/json', 'x-mcdash': '1' },
+    headers: {
+      accept: 'application/json',
+      'x-mcdash': '1',
+      ...(reqBody !== undefined ? { 'content-type': 'application/json' } : {}),
+    },
+    ...(reqBody !== undefined ? { body: JSON.stringify(reqBody) } : {}),
   })
   if (r.status === 401) {
     for (const fn of authSubs) fn()
@@ -274,8 +279,11 @@ export const dashboard = {
    * user needs, not "request failed". So the ControlResult is returned for both
    * outcomes rather than a rejection being thrown for the 409.
    */
-  control: (id: string, action: 'start' | 'stop' | 'restart') =>
-    sendControl(API.control(id, action)),
+  control: (
+    id: string,
+    action: 'start' | 'stop' | 'restart',
+    acknowledged?: Array<{ pid: number; startedAt: string }>,
+  ) => sendControl(API.control(id, action), acknowledged ? { acknowledged } : undefined),
   /** Measured reachability for the Addresses page; see ReachabilityReport. */
   getReachability: () => get<ReachabilityReport>(API.addressesReachability),
   /** Heap edit in a creation-written start.bat; refused for scripts we did not write. */

@@ -499,10 +499,16 @@ export const windowsProvider: ProcessProvider = {
     const unattributed: UnattributedJvm[] = []
     for (const row of rows.values()) {
       if (claimed.has(row.pid)) continue
+      // The executable path only, never the arguments: the guard's refusal
+      // shows this to an admin so they can recognise "VS Code's Java", and a
+      // foreign process's argument list is not ours to display.
+      const exeMatch = /^"([^"]+)"|^(\S+)/.exec(row.ownCmd || '')
       unattributed.push({
         pid: row.pid,
         sessionId: row.sessionId,
         startedBy: startedBy(row, taskAncestor(row.pid) !== null),
+        start: Number.isFinite(row.start) ? new Date(row.start).toISOString() : null,
+        exe: exeMatch ? (exeMatch[1] ?? exeMatch[2] ?? null) : null,
       })
     }
 

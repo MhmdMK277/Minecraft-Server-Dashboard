@@ -133,6 +133,7 @@ const base = {
   loopback: true,
   lanProbe: true,
   firewall: FW_ON,
+  expectRunning: true,
 }
 
 const ok = assembleReachability(base)
@@ -190,8 +191,39 @@ if (!unchecked.problems.some((p) => p.point === 'firewall' && p.detail.includes(
 
 // The real IO path, once, against the live fleet: a server that answered SLP
 // in this very scan must not carry a not-listening verdict.
+// Never-started servers (defect 4): the checks that are meaningful before a
+// first start still run; "nothing answered" is not a finding there, and the
+// UNCHECKED firewall state stays distinct from "no rule exists", because
+// those two demand different actions from the operator.
+const fresh = assembleReachability({ ...base, loopback: null, lanProbe: null, expectRunning: false })
+if (!fresh.usable || fresh.problems.some((p) => p.point === 'process'))
+  failures.push('a never-started server must not be accused of not listening')
+if (fresh.listening !== null) failures.push('no listening claim is made for a server not expected to run')
+const freshNoRule = assembleReachability({
+  ...base,
+  loopback: null,
+  lanProbe: null,
+  expectRunning: false,
+  firewall: { ...FW_ON, rules: [] },
+})
+if (!freshNoRule.problems.some((p) => p.point === 'firewall' && p.detail.includes('none of its enabled inbound allow rules')))
+  failures.push('a never-started server still hears that no firewall rule exists')
+const freshUnchecked = assembleReachability({
+  ...base,
+  loopback: null,
+  lanProbe: null,
+  expectRunning: false,
+  firewall: { checked: false as const, why: 'powershell timed out' },
+})
+if (!freshUnchecked.problems.some((p) => p.point === 'firewall' && p.detail.includes('UNCHECKED')))
+  failures.push('the unchecked state stays distinct from no-rule for a never-started server')
+if (
+  freshNoRule.problems[0]!.detail === freshUnchecked.problems[0]!.detail
+)
+  failures.push('no-rule and unchecked must be different sentences: they demand different actions')
+
 const report = await reachabilityFor(
-  live.map((s) => ({ id: s.id, dir: s.dir, gamePort: s.gamePort })),
+  live.map((s) => ({ id: s.id, dir: s.dir, gamePort: s.gamePort, expectRunning: true })),
   lan,
 )
 for (const s of live) {

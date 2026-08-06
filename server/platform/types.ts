@@ -89,11 +89,26 @@ export type JvmProcess = {
   taskLaunched: boolean
 }
 
-/** A java process that is running and could not be tied to any directory. */
+/**
+ * A java process that is running and could not be tied to any directory.
+ *
+ * `start` and `exe` were added 2026-08-06 (defect 6): the double-spawn
+ * guard's refusal must NAME what it cannot account for, and an admin's
+ * explicit acknowledgment is pinned to (pid, start time), because Windows
+ * recycles pids and an acknowledgment that silently transferred to a
+ * different process later would be the recycled-pid bug the instance lock
+ * already solves the same way. `exe` is the executable path ONLY, never the
+ * arguments: a foreign process's command line is not ours to display, and
+ * the path is what lets an operator recognise "VS Code's Java" at a glance.
+ */
 export type UnattributedJvm = {
   pid: number
   sessionId: number | null
   startedBy: StartedBy
+  /** ISO process start time, when the process table carried one. */
+  start: string | null
+  /** The executable path, first token of the command line, no arguments. */
+  exe: string | null
 }
 
 /**

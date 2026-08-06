@@ -232,8 +232,40 @@ export const ControlResult = z.object({
   ok: z.boolean(),
   detail: z.string(),
   at: z.string(),
+  /**
+   * Present on a start refusal caused by fleet-level doubt (defect 6): the
+   * java processes the guard could not account for, each pinned to its
+   * start time. The UI offers an explicit admin acknowledgment of exactly
+   * these; `exe` is the executable path only, never arguments. Absent on
+   * every other result, including refusals grounded in evidence about the
+   * target directory itself, which no acknowledgment overrides.
+   */
+  unaccounted: z
+    .array(
+      z.object({
+        pid: z.number(),
+        startedAt: z.string().nullable(),
+        sessionId: z.number().nullable(),
+        startedBy: z.enum(['scheduled-task', 'interactive', 'unknown']),
+        exe: z.string().nullable(),
+      }),
+    )
+    .optional(),
 })
 export type ControlResult = z.infer<typeof ControlResult>
+
+/**
+ * Optional body for the start route: the admin's explicit acknowledgment
+ * that the listed processes are not this server. Pid alone is NOT identity
+ * (Windows recycles pids); each entry carries the start time the refusal
+ * reported, and the server re-verifies both against a fresh scan.
+ */
+export const ControlStartRequest = z.object({
+  acknowledged: z
+    .array(z.object({ pid: z.number().int().positive(), startedAt: z.string().min(1).max(64) }))
+    .max(64)
+    .optional(),
+})
 
 /**
  * Two JVMs on one world. A first-class alert, not a log line.
@@ -1423,6 +1455,8 @@ export type ServerReachability = {
 
 export type ReachabilityReport = {
   checkedAt: string
+  /** on is null when the rule store could not be read (UNCHECKED, said so). */
+  firewall: { checked: boolean; on: boolean | null }
   servers: ServerReachability[]
 }
 

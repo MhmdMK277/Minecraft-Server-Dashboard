@@ -21,6 +21,7 @@ import {
   RestoreColdBackupRequest,
   SetServerSettingRequest,
   SetHeapRequest,
+  ControlStartRequest,
   SetGameRuleRequest,
   RunCommandRequest,
   AttachRequest,
@@ -810,9 +811,19 @@ export async function buildServer({ version }: Deps): Promise<FastifyInstance> {
   app.get(API.addressesReachability, async (req, reply) => {
     if (!require_(req, reply, 'viewer', 'addresses.reachability')) return
     const snap = latest ?? (await doScan())
-    const live = snap.servers.filter((s) => s.classification === 'live')
+    // Never-started servers included (defect 4): the bind and firewall
+    // checks are meaningful BEFORE the first start, which is exactly when a
+    // missing rule is worth hearing about; only the listening probe waits.
+    const rows = snap.servers.filter(
+      (s) => s.classification === 'live' || s.classification === 'never-started',
+    )
     return reachabilityFor(
-      live.map((s) => ({ id: s.id, dir: s.dir, gamePort: s.gamePort })),
+      rows.map((s) => ({
+        id: s.id,
+        dir: s.dir,
+        gamePort: s.gamePort,
+        expectRunning: s.classification === 'live',
+      })),
       snap.network.lanAddress,
     )
   })
@@ -1469,9 +1480,19 @@ export async function buildServer({ version }: Deps): Promise<FastifyInstance> {
       // maxAge 0: a fresh read, because the operator may have just created the task
       // they are trying to use, and one extra second on a button press is invisible.
       const launcher = detectLauncher(server.dir, await indexTasks(0))
+      // Start may carry the defect-6 acknowledgment; a malformed body is a
+      // 400, never silently ignored consent.
+      let acknowledged: { pid: number; startedAt: string }[] | undefined
+      if (action === 'start' && req.body !== undefined && req.body !== null && req.body !== '') {
+        const parsed = ControlStartRequest.safeParse(req.body)
+        if (!parsed.success) {
+          return reply.code(400).send({ error: 'expected { acknowledged?: [{ pid, startedAt }] }' })
+        }
+        acknowledged = parsed.data.acknowledged
+      }
       const result =
         action === 'start'
-          ? await startServer(target, launcher)
+          ? await startServer(target, launcher, { acknowledged })
           : action === 'stop'
             ? await stopServer(target)
             : await restartServer(target, launcher)

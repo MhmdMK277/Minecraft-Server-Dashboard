@@ -162,13 +162,13 @@ export function ControlPanel({ s, canEdit }: { s: ServerStatus; canEdit: boolean
   const runnable = s.health !== 'DOWN' || !!s.proc
   const canStart = s.launchStrategy !== 'none'
 
-  const run = (action: ControlAction) => {
+  const run = (action: ControlAction, acknowledged?: Array<{ pid: number; startedAt: string }>) => {
     if (action === 'command') return
     setArmed(null)
     setPending(action)
     setResult(null)
     dashboard
-      .control(s.id, action)
+      .control(s.id, action, acknowledged)
       .then(setResult)
       .catch((e: unknown) =>
         setResult({
@@ -180,6 +180,24 @@ export function ControlPanel({ s, canEdit }: { s: ServerStatus; canEdit: boolean
         }),
       )
       .finally(() => setPending(null))
+  }
+
+  /**
+   * The defect-6 path: a start refusal that names the processes the guard
+   * could not account for offers an explicit acknowledgment. Only entries
+   * with a readable start time are sendable: the acknowledgment is pinned
+   * to (pid, start time) because Windows recycles pids, and the server
+   * re-verifies both against a fresh scan before acting.
+   */
+  const ackable =
+    result && !result.ok && result.action === 'start' && result.unaccounted
+      ? result.unaccounted.filter((u) => u.startedAt !== null)
+      : []
+  const confirmUnaccounted = () => {
+    run(
+      'start',
+      ackable.map((u) => ({ pid: u.pid, startedAt: u.startedAt! })),
+    )
   }
 
   if (!canEdit) return null
@@ -258,6 +276,34 @@ export function ControlPanel({ s, canEdit }: { s: ServerStatus; canEdit: boolean
         >
           {result.detail}
         </p>
+      )}
+
+      {/* The guard stays conservative; this is the explicit, audited way
+          through it. Each process is listed by pid, path and start time, so
+          the admin confirms THESE, not a vibe. A process that appeared after
+          this list was shown refuses again server-side. */}
+      {ackable.length > 0 && (
+        <div className="mt-2 rounded-md border border-warn/40 bg-warn/10 px-2 py-1.5">
+          <ul className="space-y-0.5">
+            {ackable.map((u) => (
+              <li key={`${u.pid}-${u.startedAt}`} className="break-all font-mono text-[11px] text-ink">
+                pid {u.pid} · {u.exe ?? 'path unreadable'} · started{' '}
+                {u.startedAt ? new Date(u.startedAt).toLocaleString() : '?'} · session {u.sessionId ?? '?'}
+              </li>
+            ))}
+          </ul>
+          <div className="mt-1.5 flex items-center gap-2">
+            <Btn
+              onClick={confirmUnaccounted}
+              disabled={busy}
+              tone="danger"
+              label={`These are not this server. Start anyway (${ackable.length})`}
+            />
+            <span className="prose-line text-[11px] leading-relaxed text-faint">
+              Confirms exactly the processes above, pinned to their start times. Audited.
+            </span>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -165,6 +165,13 @@ export type ReachabilityInputs = {
   loopback: boolean | null
   lanProbe: boolean | null
   firewall: FirewallReading
+  /**
+   * False for a never-started server (defect 4): nothing is expected to be
+   * listening yet, so "nothing answered" is not a finding there. The bind
+   * and firewall checks stay meaningful before the first start, which is
+   * exactly when a missing rule is worth hearing about.
+   */
+  expectRunning: boolean
 }
 
 /** The verdict, pure. Every sentence names the check that produced it. */
@@ -183,7 +190,7 @@ export function assembleReachability(x: ReachabilityInputs): ServerReachability 
   }
 
   const answered = x.loopback === true || x.lanProbe === true
-  if (x.gamePort !== null && !answered) {
+  if (x.expectRunning && x.gamePort !== null && !answered) {
     problems.push({
       point: 'process',
       detail:
@@ -230,7 +237,10 @@ export function assembleReachability(x: ReachabilityInputs): ServerReachability 
   return {
     id: x.id,
     gamePort: x.gamePort,
-    listening: x.gamePort === null ? null : { loopback: x.loopback === true, lan: x.lanProbe },
+    listening:
+      x.gamePort === null || !x.expectRunning
+        ? null
+        : { loopback: x.loopback === true, lan: x.lanProbe },
     bind,
     firewallRule,
     problems,
@@ -244,17 +254,22 @@ export function assembleReachability(x: ReachabilityInputs): ServerReachability 
  * the ten-second scan.
  */
 export async function reachabilityFor(
-  servers: Array<{ id: string; dir: string; gamePort: number | null }>,
+  servers: Array<{ id: string; dir: string; gamePort: number | null; expectRunning: boolean }>,
   lanAddress: string | null,
-): Promise<{ checkedAt: string; servers: ServerReachability[] }> {
+): Promise<{
+  checkedAt: string
+  firewall: { checked: boolean; on: boolean | null }
+  servers: ServerReachability[]
+}> {
   const firewall = await readFirewall()
   const held = machineAddresses()
   const out: ServerReachability[] = []
   for (const s of servers) {
     const props = serverProps(s.dir)
     const serverIp = typeof props['server-ip'] === 'string' ? props['server-ip'] : null
-    const loopback = s.gamePort !== null ? await portResponds(s.gamePort, '127.0.0.1') : null
-    const lanProbe = s.gamePort !== null && lanAddress ? await portResponds(s.gamePort, lanAddress) : null
+    const probe = s.expectRunning && s.gamePort !== null
+    const loopback = probe ? await portResponds(s.gamePort!, '127.0.0.1') : null
+    const lanProbe = probe && lanAddress ? await portResponds(s.gamePort!, lanAddress) : null
     out.push(
       assembleReachability({
         id: s.id,
@@ -264,8 +279,16 @@ export async function reachabilityFor(
         loopback,
         lanProbe,
         firewall,
+        expectRunning: s.expectRunning,
       }),
     )
   }
-  return { checkedAt: new Date().toISOString(), servers: out }
+  return {
+    checkedAt: new Date().toISOString(),
+    firewall: {
+      checked: firewall.checked,
+      on: firewall.checked ? firewall.enabledForCurrentProfile : null,
+    },
+    servers: out,
+  }
 }

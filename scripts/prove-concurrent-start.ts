@@ -294,6 +294,102 @@ check(
   /hold an HTTP request|hold the per-server lock|wedged mid-boot/i.test(controlSrc),
 )
 
+// ===================================================== the acknowledgment path
+//
+// Defect 6 (2026-08-06): the guard's fleet-doubt refusal names what it cannot
+// account for and accepts an explicit admin acknowledgment, pinned to
+// (pid, start time) -- the instance lock's recycled-pid defence. These run
+// the REAL startServer against an injected process world and a harmless
+// fixture launcher, so the wiring is what is proven, not a re-expression.
+
+console.log('\n--- 5. the acknowledgment: explicit, pinned, never overriding direct evidence')
+{
+  const { startServer } = await import('../server/control')
+  const { setPsForProof } = await import('../server/platform/windows')
+  const { mkdtempSync, writeFileSync, mkdirSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+
+  const DIR = mkdtempSync(join(tmpdir(), 'mcdash-ack-'))
+  mkdirSync(join(DIR, 'logs'), { recursive: true })
+  writeFileSync(join(DIR, 'server.properties'), 'server-port=25990\r\n', 'utf8')
+  writeFileSync(join(DIR, 'start.bat'), '@echo off\r\nexit /b 0\r\n', 'utf8')
+  const T = { id: 'Ack Proof', name: 'Ack Proof', dir: DIR }
+  const LAUNCHER = { strategy: 'script', script: 'start.bat', detail: 'proof fixture start.bat' } as const
+
+  const VSCODE_START = '2026-08-06T10:00:00.000Z'
+  const vscodeRow = {
+    pid: 43300, ppid: 1, sessionId: 1, parentCmd: '', ownCmd: '"C:\\vscode\\jre\\bin\\java.exe" --lsp',
+    ws: 1048576, priv: 1048576, basePri: 8, start: VSCODE_START, cpu100ns: 0,
+  }
+  const attributedRow = {
+    pid: 777, ppid: 2, sessionId: 1, parentCmd: `cmd.exe /c ""${DIR}\\start.bat""`, ownCmd: 'java -jar server.jar',
+    ws: 1048576, priv: 1048576, basePri: 8, start: '2026-08-06T10:05:00.000Z', cpu100ns: 0,
+  }
+  const world = (jvms: unknown[], dirs: unknown[] = []) =>
+    JSON.stringify({ jvms, tasks: [], parents: [[43300, 1], [777, 2]], dirs, phases: {}, portsEnumerated: false })
+
+  // 5a. No acknowledgment: refused, and the refusal NAMES the process.
+  setPsForProof(async () => world([vscodeRow]))
+  const r1 = await startServer(T, LAUNCHER)
+  check('fleet doubt with no acknowledgment refuses', !r1.ok)
+  check(
+    'and the refusal names the process: pid, exe path, start time',
+    /43300/.test(r1.detail) && /vscode/.test(r1.detail) && r1.detail.includes(VSCODE_START),
+    r1.detail,
+  )
+  check(
+    'and the result carries the structured list for the UI, start time pinned',
+    r1.unaccounted?.length === 1 && r1.unaccounted[0]!.pid === 43300 && r1.unaccounted[0]!.startedAt === VSCODE_START,
+  )
+  check('the exe field is the path only, never the arguments', r1.unaccounted?.[0]?.exe === 'C:\\vscode\\jre\\bin\\java.exe')
+
+  // 5b. Acknowledged with the WRONG start time: a recycled pid, refused.
+  const r2 = await startServer(T, LAUNCHER, {
+    acknowledged: [{ pid: 43300, startedAt: '2026-08-06T09:00:00.000Z' }],
+  })
+  check('an acknowledgment with a stale start time is a recycled pid and refuses', !r2.ok, r2.detail)
+
+  // 5c. Acknowledged correctly: proceeds through the REAL launcher, and the
+  // post-start verification (same injected world, now attributing pid 777 to
+  // the directory) reports a started server with the acknowledgment on record.
+  let calls = 0
+  setPsForProof(async () => {
+    calls++
+    // The pre-check sees the vscode process; every scan after the launch also
+    // sees the new attributed JVM appear.
+    return calls <= 1 ? world([vscodeRow]) : world([vscodeRow, attributedRow])
+  })
+  const r3 = await startServer(T, LAUNCHER, { acknowledged: [{ pid: 43300, startedAt: VSCODE_START }] })
+  check('a correctly pinned acknowledgment proceeds', r3.ok, r3.detail)
+  check(
+    'and the started sentence records the acknowledgment as fact',
+    /explicitly confirmed/.test(r3.detail) && /43300/.test(r3.detail),
+    r3.detail,
+  )
+
+  // 5d. A NEW unaccounted process appeared since the admin looked: refused.
+  const strangerRow = { ...vscodeRow, pid: 50001, ownCmd: '"C:\\other\\java.exe" -jar x.jar', start: '2026-08-06T10:07:00.000Z' }
+  setPsForProof(async () => world([vscodeRow, strangerRow]))
+  const r4 = await startServer(T, LAUNCHER, { acknowledged: [{ pid: 43300, startedAt: VSCODE_START }] })
+  check('a process that appeared since the acknowledgment refuses again', !r4.ok, r4.detail)
+  check('and the fresh refusal lists BOTH processes', r4.unaccounted?.length === 2)
+
+  // 5e. Direct evidence about the target directory is never overridable: the
+  // held log wins over any acknowledgment.
+  setPsForProof(async () => world([vscodeRow], [{ dir: DIR, logHeld: true, port: 25990, listenerPid: null }]))
+  const r5 = await startServer(T, LAUNCHER, { acknowledged: [{ pid: 43300, startedAt: VSCODE_START }] })
+  check('a held log on the target directory refuses despite the acknowledgment', !r5.ok, r5.detail)
+  check('and that refusal carries no acknowledgment offer', !r5.unaccounted || r5.unaccounted.length === 0)
+
+  // 5f. A process with no readable start time can never be acknowledged.
+  setPsForProof(async () => world([{ ...vscodeRow, start: null }]))
+  const r6 = await startServer(T, LAUNCHER, { acknowledged: [{ pid: 43300, startedAt: VSCODE_START }] })
+  check('a process with no readable start time cannot be acknowledged: nothing pins it', !r6.ok, r6.detail)
+
+  setPsForProof(null)
+}
+
 console.log('')
 let failed = 0
 for (const [l, ok, d] of checks) {

@@ -525,7 +525,8 @@ async function runCreation(req: CreateRequest, deps: CreateDeps, job: CreationJo
 function complete(job: CreationJob, journal: Journal, deps: CreateDeps): void {
   job.state = 'complete'
   job.detail =
-    'Created. The folder is now just another server: discovery picks it up on the next scan as a never-started row with the normal Start button, and its first start generates the world.'
+    'Created. The folder is now just another server: discovery picks it up on the next scan as a never-started row with the normal Start button, and its first start generates the world. ' +
+    'What remains before anyone can join from outside (the firewall rule, the router forward) is measured on the Addresses page.'
   journal.state = 'complete'
   writeJournal(job.dir, journal)
 
@@ -542,7 +543,8 @@ function complete(job: CreationJob, journal: Journal, deps: CreateDeps): void {
     )
     if (attached.ok) {
       job.detail =
-        'Created outside the servers root, so the folder was attached: discovery watches it because you attached it, starting with the next scan, and detaching it later stops the watching. Its first start generates the world.'
+        'Created outside the servers root, so the folder was attached: discovery watches it because you attached it, starting with the next scan, and detaching it later stops the watching. Its first start generates the world. ' +
+        'What remains before anyone can join from outside (the firewall rule, the router forward) is measured on the Addresses page.'
     } else {
       job.detail = `Created, but the folder is outside the servers root and could not be attached (${attached.reason}) It is NOT watched until you attach it from the Attach page.`
     }
