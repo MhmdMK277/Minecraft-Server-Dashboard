@@ -163,6 +163,86 @@ function MotdEditor({
   )
 }
 
+/**
+ * The heap, edited in the start script CREATION wrote and only there
+ * (defect 5, 2026-08-06). The editable/why split comes from the service
+ * (server/heapedit.ts readHeap, riding the snapshot), the write goes through
+ * writeHeap with the same discipline as any properties write, and the
+ * restart honesty in the response sentence is composed from the running
+ * JVM's actual -Xmx as identity read it, not assumed.
+ */
+function HeapEditor({ s }: { s: ServerStatus }) {
+  const [value, setValue] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [note, setNote] = useState<{ ok: boolean; detail: string } | null>(null)
+  const h = s.heapScript
+  const runningMb = s.proc?.heapMaxMb ?? null
+
+  if (!h.editable) {
+    return (
+      <div className="min-w-0">
+        <div className="text-[13px] font-medium text-ink">Memory</div>
+        <p className="prose-line mt-0.5 text-[11px] leading-relaxed text-faint">{h.why}</p>
+        {runningMb !== null && (
+          <p className="prose-line mt-1 text-[11px] leading-relaxed text-faint">
+            The running server was started with {runningMb} MB (read from its command line).
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  const save = () => {
+    const mb = Number(value)
+    setSaving(true)
+    setNote(null)
+    dashboard
+      .setHeap(s.id, mb)
+      .then((r) => setNote({ ok: true, detail: r.detail }))
+      .catch((e: unknown) =>
+        setNote({ ok: false, detail: e instanceof Error ? e.message : 'could not save' }),
+      )
+      .finally(() => setSaving(false))
+  }
+
+  return (
+    <div className="min-w-0">
+      <div className="text-[13px] font-medium text-ink">Memory</div>
+      <p className="prose-line mt-0.5 text-[11px] leading-relaxed text-faint">
+        start.bat gives the server {h.scriptMb} MB (-Xms and -Xmx, equal, as creation wrote them).
+        {runningMb !== null && runningMb !== h.scriptMb
+          ? ` The running server was started with ${runningMb} MB and keeps it until it restarts.`
+          : ''}{' '}
+        Edits here rewrite that one line; the previous script is kept dated beside it.
+      </p>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={String(h.scriptMb)}
+          inputMode="numeric"
+          spellCheck={false}
+          autoComplete="off"
+          className="h-8 w-28 rounded-md border border-border bg-transparent px-2 font-mono text-[12px] text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <span className="text-[11px] text-faint">MB</span>
+        <Btn
+          onClick={save}
+          disabled={saving || !/^\d+$/.test(value.trim()) || Number(value) === h.scriptMb}
+          label={saving ? 'Saving…' : 'Save'}
+        />
+      </div>
+      {note && (
+        <p
+          className={`prose-line mt-1.5 text-[12px] leading-relaxed ${note.ok ? 'text-faint' : 'text-bad'}`}
+        >
+          {note.detail}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function ServerSettingsPanel({ s }: { s: ServerStatus }) {
   const settings = s.settings
   const { pending, result, apply } = useSetter(s)
@@ -198,6 +278,11 @@ export default function ServerSettingsPanel({ s }: { s: ServerStatus }) {
 
       {/* ----------------------------------------------------------------- motd */}
       <MotdEditor motd={settings.motd} pending={pending} apply={apply} />
+
+      <div className="border-t border-border pt-3" />
+
+      {/* ------------------------------------------------------------- memory */}
+      <HeapEditor s={s} />
 
       <div className="border-t border-border pt-3" />
 

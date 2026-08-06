@@ -17,8 +17,12 @@ import {
   rconConfig,
 } from './properties'
 import { readSettings } from './serversettings'
+import { readHeap } from './heapedit'
 import { beginProbe } from './rconledger'
 import { scanJvms, jvmForDir, type DirHint, type JvmProcess } from './platform'
+
+/** Last logged attribution per directory; see the [identity] log block in scan(). */
+const lastAttribution = new Map<string, string>()
 import { slpPing } from './slp'
 import { Rcon } from './rcon'
 import { assessHealth, RCON_TIMEOUT_MS } from './health'
@@ -196,6 +200,26 @@ export async function scan(
       }),
     ),
   )
+
+  /**
+   * One service-log line whenever a directory's attribution CHANGES: which
+   * pid, named by which signal, started how. The 10.2-hour UNKNOWN of
+   * 2026-08-06 was undiagnosable from outside precisely because the service
+   * never recorded which signals had fired in ITS context (interactive
+   * probes see a different world: spec section 5b). Quiet in steady state;
+   * a line on gain, loss, or change only.
+   */
+  for (const c of candidates) {
+    const key = c.dir.replace(/[\\/]+$/, '').toLowerCase()
+    const j = jvmForDir(jvms, c.dir)
+    const now = j ? `pid ${j.pid} by ${j.attributedBy} (started ${j.startedBy})` : null
+    const before = lastAttribution.get(key) ?? null
+    if (now !== before) {
+      console.log(`[identity] ${c.name}: ${now ?? 'no longer attributed'}${before ? ` (was ${before})` : ''}`)
+      if (now === null) lastAttribution.delete(key)
+      else lastAttribution.set(key, now)
+    }
+  }
 
   // Live first, then never-started (the row the operator is most likely
   // about to act on), then retired/stale, each alphabetical. Retired and
@@ -420,6 +444,9 @@ async function inspect(
   // inspect(): anything sync that runs after an await bills its cost to whichever
   // server's probe happens to be outstanding.
   const settings = readSettings(dir, jvm?.uptimeSeconds ?? null)
+  // Same rule: a sync read of start.bat and the creation journal, above the
+  // first await. Editable only when creation wrote the script (defect 5).
+  const heap = readHeap(dir)
 
   const conflicts = gamePort !== null ? (byPort.get(gamePort) ?? []).filter((n) => n !== name) : []
 
@@ -562,6 +589,9 @@ async function inspect(
     // Read here rather than in the route, so the value the UI shows and the
     // value a write is checked against come from the same scan.
     settings: settings,
+    heapScript: heap.editable
+      ? { editable: true, scriptMb: heap.scriptMb, why: null }
+      : { editable: false, scriptMb: null, why: heap.why },
     health: verdict.health,
     healthDetail: verdict.detail,
     // Filled in by observeFleet() once every server has been read: how long
@@ -577,6 +607,8 @@ async function inspect(
           privateMb: jvm.privateMb,
           heapMaxMb: jvm.heapMaxMb,
           uptimeSeconds: jvm.uptimeSeconds,
+          attributedBy: jvm.attributedBy,
+          startedBy: jvm.startedBy,
         }
       : null,
     slp,

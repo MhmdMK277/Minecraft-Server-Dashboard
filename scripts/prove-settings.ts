@@ -375,6 +375,78 @@ check('level-name is NOT editable', !isSettingKey('level-name'))
   check('and can be set by appending the line', r.ok && serverProps(dir)['motd'] === 'fresh words')
 }
 
+// ===========================================================================
+// The heap in start.bat (defect 5, 2026-08-06): editable ONLY when creation
+// wrote the script, refusals for everything else, and the same preservation,
+// recoverability and atomicity rules as the properties writer. A corrupted
+// start.bat is a server that cannot start, which is why this is proof-guarded.
+// ===========================================================================
+{
+  const { readHeap, writeHeap } = await import('../server/heapedit')
+  const { mkdirSync } = await import('node:fs')
+
+  const heapDir = (script: string, journaled: boolean) => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcdash-heap-'))
+    writeFileSync(join(dir, 'start.bat'), script, 'utf8')
+    if (journaled) {
+      writeFileSync(
+        join(dir, '.mcdash-creation.json'),
+        JSON.stringify({ version: 1, opId: 'x', state: 'complete', files: ['.mcdash-creation.json', 'server.jar', 'start.bat'] }),
+        'utf8',
+      )
+    }
+    mkdirSync(join(dir, 'logs'), { recursive: true })
+    return dir
+  }
+  const CREATED = '@echo off\r\ncd /d "%~dp0"\r\njava -Xms2048M -Xmx2048M -jar "server.jar" nogui\r\n'
+
+  // Refusal: a script this dashboard did not write is never touched.
+  const foreign = heapDir(CREATED, false)
+  const rf = readHeap(foreign)
+  check('a start.bat with no creation journal is not editable', !rf.editable && /did not write/.test(rf.editable ? '' : rf.why))
+  const wf = writeHeap(foreign, 4096, TODAY)
+  check('and a write against it is refused', !wf.ok && /did not write/.test(wf.detail), wf.detail)
+  check('with the file byte-identical after the refusal', readFileSync(join(foreign, 'start.bat'), 'utf8') === CREATED)
+
+  // Refusal: the Forge wrapper carries no heap; the refusal names where it lives.
+  const forge = heapDir('@echo off\r\ncd /d "%~dp0"\r\ncall run.bat nogui\r\n', true)
+  const rForge = writeHeap(forge, 4096, TODAY)
+  check('the forge wrapper is refused, naming user_jvm_args.txt', !rForge.ok && /user_jvm_args\.txt/.test(rForge.detail), rForge.detail)
+
+  // Refusal: a journaled script the operator has since rewritten is not guessed at.
+  const rewritten = heapDir('@echo off\r\njava @user_args.txt -jar server.jar\r\n', true)
+  const rRew = writeHeap(rewritten, 4096, TODAY)
+  check('a rewritten launch line is refused rather than guessed at', !rRew.ok && /no longer matches/.test(rRew.detail), rRew.detail)
+
+  // The one editable shape, including the provisioned-Java variant above it.
+  const PROVISIONED =
+    '@echo off\r\ncd /d "%~dp0"\r\nREM Java below was provisioned by the dashboard (Adoptium Temurin).\r\nset "PATH=C:\\some\\jre\\bin;%PATH%"\r\njava -Xms2048M -Xmx2048M -jar "server.jar" nogui\r\n'
+  const ours = heapDir(PROVISIONED, true)
+  const r0 = readHeap(ours)
+  check('a creation-written script reads its heap', r0.editable && r0.scriptMb === 2048)
+
+  const w1 = writeHeap(ours, 4096, TODAY)
+  check('the edit succeeds and says both old and new', w1.ok && /2048/.test(w1.detail) && /4096/.test(w1.detail), w1.detail)
+  const after = readFileSync(join(ours, 'start.bat'), 'utf8')
+  check('Xms and Xmx are both the new value, still equal', after.includes('java -Xms4096M -Xmx4096M -jar "server.jar" nogui'))
+  check('every other line survives byte for byte, PATH line included', after === PROVISIONED.replace('-Xms2048M -Xmx2048M', '-Xms4096M -Xmx4096M'))
+  check('CRLF endings survive', after.includes('\r\n'))
+  const bak = join(ours, `start.bat.bak-${TODAY}`)
+  check('the previous script is kept dated beside the original', existsSync(bak) && readFileSync(bak, 'utf8') === PROVISIONED)
+  check('no temp file survives the write', !readdirSync(ours).some((n) => n.includes('.tmp-')))
+
+  const w2 = writeHeap(ours, 4096, TODAY)
+  check('writing the same value again is a no-op that says so', w2.ok && /already/.test(w2.detail), w2.detail)
+  const w3 = writeHeap(ours, 6144, TODAY)
+  check('a second same-day edit keeps the FIRST backup of the day', w3.ok && readFileSync(bak, 'utf8') === PROVISIONED)
+
+  // Bounds, mirroring creation's.
+  const low = writeHeap(ours, 100, TODAY)
+  const high = writeHeap(ours, 70000, TODAY)
+  const frac = writeHeap(ours, 2048.5, TODAY)
+  check('out-of-bounds and fractional values are refused before any file is touched', !low.ok && !high.ok && !frac.ok)
+}
+
 console.log('')
 let failed = 0
 for (const [l, ok, d] of checks) {

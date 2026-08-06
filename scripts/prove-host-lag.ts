@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PROOF: observer lag is a host measurement, and the fleet reading tells a host
  * event apart from a server event.
  *
@@ -7,7 +7,7 @@
  * 1. The lag sampler can tell WHY the loop was late. "We were on-CPU running our
  *    own code" and "wall clock passed while we were not scheduled at all" are
  *    different events with different owners, and only the second is evidence
- *    about the machine. This is the difference between the §11 bug (ours) and a
+ *    about the machine. This is the difference between the Â§11 bug (ours) and a
  *    host stall (not ours), and if the sampler cannot separate them then the
  *    whole inference below rests on nothing.
  *
@@ -123,7 +123,7 @@ check(
   selfLag.timerFloorMs === floorBefore,
 )
 check('a busy-wait is NOT attributed to the host', !assessHost(selfLag).starved)
-check('a busy-wait still counts against a probe (§11 unchanged)', selfCredited >= BLOCK_MS * 0.9)
+check('a busy-wait still counts against a probe (Â§11 unchanged)', selfCredited >= BLOCK_MS * 0.9)
 
 startObserverMonitor()
 await settle()
@@ -158,7 +158,7 @@ check(
 // ===========================================================================
 // 2. The lag figure is not blind to a block that is still open
 // ===========================================================================
-// The §11 subtlety, applied to the host metric: a caller asking DURING a block
+// The Â§11 subtlety, applied to the host metric: a caller asking DURING a block
 // has given the sampler no turn in which to record it. The naive version of
 // this reports a calm machine at the exact moment the machine is worst.
 startObserverMonitor()
@@ -197,7 +197,7 @@ function lag(o: Partial<LoopLag>): LoopLag {
 const FLAT = lag({})
 /** The machine stopped scheduling us: big block, none of it our CPU. */
 const STARVED = lag({ p95Ms: 900, maxMs: 4200, blockedMs: 9000, starvedMs: 8600 })
-/** We blocked ourselves: same size block, all of it our own CPU. §11's bug. */
+/** We blocked ourselves: same size block, all of it our own CPU. Â§11's bug. */
 const SELF = lag({ p95Ms: 900, maxMs: 4200, blockedMs: 9000, starvedMs: 200 })
 
 function srv(name: string, health: ServerStatus['health']): ServerStatus {
@@ -211,6 +211,7 @@ function srv(name: string, health: ServerStatus['health']): ServerStatus {
     levelName: 'world',
     worldDirs: [],
     settings: { onlineMode: true, whitelist: true, motd: null, fileModifiedAt: null, changedSinceStart: null },
+  heapScript: { editable: false, scriptMb: null, why: 'synthetic state' },
     rconConfigured: true,
     health,
     healthDetail: '',
@@ -218,7 +219,7 @@ function srv(name: string, health: ServerStatus['health']): ServerStatus {
     healthScans: 1,
     attribution: null,
     attributionDetail: null,
-    proc: { pid: 1, workingSetMb: null, privateMb: null, heapMaxMb: null, uptimeSeconds: 9000 },
+    proc: { pid: 1, workingSetMb: null, privateMb: null, heapMaxMb: null, uptimeSeconds: 9000, attributedBy: 'scheduled-task' as const, startedBy: 'scheduled-task' as const },
     slp: null,
     rcon: null,
     gc: null,
@@ -357,8 +358,8 @@ const settledDetail = persistent[0]!.attributionDetail ?? ''
 console.log('\n5. a persistent UNKNOWN, six scans in')
 console.log(`   fleet verdict held for      ${host.fleet.scans} scans`)
 console.log(`   server attribution          ${persistent[0]!.attribution}`)
-console.log(`   scan 1 says:  ${firstDetail.slice(0, 96)}…`)
-console.log(`   scan 6 says:  ${settledDetail.slice(0, 96)}…`)
+console.log(`   scan 1 says:  ${firstDetail.slice(0, 96)}â€¦`)
+console.log(`   scan 6 says:  ${settledDetail.slice(0, 96)}â€¦`)
 
 check('the fleet verdict accumulates scans', host.fleet.scans === 6)
 check('a persistent UNKNOWN is attributed to the host', persistent[0]!.attribution === 'host')
@@ -382,8 +383,8 @@ check(
 // matched to it (observed live 2026-08-02, on a server the Create page had
 // just started). No probe ran, so there is no discarded reading -- but the
 // settled self-lag branch used to swallow this case and blame our own
-// scan-path CPU, citing §11: a second, false explanation rendered beside the
-// true one. The note must talk about identity and must not cite §11 or CPU
+// scan-path CPU, citing Â§11: a second, false explanation rendered beside the
+// true one. The note must talk about identity and must not cite Â§11 or CPU
 // accounting for a reading that was never taken.
 resetFleetMemory()
 const ghost = [{ ...srv('ghost', 'UNKNOWN'), proc: null }]
@@ -393,15 +394,15 @@ observeFleet(ghost, SELF, Date.now())
 for (let i = 1; i <= 5; i++) observeFleet(ghost, SELF, Date.now() + i * 10_000)
 const ghostDetail = ghost[0]!.attributionDetail ?? ''
 console.log(`\n   identity-doubt UNKNOWN attribution  ${ghost[0]!.attribution}`)
-console.log(`   says: ${ghostDetail.slice(0, 96)}…`)
+console.log(`   says: ${ghostDetail.slice(0, 96)}â€¦`)
 check(
   'an UNKNOWN with no matched process is attributed to the observer',
   ghost[0]!.attribution === 'observer',
 )
 check('and the note names identity as the cause', /identity/i.test(ghostDetail))
 check(
-  'and does not cite §11 or scan-path CPU for a reading that was never taken',
-  !/§11|scan path|CPU/.test(ghostDetail),
+  'and does not cite Â§11 or scan-path CPU for a reading that was never taken',
+  !/Â§11|scan path|CPU/.test(ghostDetail),
 )
 check('and does not accuse the server', /not a fault in ghost/.test(ghostDetail))
 check('and states how long it has held', /consecutive scan/.test(ghostDetail))
@@ -412,7 +413,7 @@ const ghost2 = [{ ...srv('ghost2', 'UNKNOWN'), proc: null }]
 observeFleet(ghost2, STARVED, Date.now())
 check(
   'the identity explanation does not depend on lag state or streak length',
-  /identity/i.test(ghost2[0]!.attributionDetail ?? '') && !/§11/.test(ghost2[0]!.attributionDetail ?? ''),
+  /identity/i.test(ghost2[0]!.attributionDetail ?? '') && !/Â§11/.test(ghost2[0]!.attributionDetail ?? ''),
 )
 
 // Identity doubt with RCON unconfigured is still identity first: advice to
@@ -476,3 +477,5 @@ for (const [label, ok] of checks) {
 }
 console.log(failed === 0 ? `\nALL PASS. ${checks.length} checks` : `\n${failed} FAILED`)
 process.exit(failed === 0 ? 0 : 1)
+
+

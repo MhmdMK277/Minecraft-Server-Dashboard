@@ -412,6 +412,10 @@ function Overview({ s, canEdit }: { s: ServerStatus; canEdit: boolean }) {
               <Metric label="Platform" value={s.kind} tier="meta" />
               <Metric label="Launcher" value={s.launchStrategy} tier="meta" />
               <Metric label="Classification" value={s.classification} tier="meta" />
+              {/* Which signal named the pid (2026-08-06): a long UNKNOWN is
+                  only explicable by knowing which signal did NOT fire. */}
+              <Metric label="Attributed by" value={s.proc ? s.proc.attributedBy : '–'} tier="meta" />
+              <Metric label="Started" value={s.proc ? s.proc.startedBy : '–'} tier="meta" />
             </div>
             <p className="prose-line mt-2.5 break-all font-mono text-[11px] leading-relaxed text-faint">
               {s.dir}

@@ -15,7 +15,7 @@ import { z } from 'zod'
  */
 
 /** Platform, which decides which TPS command is valid. See docs/liveness-spec.md §7. */
-export const ServerKind = z.enum(['paper', 'forge-modern', 'forge-1710', 'unknown'])
+export const ServerKind = z.enum(['paper', 'forge-modern', 'forge-1710', 'vanilla', 'unknown'])
 export type ServerKind = z.infer<typeof ServerKind>
 
 export const Classification = z.enum([
@@ -85,6 +85,14 @@ export const ProcInfo = z.object({
    */
   heapMaxMb: z.number().nullable(),
   uptimeSeconds: z.number().nullable(),
+  /**
+   * Which identity signal named this pid, and how the process came to exist.
+   * Rendered in the Identity panel (added 2026-08-06): a 10-hour UNKNOWN was
+   * only explicable by knowing which signal had NOT fired, and nothing
+   * showed it.
+   */
+  attributedBy: z.enum(['scheduled-task', 'command-line', 'open-log-and-port']),
+  startedBy: z.enum(['scheduled-task', 'interactive', 'unknown']),
 })
 export type ProcInfo = z.infer<typeof ProcInfo>
 
@@ -491,6 +499,16 @@ export const ServerStatus = z.object({
   rconConfigured: z.boolean(),
   /** The two editable server.properties values. Null for a non-server directory. */
   settings: ServerSettings.nullable(),
+  /**
+   * The heap in the start script, when CREATION wrote that script (the
+   * journal claims it and the launch line still matches). Editable only
+   * then: a script the operator wrote is theirs (defect 5, 2026-08-06).
+   */
+  heapScript: z.object({
+    editable: z.boolean(),
+    scriptMb: z.number().nullable(),
+    why: z.string().nullable(),
+  }),
   health: Health,
   healthDetail: z.string(),
   /** When this health state began, and how many consecutive scans it has held. */
@@ -1379,6 +1397,9 @@ export const TunnelEnableRequest = z.object({
 
 export const TunnelDisableRequest = z.object({ id: z.string().min(1).max(128) })
 
+/** Heap edit for a creation-written start script; bounds mirror creation's. */
+export const SetHeapRequest = z.object({ memoryMb: z.number().int().min(512).max(65536) })
+
 /**
  * Per-server reachability, measured on demand for the Addresses page
  * (decision behind it: 2026-08-06, a public address was offered for a server
@@ -1435,6 +1456,7 @@ export const API = {
   runColdBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/coldbackup`,
   restoreColdBackup: (id: string) => `/api/servers/${encodeURIComponent(id)}/coldbackup/restore`,
   setSetting: (id: string) => `/api/servers/${encodeURIComponent(id)}/settings`,
+  setHeap: (id: string) => `/api/servers/${encodeURIComponent(id)}/heap`,
   control: (id: string, action: 'start' | 'stop' | 'restart') =>
     `/api/servers/${encodeURIComponent(id)}/${action}`,
   runCommand: (id: string) => `/api/servers/${encodeURIComponent(id)}/command`,

@@ -278,6 +278,9 @@ export const dashboard = {
     sendControl(API.control(id, action)),
   /** Measured reachability for the Addresses page; see ReachabilityReport. */
   getReachability: () => get<ReachabilityReport>(API.addressesReachability),
+  /** Heap edit in a creation-written start.bat; refused for scripts we did not write. */
+  setHeap: (id: string, memoryMb: number) =>
+    post<{ ok: boolean; detail: string }>(API.setHeap(id), { memoryMb }),
   runCommand: (id: string, command: string) => sendCommand(API.runCommand(id), command),
 
   /**

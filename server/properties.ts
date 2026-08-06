@@ -85,7 +85,7 @@ export function levelDatPath(dir: string): string | null {
 }
 
 /** Platform detection from directory contents. Decides the TPS command. */
-export function detectKind(dir: string): 'paper' | 'forge-modern' | 'forge-1710' | 'unknown' {
+export function detectKind(dir: string): 'paper' | 'forge-modern' | 'forge-1710' | 'vanilla' | 'unknown' {
   const has = (f: string) => existsSync(join(dir, f))
   if (has('paper.jar')) return 'paper'
   if (has('lwjgl3ify-forgePatches.jar')) return 'forge-1710'
@@ -99,6 +99,31 @@ export function detectKind(dir: string): 'paper' | 'forge-modern' | 'forge-1710'
     if (statSync(join(dir, 'mods')).isDirectory()) return 'forge-modern'
   } catch {
     /* no mods dir */
+  }
+  /**
+   * Last and weakest: this dashboard's own creation journal, checked only
+   * after every real marker has said nothing. Vanilla is the platform with
+   * NO on-disk marker of its own (no plugins/, no mods/, no loader jar;
+   * telling a vanilla server.jar apart from anything else means unzipping
+   * it), so a server this dashboard created read "unknown" forever
+   * (2026-08-06, found by the operator on a server the dashboard itself
+   * downloaded and journaled). The journal is a normal file living in the
+   * folder, written at creation and never consulted as a registry: real
+   * markers above win precisely because an operator can swap jars in a
+   * folder and the journal would then be stale evidence.
+   */
+  try {
+    const j = JSON.parse(readFileSync(join(dir, '.mcdash-creation.json'), 'utf8')) as {
+      state?: unknown
+      flavor?: unknown
+    }
+    if (j.state === 'complete') {
+      if (j.flavor === 'vanilla') return 'vanilla'
+      if (j.flavor === 'paper') return 'paper'
+      if (j.flavor === 'forge' || j.flavor === 'neoforge') return 'forge-modern'
+    }
+  } catch {
+    /* no journal, or not ours: not created here */
   }
   return 'unknown'
 }

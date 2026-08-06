@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Renders the servers view to a standalone HTML file, for states that are hard
  * to produce on demand.
  *
@@ -78,13 +78,14 @@ function srv(o: Partial<ServerStatus> & { name: string }): ServerStatus {
     worldDirs: ['world'],
     rconConfigured: true,
     settings: { onlineMode: true, whitelist: true, motd: 'A Minecraft Server', fileModifiedAt: null, changedSinceStart: false },
+  heapScript: { editable: false, scriptMb: null, why: 'synthetic state' },
     health: 'HEALTHY',
     healthDetail: 'Port answering and the main game thread acknowledged RCON in 1 ms.',
     healthSince: new Date().toISOString(),
     healthScans: 1,
     attribution: null,
     attributionDetail: null,
-    proc: { pid: 1234, workingSetMb: 512, privateMb: 3600, heapMaxMb: null, uptimeSeconds: 26000 },
+    proc: { pid: 1234, workingSetMb: 512, privateMb: 3600, heapMaxMb: null, uptimeSeconds: 26000, attributedBy: 'scheduled-task' as const, startedBy: 'scheduled-task' as const },
     slp: {
       versionName: 'Paper 1.21.4',
       protocol: 769,
@@ -297,3 +298,5 @@ for (const s of SCENARIOS) {
   const { host } = render(s)
   console.log(`\n${s.title}\n  fault=${host.fleet.fault} state=${host.state}\n  ${host.fleet.headline}`)
 }
+
+

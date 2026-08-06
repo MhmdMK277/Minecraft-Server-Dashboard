@@ -20,6 +20,7 @@ import {
   RunColdBackupRequest,
   RestoreColdBackupRequest,
   SetServerSettingRequest,
+  SetHeapRequest,
   SetGameRuleRequest,
   RunCommandRequest,
   AttachRequest,
@@ -72,6 +73,7 @@ import { readBackupDetection, resetDetectionCache } from './backupdetect'
 import { startPagingSampler, stopPagingSampler } from './hostpaging'
 import { runColdBackup, restoreColdBackup, listColdBackups } from './coldbackup'
 import { writeSetting, writeMotd } from './serversettings'
+import { writeHeap } from './heapedit'
 import { readGameRules, setGameRule } from './gamerules'
 import { profileSafepoints } from './profiling'
 import { startServer, stopServer, restartServer, runCommand } from './control'
@@ -1614,6 +1616,49 @@ export async function buildServer({ version }: Deps): Promise<FastifyInstance> {
     // Reflect it immediately rather than waiting for the next poll.
     await pushSnapshot()
     return { ok: true, detail: result.detail }
+  })
+
+  /**
+   * The heap in a creation-written start script (defect 5, 2026-08-06).
+   * Same discipline as the settings write: admin-only, audited, previous
+   * file kept dated, atomic, and it refuses any start.bat this dashboard
+   * did not generate (heapedit.ts holds the refusal matrix). The honest
+   * restart sentence is composed HERE, from the running JVM's actual -Xmx
+   * as identity read it off the command line, not from hope.
+   */
+  app.post<{ Params: { id: string } }>('/api/servers/:id/heap', async (req, reply) => {
+    const session = require_(req, reply, 'admin', 'settings.heap')
+    if (!session) return
+    const parsed = SetHeapRequest.safeParse(req.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'expected { memoryMb: 512..65536 }' })
+    }
+    const snapshot = latest ?? (await doScan())
+    const server = snapshot.servers.find((s) => s.id === req.params.id)
+    if (!server) return reply.code(404).send({ error: 'no such server directory' })
+
+    const today = new Date().toISOString().slice(0, 10)
+    const result = writeHeap(server.dir, parsed.data.memoryMb, today)
+    audit({
+      actor: session.username,
+      role: session.role,
+      action: 'settings.heap',
+      target: server.name,
+      outcome: result.ok ? 'ok' : 'denied',
+      ip: clientIp(req),
+      detail: result.backupPath
+        ? `${result.detail}; previous file kept as ${result.backupPath}`
+        : result.detail,
+    })
+    if (!result.ok) return reply.code(409).send({ error: result.detail })
+
+    const runningMb = server.proc?.heapMaxMb ?? null
+    const restartNote =
+      runningMb !== null
+        ? ` The running server was started with ${runningMb} MB and keeps it until it restarts.`
+        : ' The server is not running; the new value applies at its next start.'
+    await pushSnapshot()
+    return { ok: true, detail: result.detail + restartNote }
   })
 
   /**

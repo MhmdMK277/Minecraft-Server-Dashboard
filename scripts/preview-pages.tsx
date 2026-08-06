@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TEMPORARY layout-law harness (not committed): renders the per-server
  * Overview and Console pages for a worst-case modded server, so law 6
  * (content never dictates column width) can be verified by screenshot
@@ -32,13 +32,14 @@ const gtnh: ServerStatus = {
   worldDirs: ['World Of Extremely Long Names For Testing'],
   rconConfigured: true,
   settings: { onlineMode: false, whitelist: true, motd: 'A Minecraft Server', fileModifiedAt: null, changedSinceStart: false },
+  heapScript: { editable: false, scriptMb: null, why: 'synthetic state' },
   health: 'HEALTHY',
   healthDetail: 'Port answering and the main game thread acknowledged RCON in 24 ms.',
   healthSince: new Date('2026-07-31T05:02:00Z').toISOString(),
   healthScans: 900,
   attribution: null,
   attributionDetail: null,
-  proc: { pid: 18076, workingSetMb: 1004, privateMb: 6906, heapMaxMb: 6144, uptimeSeconds: 51000 },
+  proc: { pid: 18076, workingSetMb: 1004, privateMb: 6906, heapMaxMb: 6144, uptimeSeconds: 51000, attributedBy: 'scheduled-task' as const, startedBy: 'scheduled-task' as const },
   slp: {
     versionName: 'GT New Horizons 2.8.4 (1.7.10 Forge)',
     protocol: 5,
@@ -88,7 +89,7 @@ const gtnh: ServerStatus = {
 }
 
 const CODED =
-  '[31Jul2026 03:20:00] [Server thread/INFO]: §6There are §c2§6 out of maximum §c20§6 players online. §aGreen§r plain §l§bBoldAqua§r §nunder§r §mstruck§r §kobfuscated§r end'
+  '[31Jul2026 03:20:00] [Server thread/INFO]: Â§6There are Â§c2Â§6 out of maximum Â§c20Â§6 players online. Â§aGreenÂ§r plain Â§lÂ§bBoldAquaÂ§r Â§nunderÂ§r Â§mstruckÂ§r Â§kobfuscatedÂ§r end'
 
 const lines: LogLine[] = Array.from({ length: 40 }, (_, i) => ({
   seq: i,
@@ -127,3 +128,5 @@ writeFileSync(
   'utf8',
 )
 console.log('wrote dist/preview-pages.html')
+
+
