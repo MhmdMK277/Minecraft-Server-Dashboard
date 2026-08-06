@@ -1379,6 +1379,32 @@ export const TunnelEnableRequest = z.object({
 
 export const TunnelDisableRequest = z.object({ id: z.string().min(1).max(128) })
 
+/**
+ * Per-server reachability, measured on demand for the Addresses page
+ * (decision behind it: 2026-08-06, a public address was offered for a server
+ * that could not bind, had no firewall rule and no router forward, and the
+ * page named none of it). Sentences are composed server-side, next to the
+ * checks that make them true.
+ */
+export type ServerReachability = {
+  id: string
+  gamePort: number | null
+  /** TCP connect results, loopback and LAN. Null when there was no port. */
+  listening: { loopback: boolean; lan: boolean | null } | null
+  /** server-ip when set to a concrete address; held = this machine has it. */
+  bind: { address: string; held: boolean } | null
+  /** The enabled inbound allow rule covering the port, when one was found. */
+  firewallRule: string | null
+  problems: Array<{ point: 'process' | 'bind' | 'firewall'; detail: string }>
+  /** False when a measured point failed; the UI must not offer addresses. */
+  usable: boolean
+}
+
+export type ReachabilityReport = {
+  checkedAt: string
+  servers: ServerReachability[]
+}
+
 /** HTTP routes. Was `CH`, the Electron IPC channel list. */
 export const API = {
   appInfo: '/api/info',
@@ -1388,6 +1414,7 @@ export const API = {
   worlds: (id: string, fresh = false) =>
     `/api/servers/${encodeURIComponent(id)}/worlds${fresh ? '?fresh=1' : ''}`,
   discover: (fresh = false) => `/api/discover${fresh ? '?fresh=1' : ''}`,
+  addressesReachability: '/api/addresses/reachability',
   attachValidate: '/api/attach/validate',
   attach: '/api/attach',
   attachLaunch: '/api/attach/launch',

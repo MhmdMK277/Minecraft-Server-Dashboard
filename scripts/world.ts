@@ -33,13 +33,22 @@ export function describeWorld(jvms: JvmProcess[]): World {
   // broke on a case that is production BY DESIGN: a server the dashboard
   // spawns outlives the dashboard (spawned detached -- the attach model), and
   // once the dashboard restarts, the survivor's ancestry walk dies at a dead
-  // pid and its provenance reads `unknown`. That server is not the desktop
-  // hazard this gate exists to catch (proof-coverage.md: suites green against
-  // interactively started servers only). The hazard is session-1 processes
-  // and a world where the task-started path goes unexercised -- so the gate
-  // is exactly that: everything in session 0, nothing on a desktop, and the
-  // scheduler-started shape present to be tested.
-  const isProduction = total > 0 && session0 === total && taskStarted > 0
+  // pid and its provenance reads `unknown`.
+  //
+  // Revised again 2026-08-06. "Everything in session 0" stopped describing
+  // production too: the operator now runs a hand-started vanilla server from
+  // the desktop as a durable fleet member, and that exact shape produced a
+  // 10-hour misreport (a v6-only listener invisible to the IPv4-only port
+  // table; prove-identity group E). A gate that disqualifies the world for
+  // containing it would gate the proofs OUT of the newest hard case. The
+  // hazard this gate exists to catch is unchanged -- proving identity only
+  // against interactively started servers, where command lines are readable
+  // and everything is easy -- so the gate demands the HARD shape present and
+  // exercised: scheduler-started servers, all of them in session 0. A
+  // desktop-started server alongside them no longer disqualifies the world;
+  // it is the second shape production actually runs.
+  const isProduction =
+    total > 0 && taskStarted > 0 && jvms.every((j) => j.startedBy !== 'scheduled-task' || j.sessionId === 0)
 
   const bySignal = jvms.reduce<Record<string, number>>((a, j) => {
     a[j.attributedBy] = (a[j.attributedBy] ?? 0) + 1
@@ -58,11 +67,14 @@ export function describeWorld(jvms: JvmProcess[]): World {
           (session0 - taskStarted > 0
             ? `, ${session0 - taskStarted} session-0 with no surviving launcher ancestry (a detached spawn outliving its launcher)`
             : '') +
+          (total - session0 > 0
+            ? `, ${total - session0} desktop-started (the second production shape since 2026-08-06)`
+            : '') +
           `. Attributed by ${Object.entries(bySignal).map(([k, v]) => `${k} ${v}`).join(', ')}.`,
     remedy:
       total === 0
         ? 'Start the servers via their scheduled tasks before running this.'
-        : 'Stop the hand-started servers and start them through their scheduled tasks (Start-ScheduledTask), which is how they run in production.',
+        : 'Start the scheduler-run servers through their scheduled tasks (Start-ScheduledTask); the task-started session-0 shape must be present, or the hard case goes untested.',
   }
 }
 

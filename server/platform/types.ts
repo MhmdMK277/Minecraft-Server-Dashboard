@@ -133,6 +133,16 @@ export type JvmScan = {
    * every candidate was resolved by a stronger signal and it was skipped.
    */
   portsEnumerated: boolean
+  /**
+   * Signal 3's raw per-directory view: was the log held, and which pid (if
+   * any) did the listening-port table name. A directory occupied with no
+   * nameable pid is the state that renders as a persistent UNKNOWN, and the
+   * WHY has to be inspectable: a server ran 10 hours in that state
+   * (2026-08-06) because the port table was IPv4-only, and nothing recorded
+   * what signal 3 had actually seen. Empty when no hints were passed or the
+   * scan failed.
+   */
+  signal3: Array<{ dir: string; logHeld: boolean; listenerPid: number | null }>
 }
 
 /**

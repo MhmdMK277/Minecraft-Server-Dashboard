@@ -93,14 +93,14 @@ const taskStarted = scan.jvms.filter((j) => j.startedBy === 'scheduled-task')
 // The load-bearing assertion. A green run must mean "the production
 // configuration works", not "some configuration works".
 check(
-  'the world is production-shaped: all session 0, none desktop-started, the task path exercised',
+  'the world is production-shaped: the scheduler-started session-0 shape is present and exercised',
   world.isProduction,
   `${world.summary} ${world.remedy}`,
 )
 check(
-  'and runs in session 0, where the command line is unreadable',
-  world.total > 0 && world.session0 === world.total,
-  `${world.session0} of ${world.total}`,
+  'and every task-started server runs in session 0, where the command line is unreadable',
+  taskStarted.length > 0 && taskStarted.every((j) => j.sessionId === 0),
+  `${taskStarted.filter((j) => j.sessionId === 0).length} of ${taskStarted.length} task-started in session 0`,
 )
 
 // Signal accounting. Not an assertion that a particular signal wins, that
@@ -440,6 +440,66 @@ check(
   created2 !== null && created2.startedBy === 'unknown' && !created2.taskLaunched,
   created2 ? `startedBy=${created2.startedBy}` : 'not attributed',
 )
+
+// =============================== E. a v6-only listener is visible to signal 3
+//
+// Found 2026-08-06 after a real server read UNKNOWN for 10.2 hours with its
+// log held open: the provider's port table came from `netstat -ano -p TCP`,
+// which lists the IPv4 table only. Paper and Forge bind BOTH tables, so the
+// fleet never showed it; modern vanilla can sit on one dual-stack socket
+// that appears only as [::]:port in the TCPv6 table, and signal 3 held the
+// log but could never name the pid. This group runs the REAL PowerShell
+// provider against a listener bound v6-only, the exact shape that failed,
+// and proves the run could not have passed via the IPv4 table.
+{
+  const { mkdtempSync, mkdirSync, writeFileSync, existsSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { spawn, execFileSync } = await import('node:child_process')
+  const { createServer } = await import('node:net')
+
+  const FIX = mkdtempSync(join(tmpdir(), 'mcdash-v6only-'))
+  mkdirSync(join(FIX, 'logs'), { recursive: true })
+  writeFileSync(join(FIX, 'logs', 'latest.log'), 'held by the proof\n', 'utf8')
+  writeFileSync(join(FIX, 'server.properties'), 'server-port=0\n', 'utf8')
+
+  // The v6-only listener, in this process: the shape vanilla produced.
+  const srv = createServer()
+  await new Promise<void>((res) => srv.listen({ host: '::', port: 0, ipv6Only: true }, res))
+  const addr = srv.address()
+  const PORT = typeof addr === 'object' && addr ? addr.port : 0
+
+  // Discrimination: the IPv4 table alone must NOT carry this port, or the
+  // fixture would not reproduce the failing shape and the pass would be
+  // vacuous. Same self-validating stance as prove-scan section 5.
+  const v4 = execFileSync('netstat.exe', ['-ano', '-p', 'TCP'], { encoding: 'utf8' })
+  check(
+    `E. the fixture listener on ${PORT} is absent from the IPv4 table`,
+    !v4.split('\n').some((l) => l.includes(`:${PORT} `) && l.includes('LISTENING')),
+  )
+
+  // A child holds the log with dwShareMode=0, the way a JVM does. It writes
+  // a sentinel once the handle is open so the scan cannot race it.
+  const sentinel = join(FIX, 'held.txt')
+  const holder = spawn('powershell.exe', [
+    '-NoProfile', '-NonInteractive', '-Command',
+    `$fs=[System.IO.File]::Open('${join(FIX, 'logs', 'latest.log')}','Open','Read','None'); Set-Content -Path '${sentinel}' -Value held; Start-Sleep -Seconds 120`,
+  ], { windowsHide: true, stdio: 'ignore' })
+  for (let i = 0; i < 100 && !existsSync(sentinel); i++) await new Promise((r) => setTimeout(r, 100))
+  check('E. the proof child reports the log handle open', existsSync(sentinel))
+
+  const e1 = await scanJvms([{ dir: FIX, gamePort: PORT }])
+  const sig = e1.signal3.find((s) => nkey(s.dir) === nkey(FIX))
+  check('E. the held log marks the directory occupied', e1.occupiedDirs.some((o) => nkey(o) === nkey(FIX)))
+  check('E. the port table was enumerated for it', e1.portsEnumerated)
+  check(
+    'E. signal 3 names the v6-only listener pid, through the real netstat parse',
+    sig !== undefined && sig.logHeld && sig.listenerPid === process.pid,
+    sig ? `listenerPid=${sig.listenerPid} (this proof is pid ${process.pid})` : 'no signal3 entry',
+  )
+
+  srv.close()
+  holder.kill()
+}
 
 stopObserverMonitor()
 

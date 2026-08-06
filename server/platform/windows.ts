@@ -195,9 +195,19 @@ Phase 'handles'
 # Get-NetTCPConnection costs ~590 ms on this host; netstat costs ~70 ms for the
 # same answer, and in the common case where every server was resolved by its
 # scheduled task neither is called at all.
+#
+# BOTH address families, deliberately (found 2026-08-06). "-p TCP" lists the
+# IPv4 table only, and a modern vanilla server can sit on ONE dual-stack
+# socket that netstat reports as [::]:25570 in the TCPv6 table with no IPv4
+# row at all -- Paper and Forge bind both tables, which is why this filter
+# looked correct against the fleet and blinded signal 3 for exactly the
+# canonically-started vanilla case it exists to catch. A server ran 10 hours
+# reading UNKNOWN with its log held open because of this line. Plain
+# "netstat -ano" carries both tables; the LISTENING guard in the regex
+# already excludes UDP and non-listening rows, and it matches [::]:port.
 if ($needPorts) {
   $listeners = @{}
-  foreach ($line in (netstat -ano -p TCP)) {
+  foreach ($line in (netstat -ano)) {
     $m = [regex]::Match($line, '^\\s+TCP\\s+\\S+:(\\d+)\\s+\\S+\\s+LISTENING\\s+(\\d+)')
     if ($m.Success -and -not $listeners.ContainsKey($m.Groups[1].Value)) {
       $listeners[$m.Groups[1].Value] = [int]$m.Groups[2].Value
@@ -301,6 +311,7 @@ export const windowsProvider: ProcessProvider = {
         loopBlockedMs: observerBlockedMs(t0, Date.now()),
         phases: {},
         portsEnumerated: false,
+        signal3: [],
       }
     }
 
@@ -314,6 +325,7 @@ export const windowsProvider: ProcessProvider = {
       loopBlockedMs: observerBlockedMs(t0, Date.now()),
       phases: {},
       portsEnumerated: false,
+      signal3: [],
     })
 
     if (!raw) return fail('process enumeration returned nothing')
@@ -506,6 +518,11 @@ export const windowsProvider: ProcessProvider = {
         Object.entries((top.phases ?? {}) as Record<string, unknown>).map(([k, v]) => [k, Number(v) || 0]),
       ),
       portsEnumerated: top.portsEnumerated === true,
+      signal3: asArray(top.dirs).map((d) => ({
+        dir: String(d.dir ?? ''),
+        logHeld: d.logHeld === true,
+        listenerPid: Number.isFinite(Number(d.listenerPid)) && d.listenerPid !== null ? Number(d.listenerPid) : null,
+      })),
     }
   },
 }

@@ -22,6 +22,7 @@ import type {
   CreateServerRequest,
   CreationInfo,
   CreationJobStatus,
+  ReachabilityReport,
   RemoveFailedResult,
   TunnelStatus,
   TunnelClaimStatus,
@@ -275,6 +276,8 @@ export const dashboard = {
    */
   control: (id: string, action: 'start' | 'stop' | 'restart') =>
     sendControl(API.control(id, action)),
+  /** Measured reachability for the Addresses page; see ReachabilityReport. */
+  getReachability: () => get<ReachabilityReport>(API.addressesReachability),
   runCommand: (id: string, command: string) => sendCommand(API.runCommand(id), command),
 
   /**

@@ -49,6 +49,7 @@ import { readWorlds } from './worlds'
 import { historyFor } from './history'
 import { validateAttachCandidate, attachDir, detachDir, setLaunchMethod } from './attach'
 import { scanForServers } from './scan'
+import { reachabilityFor } from './reachability'
 import { consoleBus, syncConsoles, backlogFor, stopAllConsoles } from './consoles'
 import { refreshPublicIp, acknowledgeIpChange } from './network'
 import { loadConfig, dataDir, type AppConfig } from './config'
@@ -794,6 +795,24 @@ export async function buildServer({ version }: Deps): Promise<FastifyInstance> {
     const session = require_(req, reply, 'admin', 'discover.scan')
     if (!session) return
     return scanForServers(req.query.fresh === '1' ? { maxAgeMs: 0 } : {})
+  })
+
+  /**
+   * Reachability for the Addresses page (2026-08-06): a public address was
+   * once offered for a server that could not bind, had no firewall rule and
+   * no router forward, and the page named none of it. Measured on demand,
+   * never on the ten-second loop: one firewall read shared across the fleet,
+   * one bind read and up to two TCP probes per server. Viewer-level, it
+   * reads and probes and changes nothing.
+   */
+  app.get(API.addressesReachability, async (req, reply) => {
+    if (!require_(req, reply, 'viewer', 'addresses.reachability')) return
+    const snap = latest ?? (await doScan())
+    const live = snap.servers.filter((s) => s.classification === 'live')
+    return reachabilityFor(
+      live.map((s) => ({ id: s.id, dir: s.dir, gamePort: s.gamePort })),
+      snap.network.lanAddress,
+    )
   })
 
   app.post(API.attachValidate, async (req, reply) => {
