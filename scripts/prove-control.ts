@@ -80,6 +80,8 @@ type Snap = {
     name: string
     dir: string
     health: string
+    healthDetail: string
+    proc: unknown
     launchStrategy: string
     launchDetail: string
     controlBusy: boolean
@@ -174,13 +176,43 @@ const stopped = snap.servers.find((s) => s.health === 'DOWN')
 if (!stopped) {
   /**
    * This proof's world is PRODUCTION: it aims real refusals at a real
-   * stopped server. A machine with no fleet (a CI runner, a fresh clone)
-   * cannot provide that world, and a proof that cannot run must say so
-   * rather than fail as though the code were broken, or pass as though it
-   * had checked something. Same SKIP convention as prove-backup-policy.
+   * stopped server. "No stopped server" has THREE causes, and only two of
+   * them are the environment's fault. Conflating them is how this proof was
+   * silenced for a whole defect cycle (2026-08-06): identity doubt from VS
+   * Code's Java made every stopped server read UNKNOWN instead of DOWN, so
+   * the no-target branch fired the skip written for fleetless CI runners --
+   * exit 0, wrong reason, and the one suite that exercises the start guard
+   * against the real service never ran while the guard's surroundings were
+   * broken. A defect must not be able to hide the proof that would catch
+   * it (docs/proof-coverage.md, third instance).
    */
-  console.log('\n  SKIP  this proof needs a real fleet with at least one stopped server.')
-  console.log('        Nothing was checked here. Run it on the host that has the servers.')
+  const doubted = snap.servers.filter((s) => s.health === 'UNKNOWN' && !s.proc)
+  if (snap.servers.length === 0) {
+    // A machine with no fleet (a CI runner, a fresh clone) cannot provide
+    // this world. Same SKIP convention as prove-backup-policy.
+    console.log('\n  SKIP  this proof needs a real fleet with at least one stopped server.')
+    console.log('        Nothing was checked here. Run it on the host that has the servers.')
+    process.exit(0)
+  }
+  if (doubted.length > 0) {
+    // A fleet IS present, but its stopped servers cannot be certified
+    // stopped. That is not an environment: it is the identity layer failing
+    // in production, the exact state this proof exists downstream of. FAIL,
+    // loudly, naming the doubt, so the silencing is a red build and not a
+    // quiet exit 0.
+    console.error('\n  FAIL  a fleet is present but no server can be certified stopped:')
+    for (const s of doubted) {
+      console.error(`        ${s.name}: ${s.health}. ${s.healthDetail}`)
+    }
+    console.error('        Identity doubt is hiding the stopped target this proof needs. That doubt')
+    console.error('        silenced this proof once (2026-08-06, VS Code\'s Java); it does not get to')
+    console.error('        do it silently again. Fix the doubt, then re-run.')
+    process.exit(1)
+  }
+  // Every server is genuinely running: an honest state with nothing to aim
+  // refusals at. Skip with the TRUE reason, not the fleetless one.
+  console.log('\n  SKIP  every server in the fleet is running; there is no stopped server to aim')
+  console.log('        refusals at. Stop one (or wait for one to be stopped) and re-run.')
   process.exit(0)
 }
 console.log(`  aiming refusals at ${stopped.name} (${stopped.health}, launcher ${stopped.launchStrategy})`)

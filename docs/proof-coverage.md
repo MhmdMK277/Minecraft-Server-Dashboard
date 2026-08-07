@@ -75,6 +75,68 @@ masked because signal 1 was answering for every server. That is the same shape o
 failure as the original: a component doing nothing, hidden by another that
 happened to succeed.
 
+### The third instance: a defect that silenced its own proof (2026-08-07)
+
+`prove-control` aims real refusals at a real stopped server, so it begins by
+finding one: `snap.servers.find((s) => s.health === 'DOWN')`. When none
+existed, it skipped with exit 0 and a message written for the one cause anyone
+had imagined, a machine with no fleet (a CI runner).
+
+Then the VS Code defect arrived: an unattributed Java process cast fleet-wide
+identity doubt, and every genuinely stopped server read `UNKNOWN` instead of
+`DOWN`. A full fleet was present, half of it stopped, and the proof found no
+target, so it fired the fleetless skip: **exit 0, wrong reason, on the exact
+machine it exists to test**. The suite that exercises the start guard against
+the real service was un-runnable for the whole life of the defect, and nothing
+recorded that as anything other than a routine skip. A defect that hides a
+proof from running is worse than the defect itself, because it removes the
+thing that would have caught it -- and it hides the NEXT defect too, for as
+long as it lives.
+
+This is the first lesson in a new coat. There, proofs ran in a world nobody
+had named and their green meant nothing about production. Here, a proof's
+**precondition** encoded an assumption nobody had named (a stopped server
+reads `DOWN`), and when a defect broke that assumption the proof's silence
+meant nothing about the code. The generalisation:
+
+> A skip is a claim about the environment. If the skip's trigger cannot
+> distinguish "the environment lacks the precondition" from "the code under
+> test broke the precondition", a defect can silence the proof and wear the
+> skip as camouflage.
+
+**What was done about it.** `prove-control`'s no-target branch now splits the
+three causes: an empty fleet skips (exit 0, the CI case); a fleet whose
+stopped servers read `UNKNOWN` with no process **fails** (exit 1, naming each
+doubted server and its health detail), because identity doubt hiding the
+target is the defect state, not an environment; a fleet that is entirely
+running skips with that stated as the reason. The same sweep fixed
+`crossvalidate` §6, which had the sibling failure mode (fleet state frozen
+into a fixture, so it went red whenever today's running set differed from
+capture day: a suite that cries wolf gets ignored, which silences it just as
+effectively). It now compares both implementations live at the same moment,
+and its two preconditions (mcbackup.py present, something running) skip out
+loud with the remedy printed.
+
+**The survey, so this is a checked claim and not a hope.** Every suite's
+environmental preconditions and what happens when they fail:
+
+| Suite | Precondition | On failure | Can a defect silence it? |
+| --- | --- | --- | --- |
+| `prove-control` | a `DOWN` server exists | split as above | no longer: the doubt state is a loud FAIL |
+| `crossvalidate` §6 | mcbackup.py present; something running | loud SKIP with remedy; live-vs-live otherwise | no longer state-frozen; a TS/python disagreement is always red |
+| `prove-identity`, world gate | scheduler-started session-0 server running | **FAIL** with remedy | no: failure is loud by design |
+| `prove-observer-lag` | a HEALTHY RCON server | exit 1 with remedy | no: loud |
+| `prove-backup-policy`, `prove-restart`, `prove-stall` | `MCDASH_BACKUP_SCRIPT` | loud SKIP, counted in the total | no: printed and counted |
+| `prove-console-noise` | servers root with real logs | loud SKIP, counted | no: printed and counted |
+| `prove-backup-route` | at least one server directory | loud SKIP | trigger is directory existence, which no process-state defect can fake |
+| `prove-portability` | none (fake dir, no process) | runs anywhere | it asserts `DOWN` for its fake servers, so fleet-level doubt from a genuinely ambiguous process on the host would FAIL it red -- loud, and arguably correct: the doubt is real. The ruled-out rule (spec §14) keeps the common IDE-java case from tripping it. |
+| `accept-attach` | `--source` folder | loud SKIP with remedy | no |
+| `accept-tunnel-live` | `MCDASH_TUNNEL_WORLD` | documented, env-gated | no |
+| `accept-creation` | doubt-free occupancy to certify its own server stopped | its 120 s poll never certifies, the check FAILS red | loud, though the red would read as a stop failure rather than naming the doubt; acceptable for a hand-run acceptance script, noted here so the next reader recognises the shape |
+
+No other suite selects its targets by live health state; the two that did are
+the two fixed above.
+
 ---
 
 ## Coverage table

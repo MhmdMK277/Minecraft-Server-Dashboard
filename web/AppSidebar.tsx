@@ -1,7 +1,6 @@
 import {
   Activity,
   Archive,
-  ArrowLeft,
   ChevronsUpDown,
   Dices,
   Earth,
@@ -29,7 +28,11 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarRail,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import {
   DropdownMenu,
@@ -74,14 +77,119 @@ function viewActive(view: Route, route: Route): boolean {
 }
 
 /**
- * The navigation rail. Two contexts, the VoxelDash model:
+ * One server in the tree.
  *
- * On fleet views: the three views plus one entry per live server, each
- * carrying the same tone + confidence indicator as its row, so the sidebar
- * is a miniature of the board and a fault is visible from every screen.
+ * The expansion is derived from the ROUTE, never from local open/closed
+ * state: the server named in the URL is the one whose pages show, exactly
+ * one at a time, so a deep link or a refresh lands already expanded and
+ * there is no chevron state to get out of sync with where the reader
+ * actually is.
  *
- * Inside a server: a way back, that server's pages, and the same server
- * list as a switcher. The colour channel still belongs to the lamps.
+ * On the icon-collapsed rail the sub-list cannot render (the sidebar hides
+ * it at icon width), so the row becomes a flyout: clicking the lamp opens a
+ * menu of that server's pages. Deliberately the SAME DropdownMenu primitives
+ * the footer account menu already uses -- an existing pattern, not new
+ * machinery. The `tooltip` prop is NOT passed in that mode: SidebarMenuButton
+ * would wrap itself in a TooltipTrigger and stacking a DropdownMenuTrigger
+ * on top of that gives Radix two asChild parents fighting over one button.
+ */
+function ServerNavItem({
+  s,
+  route,
+  isAdmin,
+  closeMobile,
+}: {
+  s: ServerStatus
+  route: Route
+  isAdmin: boolean
+  closeMobile: () => void
+}) {
+  const { state, isMobile } = useSidebar()
+  const iconRail = state === 'collapsed' && !isMobile
+  const selected = route.name === 'server' && route.id === s.id
+  const v = verdict(s)
+  const pages = SERVER_NAV.filter((n) => !n.adminOnly || isAdmin)
+
+  const lamp = (
+    <span className={`flex size-4 items-center justify-center ${TONE_TEXT[v.tone]}`}>
+      <Indicator tone={v.tone} confidence={v.confidence} large={v.attention} />
+    </span>
+  )
+
+  if (iconRail) {
+    return (
+      <SidebarMenuItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <SidebarMenuButton isActive={selected}>
+              {lamp}
+              <span className="truncate">{s.name}</span>
+            </SidebarMenuButton>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" align="start" className="w-52">
+            <DropdownMenuLabel className="grid gap-0.5 font-normal">
+              <span className="text-[12px] font-medium">{s.name}</span>
+              <span className="prose-line text-[11px] text-muted-foreground">{verdictSentence(v)}</span>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {pages.map((n) => (
+              <DropdownMenuItem key={n.page} asChild>
+                <a href={href({ name: 'server', id: s.id, page: n.page })}>
+                  <n.icon />
+                  {n.label}
+                </a>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    )
+  }
+
+  return (
+    <SidebarMenuItem>
+      {/* The row itself goes to Overview, which is also what expands it.
+          Server rows deliberately carry NO accent: their colour channel
+          belongs to the status lamp; the accent marks the active page. */}
+      <SidebarMenuButton asChild isActive={selected} tooltip={`${s.name}: ${verdictSentence(v)}`}>
+        <a href={href({ name: 'server', id: s.id, page: 'overview' })} onClick={closeMobile}>
+          {lamp}
+          <span className="truncate">{s.name}</span>
+        </a>
+      </SidebarMenuButton>
+      {selected && (
+        <SidebarMenuSub>
+          {pages.map((n) => (
+            <SidebarMenuSubItem key={n.page}>
+              <SidebarMenuSubButton
+                asChild
+                isActive={route.name === 'server' && route.page === n.page}
+                className="data-[active=true]:text-sidebar-primary"
+              >
+                <a href={href({ name: 'server', id: s.id, page: n.page })} onClick={closeMobile}>
+                  <n.icon />
+                  <span>{n.label}</span>
+                </a>
+              </SidebarMenuSubButton>
+            </SidebarMenuSubItem>
+          ))}
+        </SidebarMenuSub>
+      )}
+    </SidebarMenuItem>
+  )
+}
+
+/**
+ * The navigation rail: ONE tree, no modes (operator decision 2026-08-07,
+ * replacing the two-context VoxelDash model).
+ *
+ * The top-level views stay visible everywhere. The server list stays visible
+ * everywhere, each entry carrying the same tone + confidence indicator as its
+ * board row, so the sidebar remains a miniature of the board and a fault is
+ * visible from every screen. The server named in the route expands IN PLACE:
+ * its pages nest under its row, so the reader can see where they are and
+ * switch servers without leaving anything. The colour channel still belongs
+ * to the lamps; the single accent marks the active view or page.
  */
 export function AppSidebar({
   route,
@@ -94,12 +202,22 @@ export function AppSidebar({
   user: SessionUser
   onSignOut: () => void
 }) {
+  const { isMobile, setOpenMobile } = useSidebar()
+  // On the phone-width sheet, choosing a destination must also dismiss the
+  // sheet, or the page just navigated to stays hidden behind it.
+  const closeMobile = () => {
+    if (isMobile) setOpenMobile(false)
+  }
+
   // never-started rides along: a fresh creation must be navigable to be started.
   const live = servers.filter(
     (s) => s.classification === 'live' || s.classification === 'never-started',
   )
   const isAdmin = user.role === 'admin'
   const current = route.name === 'server' ? servers.find((s) => s.id === route.id) : undefined
+  // A retired or stale server opened from the board is not in the live list,
+  // but "where am I" must never break: it joins the tree while selected.
+  const listed = current && !live.some((s) => s.id === current.id) ? [...live, current] : live
 
   return (
     <Sidebar variant="inset" collapsible="icon">
@@ -107,7 +225,7 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild className="h-auto py-2">
-              <a href={href({ name: 'fleet' })}>
+              <a href={href({ name: 'fleet' })} onClick={closeMobile}>
                 {/* The brand block: glyph in a tile, name, version tag. The
                     tile is what survives icon-collapse, so it reads alone.
                     The wordmark wraps rather than clipping (layout law 1). */}
@@ -129,106 +247,45 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        {current ? (
-          <>
-            <SidebarGroup>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton asChild tooltip="All servers">
-                      <a href={href({ name: 'fleet' })}>
-                        <ArrowLeft />
-                        <span>All servers</span>
-                      </a>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {VIEWS.filter((v) => !v.adminOnly || isAdmin).map((v) => (
+                <SidebarMenuItem key={v.label}>
+                  {/* The active view carries the accent. Server entries
+                      deliberately do NOT: their colour channel belongs to
+                      the status indicator. */}
+                  <SidebarMenuButton
+                    asChild
+                    isActive={viewActive(v.route, route)}
+                    tooltip={v.label}
+                    className="data-[active=true]:text-sidebar-primary"
+                  >
+                    <a href={href(v.route)} onClick={closeMobile}>
+                      <v.icon />
+                      <span>{v.label}</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-            <SidebarGroup>
-              <SidebarGroupLabel className="gap-1.5 font-mono uppercase tracking-[0.1em]">
-                <span className={TONE_TEXT[verdict(current).tone]}>
-                  <Indicator
-                    tone={verdict(current).tone}
-                    confidence={verdict(current).confidence}
-                    large={false}
-                  />
-                </span>
-                <span className="truncate">{current.name}</span>
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {SERVER_NAV.filter((n) => !n.adminOnly || isAdmin).map((n) => (
-                    <SidebarMenuItem key={n.page}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={route.name === 'server' && route.page === n.page}
-                        tooltip={n.label}
-                        className="data-[active=true]:text-sidebar-primary"
-                      >
-                        <a href={href({ name: 'server', id: current.id, page: n.page })}>
-                          <n.icon />
-                          <span>{n.label}</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </>
-        ) : (
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {VIEWS.filter((v) => !v.adminOnly || isAdmin).map((v) => (
-                  <SidebarMenuItem key={v.label}>
-                    {/* The active view carries the accent. Server entries
-                        deliberately do NOT: their colour channel belongs to
-                        the status indicator. */}
-                    <SidebarMenuButton
-                      asChild
-                      isActive={viewActive(v.route, route)}
-                      tooltip={v.label}
-                      className="data-[active=true]:text-sidebar-primary"
-                    >
-                      <a href={href(v.route)}>
-                        <v.icon />
-                        <span>{v.label}</span>
-                      </a>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
-
-        {live.length > 0 && (
+        {listed.length > 0 && (
           <SidebarGroup>
             <SidebarGroupLabel>Servers</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {live.map((s) => {
-                  const v = verdict(s)
-                  return (
-                    <SidebarMenuItem key={s.id}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={route.name === 'server' && route.id === s.id}
-                        tooltip={`${s.name}: ${verdictSentence(v)}`}
-                      >
-                        <a href={href({ name: 'server', id: s.id, page: 'overview' })}>
-                          <span className={`flex size-4 items-center justify-center ${TONE_TEXT[v.tone]}`}>
-                            <Indicator tone={v.tone} confidence={v.confidence} large={v.attention} />
-                          </span>
-                          <span className="truncate">{s.name}</span>
-                        </a>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })}
+                {listed.map((s) => (
+                  <ServerNavItem
+                    key={s.id}
+                    s={s}
+                    route={route}
+                    isAdmin={isAdmin}
+                    closeMobile={closeMobile}
+                  />
+                ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

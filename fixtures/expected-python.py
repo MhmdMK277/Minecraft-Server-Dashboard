@@ -6,11 +6,17 @@ Only the surface both implementations genuinely share is emitted:
   - SLP payload normalisation   (the normaliser inside mcbackup.slp_ping)
   - world folder resolution     (mcbackup.world_dirs / level_dat_path)
   - directory classification    (mcbackup.discover_servers)
-  - process identity            (mcbackup.pid_of_server)
 
 TPS parsing is deliberately absent: the backup script does not parse TPS, so
 there is nothing to cross-validate against. The dashboard's TPS parsers are
 tested against the captured raw fixtures instead.
+
+Process identity is deliberately NOT emitted any more (2026-08-07). It was a
+snapshot of pid_of_server at generation time, which is transient fleet state,
+not behaviour: crossvalidate went red whenever today's running set differed
+from capture day, red for reasons unrelated to the code. crossvalidate.ts
+section 6 now runs pid_of_server itself, live, and compares both
+implementations at the same moment.
 """
 import json, os, re, sys
 
@@ -21,7 +27,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 servers = json.load(open(os.path.join(HERE, "servers.json"), encoding="utf-8"))
 samples = json.load(open(os.path.join(HERE, "samples.json"), encoding="utf-8"))
 
-out = {"playerCount": {}, "slpReady": {}, "worlds": {}, "discovery": {}, "identity": {}}
+out = {"playerCount": {}, "slpReady": {}, "worlds": {}, "discovery": {}}
 
 
 class FakeRcon:
@@ -64,10 +70,6 @@ out["discovery"] = {
     "servers": sorted(n for n, _ in found),
     "notServers": sorted(rejected),
 }
-
-for e in servers:
-    if e["isServer"]:
-        out["identity"][e["name"]] = m.pid_of_server(os.path.join(m.SERVERS_ROOT, e["name"])) is not None
 
 # Normalisation: feed the tricky shapes through the python normaliser.
 def py_normalise(text):

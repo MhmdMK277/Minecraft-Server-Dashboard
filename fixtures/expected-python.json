@@ -91,14 +91,6 @@
       "clientpacks"
     ]
   },
-  "identity": {
-    "MC 1.21.11": true,
-    "MC 1.21.4": true,
-    "MC 1.21.4 - Copy": false,
-    "MC GTNH": true,
-    "MC Skyblock": true,
-    "MC Tech": false
-  },
   "normalise": {
     "object": {
       "version": {

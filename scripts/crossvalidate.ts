@@ -8,7 +8,9 @@
  *
  * Run: npx tsx scripts/crossvalidate.ts
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { homedir } from 'node:os'
 import { join, dirname, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parsePlayerCount, pingIsReady, normaliseSlpPayload, parseTps, tpsCommandFor } from '../server/parse'
@@ -89,25 +91,79 @@ check('servers', tsServers, expected.discovery.servers)
 check('not servers', tsNot, expected.discovery.notServers)
 
 console.log('\n=== 6. process identity, port is not identity (spec §1) ===')
-// Hints are passed for the same reason discovery passes them: a server started
-// by a boot task has no readable command line, and without the second signal
-// every one of these would report as not running. Ports come from the live
-// server.properties, never from the fixture -- the fixture deliberately does not
-// record them.
-const jvms = await enumerateJvms(
-  servers.map((e) => ({ dir: e.dir as string, gamePort: gamePortOf(e.dir as string) })),
-)
-// Which world this is validating, stated out loud. A green 37/37 used to mean
-// "identity works" when it only meant "identity works for servers someone
-// started by hand", which is not how these servers run. See docs/proof-coverage.md.
-const world = describeWorld(jvms)
-printWorld(world)
-check('the servers under test are started the way production starts them', world.isProduction, true)
-for (const [name, want] of Object.entries(expected.identity as Record<string, boolean>)) {
-  const e = servers.find((s) => s.name === name)
-  // A fixture naming a directory that no longer exists must fail the check, not
-  // crash the run -- the point of this script is to report every divergence.
-  check(name, e ? jvmForDir(jvms, e.dir) !== null : false, want)
+/**
+ * LIVE against LIVE, deliberately (2026-08-07). This section used to compare
+ * today's TypeScript answer against the PYTHON ANSWER FROZEN AT FIXTURE
+ * GENERATION, so it went red whenever the fleet's running set differed from
+ * capture day: red for reasons unrelated to the code, which teaches the
+ * reader to ignore the suite. Both implementations now answer the same
+ * question at the same moment: which of these directories has a JVM right
+ * now. No fleet state is baked into the fixture any more.
+ *
+ * Preconditions are stated out loud, never silently absorbed:
+ *   - mcbackup.py (the independent Python implementation) must be present:
+ *     without it this section SKIPs with the remedy printed, the
+ *     prove-backup-policy convention, and says plainly that identity was
+ *     not checked.
+ *   - something must be running: if BOTH implementations see an empty
+ *     fleet there is nothing for them to disagree on, and that agreement
+ *     is recorded as the one check this state supports.
+ * The production-world gate still applies whenever anything is running: a
+ * green run must not mean "identity works for hand-started servers only"
+ * (docs/proof-coverage.md).
+ *
+ * Hints are passed for the same reason discovery passes them: a server
+ * started by a boot task has no readable command line, and without the
+ * second signal every one of these would report as not running. Ports come
+ * from the live server.properties, never from the fixture.
+ */
+const identityNames = servers.filter((e) => e.isServer).map((e) => e.name as string)
+const backupScript = process.env.MCDASH_BACKUP_SCRIPT ?? join(homedir(), 'mcbackup', 'mcbackup.py')
+const identityHints = servers.map((e) => ({ dir: e.dir as string, gamePort: gamePortOf(e.dir as string) }))
+
+const pythonIdentity = (): Record<string, boolean> => {
+  const code = [
+    'import json, os, sys',
+    'sys.path.insert(0, os.path.dirname(sys.argv[1]))',
+    'import mcbackup as m',
+    'names = json.loads(sys.argv[2])',
+    'print(json.dumps({n: m.pid_of_server(os.path.join(m.SERVERS_ROOT, n)) is not None for n in names}))',
+  ].join('\n')
+  const out = execFileSync('python', ['-c', code, backupScript, JSON.stringify(identityNames)], {
+    encoding: 'utf8',
+    timeout: 60_000,
+  })
+  return JSON.parse(out.trim()) as Record<string, boolean>
+}
+
+if (!existsSync(backupScript)) {
+  console.log(`  SKIP  the live identity cross-check needs mcbackup.py (looked at ${backupScript}).`)
+  console.log('        Set MCDASH_BACKUP_SCRIPT to its path. Identity was NOT checked in this run.')
+} else {
+  let py = pythonIdentity()
+  let jvms = await enumerateJvms(identityHints)
+  const tsFor = (name: string) =>
+    jvmForDir(jvms, servers.find((s) => s.name === name)!.dir as string) !== null
+  // A server starting or stopping between the two reads is a state change,
+  // not a divergence. Both sides are re-read once before a disagreement is
+  // believed, precisely so this suite cannot cry wolf on a mid-run restart.
+  if (identityNames.some((n) => tsFor(n) !== py[n])) {
+    py = pythonIdentity()
+    jvms = await enumerateJvms(identityHints)
+  }
+  const pythonSeesNothing = identityNames.every((n) => !py[n])
+  if (jvms.length === 0 && pythonSeesNothing) {
+    check('with nothing running, both implementations agree the fleet is empty', true, true)
+    console.log('  SKIP  per-server attribution: nothing is running, so there is nothing to attribute.')
+    console.log('        Start a server to exercise the live comparison. Doubt-vs-absence is proven in prove-identity.')
+  } else {
+    const world = describeWorld(jvms)
+    printWorld(world)
+    check('the servers under test are started the way production starts them', world.isProduction, true)
+    for (const name of identityNames) {
+      check(`${name} (python says running=${py[name]})`, tsFor(name), py[name])
+    }
+  }
 }
 
 console.log('\n=== 7. TPS command selection + parsing (dashboard-only, vs captured raw) ===')
