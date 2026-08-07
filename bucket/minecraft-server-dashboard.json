@@ -1,13 +1,13 @@
 {
-    "version": "0.4.0",
+    "version": "0.5.0",
     "description": "Attach-model dashboard for Minecraft servers started outside the app",
     "homepage": "https://github.com/MhmdMK277/Minecraft-Server-Dashboard",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/MhmdMK277/Minecraft-Server-Dashboard/releases/download/v0.4.0/minecraft-server-dashboard-0.4.0-win-x64.zip",
-            "hash": "64ed4958b02a1a6554d99a687c9bcbfb4d274ecfabb409418377514233d3fa91",
-            "extract_dir": "minecraft-server-dashboard-0.4.0-win-x64"
+            "url": "https://github.com/MhmdMK277/Minecraft-Server-Dashboard/releases/download/v0.5.0/minecraft-server-dashboard-0.5.0-win-x64.zip",
+            "hash": "b90eeb79f4f21208c075af14876f5423413b9214eabf307f1de3261ab89825f3",
+            "extract_dir": "minecraft-server-dashboard-0.5.0-win-x64"
         }
     },
     "shortcuts": [
