@@ -23,6 +23,8 @@ import { scanJvms, jvmForDir, type DirHint, type JvmProcess } from './platform'
 
 /** Last logged attribution per directory; see the [identity] log block in scan(). */
 const lastAttribution = new Map<string, string>()
+/** Last logged ruled-out evidence per pid, same change-only discipline. */
+const lastRuledOut = new Map<number, string>()
 import { slpPing } from './slp'
 import { Rcon } from './rcon'
 import { assessHealth, RCON_TIMEOUT_MS } from './health'
@@ -221,6 +223,20 @@ export async function scan(
     }
   }
 
+  // Same change-only discipline for exclusions: one line when a java process
+  // is first ruled out (or its evidence changes), so the service log records
+  // WHY a machine with a foreign JVM still reads its stopped servers as DOWN.
+  const ruledOutNow = new Set(scan.ruledOut.map((r) => r.pid))
+  for (const r of scan.ruledOut) {
+    if (lastRuledOut.get(r.pid) !== r.evidence) {
+      console.log(`[identity] ruled out pid ${r.pid}${r.exe ? ` (${r.exe})` : ''}: ${r.evidence}`)
+      lastRuledOut.set(r.pid, r.evidence)
+    }
+  }
+  for (const pid of lastRuledOut.keys()) {
+    if (!ruledOutNow.has(pid)) lastRuledOut.delete(pid)
+  }
+
   // Live first, then never-started (the row the operator is most likely
   // about to act on), then retired/stale, each alphabetical. Retired and
   // stale stay visible -- hiding them means forgetting they need cleaning up.
@@ -323,6 +339,10 @@ export async function scan(
       ok: scan.ok,
       failure: scan.failure,
       unattributed: scan.unattributed.length,
+      // Java processes positively excluded from doubt, with their evidence.
+      // On the wire so the fleet panel can show WHY stopped servers still
+      // read DOWN while, say, VS Code's Java is running.
+      ruledOut: scan.ruledOut.map((r) => ({ pid: r.pid, exe: r.exe, evidence: r.evidence })),
       // A JVM whose directory we know but whose directory we are not
       // watching. See the note on IdentityScan.unwatched: this used to fall
       // through both lists and be reported nowhere.

@@ -17,6 +17,7 @@ export type {
   ProviderUnavailable,
   DirHint,
   UnattributedJvm,
+  RuledOutJvm,
   Attribution as JvmAttribution,
   StartedBy,
 } from './types'

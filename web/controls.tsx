@@ -161,6 +161,17 @@ export function ControlPanel({ s, canEdit }: { s: ServerStatus; canEdit: boolean
   const players = s.players?.length ?? s.slp?.playersOnline ?? 0
   const runnable = s.health !== 'DOWN' || !!s.proc
   const canStart = s.launchStrategy !== 'none'
+  /**
+   * Start is offered whenever NO process is attributed to this directory,
+   * including UNKNOWN. It used to hide behind `!runnable`, which made UNKNOWN
+   * a dead end: a stopped server under fleet-wide identity doubt showed only
+   * Stop/Restart, and the defect-6 acknowledgment path (which lives behind a
+   * start ATTEMPT) was unreachable exactly when it was needed. The safety is
+   * not this button's visibility: startServer re-checks identity inside its
+   * lock and refuses under doubt, naming what it cannot account for.
+   */
+  const startable = !s.proc && canStart
+  const uncertain = s.health === 'UNKNOWN' && !s.proc
 
   const run = (action: ControlAction, acknowledged?: Array<{ pid: number; startedAt: string }>) => {
     if (action === 'command') return
@@ -205,7 +216,7 @@ export function ControlPanel({ s, canEdit }: { s: ServerStatus; canEdit: boolean
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        {!runnable && canStart && (
+        {startable && (
           <Btn
             onClick={() => run('start')}
             disabled={busy}
@@ -213,7 +224,7 @@ export function ControlPanel({ s, canEdit }: { s: ServerStatus; canEdit: boolean
             label={pending === 'start' ? 'Starting…' : 'Start'}
           />
         )}
-        {!runnable && !canStart && (
+        {!s.proc && !canStart && (
           <span className="prose-line text-[11px] leading-relaxed text-faint">
             Start not available: {s.launchDetail}
           </span>
@@ -264,6 +275,17 @@ export function ControlPanel({ s, canEdit }: { s: ServerStatus; canEdit: boolean
           {s.launchStrategy === 'none' ? 'no launcher' : s.launchStrategy}
         </span>
       </div>
+
+      {/* UNKNOWN is a state, not a dead end. Both directions stay offered and
+          each is guarded by the code it names, so the sentence is checkable. */}
+      {uncertain && (
+        <p className="prose-line mt-1.5 text-[11px] leading-relaxed text-faint">
+          Whether this server is running could not be determined, so both actions stay available.
+          Start re-checks identity inside its own lock and refuses under doubt, naming any process
+          it cannot account for. Stop only asks the server to shut down over RCON and never kills a
+          process.
+        </p>
+      )}
 
       {/* The server's own sentence is the result. A refusal from the guard reads
           "already running as pid 9876…" and that is what gets shown, verbatim.

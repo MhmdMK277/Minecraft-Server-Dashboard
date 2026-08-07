@@ -759,6 +759,24 @@ export const IdentityScan = z.object({
   failure: z.string().nullable(),
   /** Running java processes that could not be matched to any directory. */
   unattributed: z.number(),
+  /**
+   * Java processes positively excluded from doubt: each one's own command
+   * line names a program (an absolute -jar, or an all-absolute classpath)
+   * outside every watched server directory, so it cannot be a tracked
+   * server. Carried with the evidence sentence, because "ruled out" is a
+   * claim and the reader deserves the reason. server/platform/windows.ts
+   * foreignEvidence() is the code behind it. Default [] so snapshots
+   * rendered from older captures still parse.
+   */
+  ruledOut: z
+    .array(
+      z.object({
+        pid: z.number(),
+        exe: z.string().nullable(),
+        evidence: z.string(),
+      }),
+    )
+    .default([]),
   tookMs: z.number(),
   loopBlockedMs: z.number(),
   bySignal: z.object({

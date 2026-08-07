@@ -69,7 +69,9 @@ const isOccupied = (dir: string) => scan.occupiedDirs.some((o) => nkey(o) === nk
 
 console.log(`servers root : ${cfg.serversRoot}`)
 console.log(`candidates   : ${names.length}`)
-console.log(`attributed   : ${scan.jvms.length}   unattributed: ${scan.unattributed.length}`)
+console.log(
+  `attributed   : ${scan.jvms.length}   unattributed: ${scan.unattributed.length}   ruled out: ${scan.ruledOut.length}`,
+)
 console.log(`scan         : ok=${scan.ok} ${scan.tookMs} ms, loop blocked ${scan.loopBlockedMs} ms`)
 console.log(`phases       : ${Object.entries(scan.phases).map(([k, v]) => `${k} ${v}ms`).join('  ')}`)
 console.log(`ports needed : ${scan.portsEnumerated}`)
@@ -499,6 +501,144 @@ check(
 
   srv.close()
   holder.kill()
+}
+
+// ======================= F. a provably foreign JVM is ruled out, not doubted
+//
+// Found 2026-08-07, live: VS Code's Java language server (redhat.java's
+// jdtls, running for as long as the editor is open) sat unattributed, and
+// unattributed meant fleet-wide doubt: four genuinely stopped servers read
+// UNKNOWN indefinitely and none could be started. Its command line names an
+// absolute -jar inside the .vscode extensions tree, which is positive
+// evidence it is not any server we track. The rule under test
+// (foreignEvidence in server/platform/windows.ts): rule out only on a
+// readable absolute program location outside every candidate; everything
+// else, an unreadable command line, a relative -jar, an argfile launch, a
+// jar inside a candidate, keeps its doubt. Wrongly ruling out a REAL
+// server's JVM would erase the doubt that stops a second JVM landing on its
+// world, so the conservative side of this rule is load-bearing, not polish.
+console.log('\n--- F. a provably foreign JVM is ruled out; real ambiguity keeps its doubt')
+{
+  const { foreignEvidence } = await import('../server/platform/windows')
+  const { occupancyOf } = await import('../server/control')
+
+  const F_A = 'C:\\srv\\MC Alpha'
+  const F_B = 'C:\\srv\\MC Beta'
+  const fHints: DirHint[] = [
+    { dir: F_A, gamePort: 25565 },
+    { dir: F_B, gamePort: 25566 },
+  ]
+  const fDirs = [
+    { dir: F_A, logHeld: false, port: 25565, listenerPid: null },
+    { dir: F_B, logHeld: false, port: 25566, listenerPid: null },
+  ]
+
+  // The exact shape observed live 2026-08-07 (pid 43300 on this host), with
+  // the machine-private username neutralised: VS Code's jdtls, session 1,
+  // absolute -jar into the extensions tree, -Declipse.application, --pipe.
+  const JDTLS_JAR =
+    'c:\\Users\\someone\\.vscode\\extensions\\redhat.java-1.55.0-win32-x64\\server\\plugins\\org.eclipse.equinox.launcher_1.7.200.v20250519-0528.jar'
+  const vscodeRow = {
+    pid: 43300, ppid: 100, sessionId: 1,
+    parentCmd: '"C:\\Users\\someone\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe" --type=extensionHost',
+    ownCmd: `"C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.5\\bin\\java.exe" --add-modules=ALL-SYSTEM -Declipse.application=org.eclipse.jdt.ls.core.id1 -Dosgi.checkConfiguration=true -Xmx1G -jar ${JDTLS_JAR} -configuration c:\\Users\\someone\\AppData\\Roaming\\Code\\User\\globalStorage\\redhat.java -data c:\\Users\\someone\\proj --pipe=\\\\.\\pipe\\lsp-1`,
+    ws: 524288000, priv: 524288000, basePri: 8, cpu100ns: 0, start: '2026-08-07T09:00:00.000Z',
+  }
+  // The Gradle-daemon shape: no -jar, one absolute classpath entry.
+  const gradleRow = {
+    pid: 43310, ppid: 100, sessionId: 1, parentCmd: '',
+    ownCmd: 'java -Xmx2g -cp C:\\Users\\someone\\.gradle\\wrapper\\dists\\gradle-8.9\\lib\\gradle-launcher-8.9.jar org.gradle.launcher.daemon.bootstrap.GradleDaemon',
+    ws: 1048576, priv: 1048576, basePri: 8, cpu100ns: 0, start: '2026-08-07T09:01:00.000Z',
+  }
+  const world = (jvms: unknown[]) =>
+    JSON.stringify({ jvms, tasks: [], parents: [[43300, 100], [43310, 100]], dirs: fDirs, phases: {}, portsEnumerated: false })
+
+  // F1. Foreign processes alone: ruled out, no doubt, occupancy CERTAIN.
+  setPsForProof(async () => world([vscodeRow, gradleRow]))
+  const f1 = await scanJvms(fHints)
+  setPsForProof(null)
+  check('F1. the scan succeeded', f1.ok, f1.failure ?? '')
+  check('F1. the jdtls and Gradle shapes are both ruled out', f1.ruledOut.length === 2,
+    JSON.stringify(f1.ruledOut.map((r) => r.pid)))
+  check('F1. and NOTHING is left unattributed, so there is no fleet doubt', f1.unattributed.length === 0,
+    JSON.stringify(f1.unattributed))
+  const ev = f1.ruledOut.find((r) => r.pid === 43300)?.evidence ?? ''
+  check('F1. the ruling carries the evidence: the -jar path, named', ev.includes(JDTLS_JAR), ev)
+  check('F1. the ruled-out entry keeps the exe path, never the arguments',
+    f1.ruledOut.every((r) => r.exe !== null && !/--pipe|-Declipse/.test(r.exe ?? '')),
+    JSON.stringify(f1.ruledOut.map((r) => r.exe)))
+  const o1 = await occupancyOf(F_A, f1)
+  check('F1. occupancy for a stopped server is CERTAIN, so it reads DOWN and Start is offered',
+    o1.certain && o1.pids.length === 0, JSON.stringify(o1))
+  const h1 = assessHealth({
+    kind: 'paper', hasProcess: false, uptimeSeconds: null, slp: null, rcon: null,
+    rconConfigured: true, identityDoubt: null,
+  })
+  check('F1. and the health verdict with no doubt is DOWN, not UNKNOWN', h1.health === 'DOWN', h1.health)
+
+  // F2. Real ambiguity keeps its doubt, next to the ruled-out pair.
+  const relativeJarRow = { // how the real servers here launch: cwd decides
+    pid: 95, ppid: 100, sessionId: 1, parentCmd: '',
+    ownCmd: 'java -Xms2048M -Xmx2048M -jar paper.jar nogui',
+    ws: 1, priv: 1, basePri: 8, cpu100ns: 0, start: '2026-08-07T09:02:00.000Z',
+  }
+  const blankRow = { // S4U session 0: the command line is unreadable
+    pid: 96, ppid: 100, sessionId: 0, parentCmd: null, ownCmd: null,
+    ws: 1, priv: 1, basePri: 8, cpu100ns: 0, start: '2026-08-07T09:03:00.000Z',
+  }
+  const insideJarRow = { // absolute jar INSIDE a candidate: location is not attribution
+    pid: 97, ppid: 100, sessionId: 1, parentCmd: '',
+    ownCmd: `java -jar "${F_A}\\server.jar" nogui`,
+    ws: 1, priv: 1, basePri: 8, cpu100ns: 0, start: '2026-08-07T09:04:00.000Z',
+  }
+  const mixedCpRow = { // one relative classpath entry spoils the ruling
+    pid: 98, ppid: 100, sessionId: 1, parentCmd: '',
+    ownCmd: 'java -cp C:\\tools\\a.jar;lib\\b.jar Main',
+    ws: 1, priv: 1, basePri: 8, cpu100ns: 0, start: '2026-08-07T09:05:00.000Z',
+  }
+  setPsForProof(async () => world([vscodeRow, gradleRow, relativeJarRow, blankRow, insideJarRow, mixedCpRow]))
+  const f2 = await scanJvms(fHints)
+  setPsForProof(null)
+  check('F2. a relative -jar, a blank command line, an inside-candidate jar and a mixed classpath ALL stay doubted',
+    f2.unattributed.map((u) => u.pid).sort((a, b) => a - b).join(',') === '95,96,97,98',
+    JSON.stringify(f2.unattributed.map((u) => u.pid)))
+  check('F2. while the two foreign shapes stay ruled out beside them', f2.ruledOut.length === 2)
+  const o2 = await occupancyOf(F_A, f2)
+  check('F2. occupancy is UNCERTAIN again: doubt survives for what deserves it',
+    !o2.certain && o2.pids.length === 0, JSON.stringify({ certain: o2.certain }))
+  check('F2. and the guard would name only the doubted four, never the ruled-out pair',
+    (o2.unaccounted ?? []).map((u) => u.pid).sort((a, b) => a - b).join(',') === '95,96,97,98',
+    JSON.stringify(o2.unaccounted?.map((u) => u.pid)))
+
+  // F3. The rule itself, at the edges.
+  const cands = [F_A, F_B]
+  check('F3. an empty candidate set rules nothing out: there is nothing to be outside of',
+    foreignEvidence(`java -jar ${JDTLS_JAR}`, []) === null)
+  check('F3. a quoted absolute jar with spaces is still ruled out',
+    foreignEvidence('java -jar "C:\\Program Files\\tool\\app with spaces.jar"', cands) !== null)
+  check('F3. the Forge argfile launch is NOT ruled out: the argfile contents are not read',
+    foreignEvidence('java @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.4.10/win_args.txt nogui', cands) === null)
+  check('F3. --class-path= with every entry absolute and outside is ruled out',
+    foreignEvidence('java --class-path=C:\\x\\a.jar;C:\\x\\b.jar Main', cands) !== null)
+  check('F3. a wildcard classpath entry locates its directory and is ruled out',
+    foreignEvidence('java -cp "C:\\gradle\\lib\\*" Main', cands) !== null)
+  // Quoted, as a real launcher writes a spaced path: unquoted it would split
+  // at the space and stop being the entry it claims to be.
+  check('F3. a classpath entry inside a candidate is NOT ruled out',
+    foreignEvidence(`java -cp "C:\\tools\\a.jar;${F_A}\\lib\\b.jar" Main`, cands) === null)
+  check('F3. -jar with no path after it is NOT ruled out',
+    foreignEvidence('java -jar', cands) === null)
+
+  // F4. The live fleet, through the same eyes: the lists are disjoint and
+  // every ruling carries its sentence. When VS Code's Java is running on
+  // this machine right now, it appears below, ruled out.
+  const attributedPids = new Set(scan.jvms.map((j) => j.pid))
+  const doubtedPids = new Set(scan.unattributed.map((u) => u.pid))
+  for (const r of scan.ruledOut) console.log(`  live ruled out: pid ${r.pid}: ${r.evidence}`)
+  check('F4. live: no ruled-out process is also attributed or doubted',
+    scan.ruledOut.every((r) => !attributedPids.has(r.pid) && !doubtedPids.has(r.pid)))
+  check('F4. live: every ruling names a path in its evidence',
+    scan.ruledOut.every((r) => /[A-Za-z]:[\\/]|\\\\/.test(r.evidence)))
 }
 
 stopObserverMonitor()

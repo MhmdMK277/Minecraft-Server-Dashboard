@@ -537,6 +537,31 @@ what it could **not** resolve (`ok: false`, `unattributed`, `occupiedDirs`) rath
 than returning a bare list, because an empty list is indistinguishable from a
 stopped fleet.
 
+**But doubt is reserved for what deserves it: a process that proves what it is
+casts none** (found 2026-08-07). VS Code's Java language server, running for as
+long as the editor is open on exactly the machines that self-host, sat
+unattributed and its mere existence held four genuinely stopped servers at
+`UNKNOWN` with no Start button, indefinitely. Its own command line named an
+absolute `-jar` inside the `.vscode` extensions tree: positive, readable
+evidence that the program it runs lives outside every directory we track. The
+rule (`foreignEvidence()` in the Windows provider): an unclaimed JVM is **ruled
+out** only when its command line names where its program lives, an absolute
+`-jar` (with `-jar` the JVM ignores the classpath, so the named jar *is* the
+application) or a classpath whose every entry is absolute, and every named
+place is outside every candidate directory. Everything else keeps its doubt:
+an unreadable session-0 command line, a relative `-jar` (how this fleet
+launches), an argfile launch (the Forge shape; argfile contents are not read),
+a jar *inside* a candidate (location is not attribution, §1). The one
+constructible counterexample, a tracked server launched from an out-of-tree
+jar, is covered by the held-log per-directory evidence, which travels
+independently of the fleet ruling and is never overridable. Ruled-out
+processes are reported in their own list with the evidence sentence, never
+silently dropped, and the service logs each ruling on change. Proof:
+`prove-identity` group F (the exact jdtls shape, the Gradle `-cp` daemon
+shape, four ambiguity shapes keeping their doubt, live-fleet disjointness) and
+`prove-concurrent-start` 5g (the real `startServer` proceeds past a ruled-out
+process with no acknowledgment, while an opaque process still refuses).
+
 **Cost.** The probe is one PowerShell invocation per scan, on a loop that runs
 every ten seconds, which is §11's shape with a subprocess instead of a `statSync`.
 Measured on this host: 667 ms p50, of which **0 ms** blocks our event loop, and the

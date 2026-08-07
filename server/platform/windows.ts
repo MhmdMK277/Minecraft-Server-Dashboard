@@ -7,6 +7,7 @@ import type {
   JvmProcess,
   JvmScan,
   ProcessProvider,
+  RuledOutJvm,
   StartedBy,
   UnattributedJvm,
 } from './types'
@@ -245,6 +246,102 @@ function dirFromCommandLine(parentCmd: string, ownCmd: string): string | null {
 
 const norm = (p: string) => p.replace(/[\\/]+$/, '').replace(/\\/g, '/').toLowerCase()
 
+/**
+ * Positive exclusion: is this java process PROVABLY not any candidate server?
+ *
+ * Returns the evidence sentence, or null when the process stays ambiguous.
+ *
+ * The failure this closes (2026-08-07): VS Code's Java language server, an
+ * extremely common process on exactly the machines that self-host, sat
+ * unattributed for as long as the editor was open, and unattributed meant
+ * fleet-wide doubt: four genuinely stopped servers read UNKNOWN indefinitely
+ * and none of them could be started. Doubt is the right default for a process
+ * we know NOTHING about (a session-0 S4U command line is unreadable, spec
+ * section 14). It is the wrong answer for a process that tells us exactly
+ * what it is.
+ *
+ * The rule. A process is ruled out only when its own command line names where
+ * the program it runs LIVES, and that place is outside every candidate
+ * directory:
+ *
+ *   - `-jar <absolute path>` outside every candidate. Conclusive: with -jar
+ *     the JVM ignores the classpath entirely, so the named jar IS the
+ *     application. A Minecraft server's jar lives in its own directory (the
+ *     Create page writes it there; every server on this host keeps it there).
+ *   - `-cp`/`-classpath`/`--class-path` where EVERY entry is absolute and
+ *     every entry is outside every candidate (the Gradle-daemon shape). One
+ *     relative entry spoils it: relative resolves against a working
+ *     directory we cannot read, which could be a candidate.
+ *
+ * Everything else stays ambiguous, deliberately: an unreadable command line,
+ * a relative -jar (`-jar paper.jar` is how real servers here launch), an
+ * argfile launch (`@libraries/...win_args.txt`, the Forge shape, and an
+ * argfile's contents are not read here), a jar INSIDE a candidate directory
+ * (present but not sufficient for attribution: the jar's location does not
+ * prove the working directory, and the dormant-duplicate lesson of spec
+ * section 1 applies).
+ *
+ * The one constructible counterexample, on the record: a tracked server
+ * deliberately launched from an out-of-tree jar (`java -jar D:\jars\x.jar`
+ * with its working directory inside a candidate) would be ruled out by this
+ * test. If such a server is RUNNING it holds `logs/latest.log` open in its
+ * directory -- measured across Paper 1.21.x, Forge 1.20.1, Forge 1.7.10 and
+ * vanilla -- and that per-directory evidence (occupiedDirs, signal 3, the
+ * never-overridable branch of the start guard) is carried independently of
+ * this fleet-level ruling, so the directory still reads occupied and Start
+ * still refuses. The exposure is the few seconds of a first-ever boot before
+ * latest.log exists, for a launch style nothing on this machine uses.
+ *
+ * With an empty candidate set there is nothing to be outside of, and nothing
+ * is ruled out.
+ */
+export function foreignEvidence(ownCmd: string, candidateDirs: string[]): string | null {
+  if (!ownCmd || candidateDirs.length === 0) return null
+
+  const tokens: string[] = []
+  const tokRe = /"([^"]*)"|(\S+)/g
+  let m: RegExpExecArray | null
+  while ((m = tokRe.exec(ownCmd))) tokens.push(m[1] ?? m[2]!)
+
+  // Drive-letter or UNC. Anything else resolves against an unreadable cwd.
+  const isAbsolute = (p: string) => /^[A-Za-z]:[\\/]/.test(p) || /^\\\\/.test(p)
+  const insideAnyCandidate = (p: string) => {
+    const n = norm(p)
+    return candidateDirs.some((d) => {
+      const nd = norm(d)
+      return n === nd || n.startsWith(nd + '/')
+    })
+  }
+
+  // -jar first: when present it defines the application and -cp is ignored.
+  const jarAt = tokens.findIndex((t) => t === '-jar')
+  if (jarAt >= 0) {
+    const jar = tokens[jarAt + 1]
+    if (!jar || !isAbsolute(jar) || insideAnyCandidate(jar)) return null
+    return `its command line runs -jar ${jar}, which is not inside any watched server directory`
+  }
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]!
+    let raw: string | undefined
+    if (t === '-cp' || t === '-classpath' || t === '--class-path') raw = tokens[i + 1]
+    else if (t.startsWith('--class-path=')) raw = t.slice('--class-path='.length)
+    if (raw === undefined) continue
+    const entries = raw
+      .split(';')
+      .filter((e) => e.length > 0)
+      // `C:\lib\*` is a wildcard entry; the code it loads lives in C:\lib.
+      .map((e) => e.replace(/[\\/]\*$/, ''))
+    if (entries.length === 0) return null
+    if (entries.some((e) => !isAbsolute(e) || insideAnyCandidate(e))) return null
+    return `its classpath is ${entries[0]}${
+      entries.length > 1 ? ` and ${entries.length - 1} more entr${entries.length === 2 ? 'y' : 'ies'}` : ''
+    }, all of it outside every watched server directory`
+  }
+
+  return null
+}
+
 type JvmRow = {
   pid: number
   ppid: number
@@ -304,6 +401,7 @@ export const windowsProvider: ProcessProvider = {
       return {
         jvms: [],
         unattributed: [],
+        ruledOut: [],
         ok: false,
         failure: e instanceof Error ? e.message : 'process enumeration failed',
         occupiedDirs: [],
@@ -318,6 +416,7 @@ export const windowsProvider: ProcessProvider = {
     const fail = (why: string): JvmScan => ({
       jvms: [],
       unattributed: [],
+      ruledOut: [],
       ok: false,
       failure: why,
       occupiedDirs: [],
@@ -496,25 +595,34 @@ export const windowsProvider: ProcessProvider = {
       push(row, dir, 'open-log-and-port', taskAncestor(row.pid))
     }
 
+    const candidateDirs = (hints ?? []).map((h) => h.dir)
     const unattributed: UnattributedJvm[] = []
+    const ruledOut: RuledOutJvm[] = []
     for (const row of rows.values()) {
       if (claimed.has(row.pid)) continue
       // The executable path only, never the arguments: the guard's refusal
       // shows this to an admin so they can recognise "VS Code's Java", and a
       // foreign process's argument list is not ours to display.
       const exeMatch = /^"([^"]+)"|^(\S+)/.exec(row.ownCmd || '')
-      unattributed.push({
+      const common = {
         pid: row.pid,
         sessionId: row.sessionId,
         startedBy: startedBy(row, taskAncestor(row.pid) !== null),
         start: Number.isFinite(row.start) ? new Date(row.start).toISOString() : null,
         exe: exeMatch ? (exeMatch[1] ?? exeMatch[2] ?? null) : null,
-      })
+      }
+      // Positive exclusion before doubt: a process whose own command line
+      // proves it runs a program outside every candidate directory is ruled
+      // out, not doubted. See foreignEvidence() for the rule and its limits.
+      const evidence = foreignEvidence(row.ownCmd || '', candidateDirs)
+      if (evidence) ruledOut.push({ ...common, evidence })
+      else unattributed.push(common)
     }
 
     return {
       jvms: out,
       unattributed,
+      ruledOut,
       ok: true,
       failure: null,
       occupiedDirs,

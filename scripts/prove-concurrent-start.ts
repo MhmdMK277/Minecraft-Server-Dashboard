@@ -30,6 +30,9 @@
  *   8. `stop` is never escalated to a kill.
  *   9. The lock is released after a thrown error, so one failure does not wedge
  *      every later request for that server.
+ *  10. A provably foreign JVM (its own -jar outside every candidate directory,
+ *      the VS Code jdtls shape) is ruled out and does NOT refuse a start; the
+ *      acknowledgment path stays reserved for genuinely ambiguous processes.
  *
  * Run:  npx tsx scripts/prove-concurrent-start.ts
  */
@@ -386,6 +389,31 @@ console.log('\n--- 5. the acknowledgment: explicit, pinned, never overriding dir
   setPsForProof(async () => world([{ ...vscodeRow, start: null }]))
   const r6 = await startServer(T, LAUNCHER, { acknowledged: [{ pid: 43300, startedAt: VSCODE_START }] })
   check('a process with no readable start time cannot be acknowledged: nothing pins it', !r6.ok, r6.detail)
+
+  // 5g. The 2026-08-07 defect, at the guard: a foreign process whose command
+  // line PROVES what it is (the real VS Code jdtls names an absolute -jar in
+  // the .vscode extensions tree) is ruled out by the identity scan, so the
+  // start proceeds with NO acknowledgment at all. The vscodeRow above stays
+  // the opaque case (`--lsp`, no program location) and keeps refusing; the
+  // acknowledgment path remains for genuinely ambiguous processes only.
+  const jdtlsRow = {
+    pid: 43301, ppid: 1, sessionId: 1, parentCmd: '',
+    ownCmd:
+      '"C:\\vscode\\jre\\bin\\java.exe" -Declipse.application=org.eclipse.jdt.ls.core.id1 -jar C:\\Users\\someone\\.vscode\\extensions\\redhat.java-1.55.0-win32-x64\\server\\plugins\\org.eclipse.equinox.launcher_1.7.200.jar --pipe=\\\\.\\pipe\\lsp-1',
+    ws: 1048576, priv: 1048576, basePri: 8, start: '2026-08-06T10:00:00.000Z', cpu100ns: 0,
+  }
+  let jdtlsCalls = 0
+  setPsForProof(async () => {
+    jdtlsCalls++
+    return jdtlsCalls <= 1 ? world([jdtlsRow]) : world([jdtlsRow, attributedRow])
+  })
+  const r7 = await startServer(T, LAUNCHER)
+  check(
+    'a provably foreign process (the jdtls -jar shape) is ruled out and start proceeds unacknowledged',
+    r7.ok,
+    r7.detail,
+  )
+  check('and its success sentence carries no acknowledgment, because none was needed', !/explicitly confirmed/.test(r7.detail))
 
   setPsForProof(null)
 }

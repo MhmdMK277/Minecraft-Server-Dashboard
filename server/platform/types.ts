@@ -112,6 +112,35 @@ export type UnattributedJvm = {
 }
 
 /**
+ * A java process that is provably NOT any candidate server, with the evidence.
+ *
+ * Added 2026-08-07. VS Code's Java language server ran on this host and its
+ * mere existence put four genuinely stopped servers into a permanent UNKNOWN
+ * with no Start button: it was unattributed, and unattributed meant doubt for
+ * every directory. But that process's own command line named an absolute -jar
+ * inside the .vscode extensions tree -- positive, readable evidence that the
+ * program it runs lives outside every directory we track. Such a process is
+ * excluded from doubt as RULED OUT, never silently dropped: it stays visible
+ * here, with the sentence that justified the ruling, so the Identity panel
+ * and the service log can show their work.
+ */
+export type RuledOutJvm = {
+  pid: number
+  sessionId: number | null
+  startedBy: StartedBy
+  /** ISO process start time, when the process table carried one. */
+  start: string | null
+  /** The executable path, first token of the command line, no arguments. */
+  exe: string | null
+  /**
+   * The evidence sentence: which path the command line locates the program
+   * at, and that it is outside every candidate directory. Carried so the UI
+   * claim ("ruled out") is backed by something a reader can check.
+   */
+  evidence: string
+}
+
+/**
  * The result of one identity scan.
  *
  * `enumerateJvms()` returning a bare array could not express the two states that
@@ -126,6 +155,13 @@ export type UnattributedJvm = {
 export type JvmScan = {
   jvms: JvmProcess[]
   unattributed: UnattributedJvm[]
+  /**
+   * Unclaimed java processes whose own command line proves they are not any
+   * candidate server (see RuledOutJvm). Disjoint from `unattributed`: a
+   * process is doubted OR ruled out, never both. Only `unattributed` feeds
+   * fleet-level doubt; this list exists so the exclusion is inspectable.
+   */
+  ruledOut: RuledOutJvm[]
   /** False when enumeration failed. NOT the same as "no JVMs are running". */
   ok: boolean
   failure: string | null

@@ -115,6 +115,28 @@ export default function Host({
         </p>
       )}
 
+      {/* Exclusions shown quietly, warnings loudly. A ruled-out process is the
+          system explaining why a foreign JVM (VS Code's Java is the recurring
+          one) does NOT put stopped servers into UNKNOWN: its own command line
+          places its program outside every watched directory. The evidence
+          sentence comes from the scan itself (foreignEvidence in
+          server/platform/windows.ts), so what is shown is what was checked. */}
+      {identity.ruledOut.length > 0 && (
+        <div className="prose-line mt-2.5 pl-1.5 text-[12px] leading-relaxed text-faint">
+          <p>
+            {identity.ruledOut.length} java process{identity.ruledOut.length === 1 ? '' : 'es'} ruled out
+            as a server by {identity.ruledOut.length === 1 ? 'its' : 'their'} own command line, so{' '}
+            {identity.ruledOut.length === 1 ? 'it casts' : 'they cast'} no doubt on servers shown as not
+            running:
+          </p>
+          {identity.ruledOut.map((r) => (
+            <p key={r.pid} className="break-all font-mono text-[11px]">
+              pid {r.pid}: {r.evidence}
+            </p>
+          ))}
+        </div>
+      )}
+
       {paging?.elevated && (
         <p className="prose-line mt-2.5 rounded-md border border-warn/40 bg-warn/10 px-2.5 py-1.5 text-[12px] leading-relaxed text-warn">
           {paging.detail}
